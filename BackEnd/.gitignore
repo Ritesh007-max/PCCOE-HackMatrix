@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs and debug output
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Test coverage and build output
+coverage/
+dist/
+build/
+.nyc_output/
+
+# Runtime and temporary files
+tmp/
+temp/
+*.pid
+*.seed
+
+# Local tooling and OS files
+.cache/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
