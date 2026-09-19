@@ -8,8 +8,8 @@ import {
   User,
   X
 } from 'lucide-react';
-import finLogoOriginal from '../../assets/fin_logo_original.png';
-import sidebarBuildingOriginal from '../../assets/sidebar_building_original.png';
+import { FinLogoClear } from '../common/BrandAssets';
+import sidebarBuildingClean from '../../assets/sidebar_building_clean.jpg';
 import tricolorRibbonOriginal from '../../assets/tricolor_ribbon_original.png';
 
 const navItems = [
@@ -31,15 +31,16 @@ export default function Sidebar({ isOpen, onClose }) {
       />
 
       <aside className={`app-sidebar ${isOpen ? 'open' : ''}`} aria-label="Main Navigation">
-        {/* Top Logo Section with Original FIN + Tricolor + Subtitle */}
+        {/* Top Logo Section with Crisp FIN + Tricolor + Subtitle */}
         <div className="sidebar-top-section">
           <div className="sidebar-brand-wrapper">
-            <NavLink to="/dashboard" onClick={onClose} className="brand-image-link">
-              <img
-                src={finLogoOriginal}
-                alt="FIN - Financial Policy Intelligence"
-                className="sidebar-fin-brand-img"
-              />
+            <NavLink
+              to="/dashboard"
+              onClick={onClose}
+              className="sidebar-brand-link"
+              title="FIN - Financial Policy Intelligence"
+            >
+              <FinLogoClear />
             </NavLink>
 
             {/* Close button on mobile */}
@@ -76,13 +77,12 @@ export default function Sidebar({ isOpen, onClose }) {
 
         {/* Lower Editorial Quote + Bharat Visual with 40-55px gap from navigation */}
         <div className="sidebar-bottom-section">
-          {/* Middle Editorial Quote matching exact 5 lines */}
+          {/* Middle Editorial Quote with clean line-by-line alignment */}
           <div className="sidebar-quote-container">
             <p className="sidebar-quote-text">
-              “Sabka<br />
-              Saath<br />
-              Sabka Vikas<br />
-              Sabka Vishwas<br />
+              “Sabka Saath,<br />
+              Sabka Vikas,<br />
+              Sabka Vishwas,<br />
               Sabka Prayas”
             </p>
             <span className="sidebar-quote-author">— Government of India</span>
@@ -96,13 +96,18 @@ export default function Sidebar({ isOpen, onClose }) {
             aria-hidden="true"
           />
 
-          {/* Bottom Exact Bharat Building Photo (centered, 15-20% smaller) */}
+          {/* Bottom Bharat Building Photo with editorial overlay */}
           <div className="sidebar-building-bottom-wrapper">
             <img
-              src={sidebarBuildingOriginal}
-              alt="Bharat - for a brighter tomorrow."
+              src={sidebarBuildingClean}
+              alt="Bharat - Indian Government Architecture"
               className="sidebar-building-img"
             />
+            <div className="sidebar-building-overlay">
+              <span className="sidebar-bharat-title">Bharat</span>
+              <span className="sidebar-bharat-subtitle">for a brighter tomorrow.</span>
+              <div className="sidebar-bharat-tricolor-line" aria-hidden="true" />
+            </div>
           </div>
         </div>
       </aside>
