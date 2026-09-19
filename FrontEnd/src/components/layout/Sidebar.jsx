@@ -67,38 +67,43 @@ export default function Sidebar({ isOpen, onClose }) {
               >
                 {/* Left vertical green indicator bar for active item */}
                 <span className="active-green-bar" aria-hidden="true" />
-                <Icon size={18} className="sidebar-nav-icon" strokeWidth={2.2} />
+                <Icon size={20} className="sidebar-nav-icon" strokeWidth={2.2} />
                 <span className="sidebar-nav-label">{item.name}</span>
               </NavLink>
             );
           })}
         </nav>
 
-        {/* Middle Editorial Quote matching exact 5 lines */}
-        <div className="sidebar-quote-container">
-          <p className="sidebar-quote-text">
-            “Sabka<br />
-            Saath<br />
-            Sabka Vikas<br />
-            Sabka Vishwas<br />
-            Sabka Prayas”
-          </p>
-          <span className="sidebar-quote-author">— Government of India</span>
+        {/* Lower Editorial Quote + Bharat Visual with 40-55px gap from navigation */}
+        <div className="sidebar-bottom-section">
+          {/* Middle Editorial Quote matching exact 5 lines */}
+          <div className="sidebar-quote-container">
+            <p className="sidebar-quote-text">
+              “Sabka<br />
+              Saath<br />
+              Sabka Vikas<br />
+              Sabka Vishwas<br />
+              Sabka Prayas”
+            </p>
+            <span className="sidebar-quote-author">— Government of India</span>
+          </div>
+
+          {/* Full width tricolor ribbon spanning the entire sidebar */}
           <img
             src={tricolorRibbonOriginal}
             alt=""
             className="sidebar-quote-ribbon-img"
             aria-hidden="true"
           />
-        </div>
 
-        {/* Bottom Exact Bharat Building Photo with text */}
-        <div className="sidebar-building-bottom-wrapper">
-          <img
-            src={sidebarBuildingOriginal}
-            alt="Bharat - for a brighter tomorrow."
-            className="sidebar-building-img"
-          />
+          {/* Bottom Exact Bharat Building Photo (centered, 15-20% smaller) */}
+          <div className="sidebar-building-bottom-wrapper">
+            <img
+              src={sidebarBuildingOriginal}
+              alt="Bharat - for a brighter tomorrow."
+              className="sidebar-building-img"
+            />
+          </div>
         </div>
       </aside>
     </>
