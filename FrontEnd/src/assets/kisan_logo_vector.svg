@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 90" width="80" height="90">
+  <!-- Central Stem -->
+  <path d="M40 88 V22" stroke="#06582A" stroke-width="4.5" stroke-linecap="round"/>
+  
+  <!-- Top Center Leaf (Vertical) -->
+  <path d="M40 6 C32 16 34 30 40 38 C46 30 48 16 40 6 Z" fill="#0A7A3E"/>
+  
+  <!-- Middle Left Leaf -->
+  <path d="M38 38 C22 30 10 38 8 50 C18 54 30 48 38 40 Z" fill="#086E37"/>
+  
+  <!-- Middle Right Leaf (Golden Grain / Corn) -->
+  <path d="M42 38 C58 30 70 38 72 50 C62 54 50 48 42 40 Z" fill="#D99B16"/>
+  <path d="M42 38 C50 34 60 40 64 48 C56 50 48 46 42 40 Z" fill="#F3BF38"/>
+  
+  <!-- Bottom Left Leaf -->
+  <path d="M38 56 C20 50 8 60 6 72 C18 74 32 68 38 58 Z" fill="#054A23"/>
+  
+  <!-- Bottom Right Leaf -->
+  <path d="M42 56 C60 50 72 60 74 72 C62 74 48 68 42 58 Z" fill="#054A23"/>
+</svg>
