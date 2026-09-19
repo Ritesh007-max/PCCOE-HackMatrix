@@ -1,0 +1,66 @@
+:root {
+  /* Surface & Backgrounds */
+  --bg-primary: #F8F7F3;
+  --surface-white: #FFFFFF;
+  --surface-subtle: #F3F2EE;
+
+  /* Primary Brand - Deep Government Green */
+  --primary-green: #005B50;
+  --primary-green-dark: #00483F;
+  --primary-green-hover: #00483F;
+  --primary-green-light: #EBF3F1;
+  --primary-green-border: #BCDCD6;
+
+  /* Text Colors */
+  --text-primary: #10243A;
+  --text-secondary: #344054;
+  --text-muted: #667085;
+  --text-inverse: #FFFFFF;
+
+  /* Accents */
+  --accent-saffron: #E98A00;
+  --accent-saffron-light: #FEF6EC;
+  --accent-saffron-border: #FADBB0;
+  --accent-blue: #1264D6;
+  --accent-blue-light: #EEF4FD;
+  --accent-blue-border: #BCD5F8;
+
+  /* Semantic Feedback */
+  --color-success: #087443;
+  --color-success-light: #ECFDF3;
+  --color-success-border: #A6F4C5;
+  --color-warning: #C56A00;
+  --color-warning-light: #FFF9F0;
+  --color-warning-border: #FEDF89;
+  --color-error: #D92D20;
+  --color-error-light: #FEF3F2;
+  --color-error-border: #FECDCA;
+
+  /* Borders & Dividers */
+  --border-subtle: #E4E7EC;
+  --border-medium: #D0D5DD;
+
+  /* Typography Font Families - LOCKED */
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Layout Constants */
+  --sidebar-width: 260px;
+  --header-height: 68px;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 9999px;
+
+  /* Very Subtle Shadows */
+  --shadow-subtle: 0 1px 2px rgba(16, 36, 58, 0.05);
+  --shadow-card: 0 2px 4px rgba(16, 36, 58, 0.04), 0 1px 2px rgba(16, 36, 58, 0.03);
+  --shadow-elevated: 0 6px 14px rgba(16, 36, 58, 0.07), 0 2px 4px rgba(16, 36, 58, 0.03);
+  --shadow-dropdown: 0 10px 24px rgba(16, 36, 58, 0.08), 0 2px 6px rgba(16, 36, 58, 0.04);
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+}
