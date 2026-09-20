@@ -1,0 +1,12 @@
+$kind: http-request
+method: POST
+url: '{{baseUrl}}/api/users/logout'
+order: 5000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      if (pm.response.code === 200) {
+        pm.collectionVariables.set("accessToken", "");
+        pm.collectionVariables.set("refreshToken", "");
+      }

@@ -1,0 +1,27 @@
+$kind: http-request
+method: POST
+url: '{{baseUrl}}/api/users/register'
+order: 1000
+auth:
+  type: noauth
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "user@example.com",
+      "password": "password123",
+      "fullName": "John Doe",
+      "phone": "+1234567890"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      if (pm.response.code === 201) {
+        const res = pm.response.json();
+        const token = res.data && res.data.session ? res.data.session.access_token : "";
+        pm.collectionVariables.set("accessToken", token || "");
+      }

@@ -1,0 +1,27 @@
+$kind: http-request
+method: POST
+url: '{{baseUrl}}/api/users/login'
+order: 2000
+auth:
+  type: noauth
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "user@example.com",
+      "password": "password123"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      if (pm.response.code === 200) {
+        const res = pm.response.json();
+        if (res.data && res.data.session) {
+          pm.collectionVariables.set("accessToken", res.data.session.access_token);
+          pm.collectionVariables.set("refreshToken", res.data.session.refresh_token);
+        }
+      }

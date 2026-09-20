@@ -1,0 +1,14 @@
+$kind: collection
+name: PCCOE-HackMatrix API
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{accessToken}}'
+variables:
+  - key: baseUrl
+    value: 'http://localhost:5000'
+  - key: accessToken
+    value: ''
+  - key: refreshToken
+    value: ''
