@@ -1,7 +1,7 @@
-const supabase = require("../config/supabaseConfig");
+const { supabaseClient, supabaseAdmin } = require('../config/supabaseConfig');
 
-const createUser = async ({ email, password, fullName, phone }) => {
-    const { data, error } = await supabase.auth.admin.createUser({
+const registerUser = async ({ email, password, fullName, phone }) => {
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
@@ -12,14 +12,16 @@ const createUser = async ({ email, password, fullName, phone }) => {
     });
 
     if (error) {
-        throw new Error(error.message);
+        const serviceError = new Error(error.message);
+        serviceError.status = error.status;
+        throw serviceError;
     }
 
     return data.user;
 };
 
 const loginUser = async ({ email, password }) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
         email,
         password
     });
@@ -33,7 +35,46 @@ const loginUser = async ({ email, password }) => {
     return data;
 };
 
+const refreshToken = async (refreshToken) => {
+    const { data, error } = await supabaseClient.auth.refreshSession({
+        refresh_token: refreshToken
+    });
+
+    if (error) {
+        const serviceError = new Error(error.message);
+        serviceError.status = error.status;
+        throw serviceError;
+    }
+
+    return data;
+};
+
+const getCurrentUser = async (token) => {
+    const { data: { user }, error } = await supabaseClient.auth.getUser(token);
+
+    if (error) {
+        const serviceError = new Error(error.message);
+        serviceError.status = error.status;
+        throw serviceError;
+    }
+
+    return user;
+};
+
+const logoutUser = async (token) => {
+    const { error } = await supabaseAdmin.auth.admin.signOut(token);
+
+    if (error) {
+        const serviceError = new Error(error.message);
+        serviceError.status = error.status;
+        throw serviceError;
+    }
+};
+
 module.exports = {
-    createUser,
-    loginUser
+    registerUser,
+    loginUser,
+    refreshToken,
+    getCurrentUser,
+    logoutUser
 };
