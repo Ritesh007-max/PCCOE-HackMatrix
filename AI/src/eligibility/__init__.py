@@ -1,6 +1,12 @@
 """
-Eligibility Module.
-
-Evaluates citizen profiles against scheme criteria to determine eligibility verdicts
-(Eligible, Ineligible, Borderline / Missing Info) with pinpointed rule traces.
+PolicySetu Eligibility Subsystem.
+Provides the deterministic eligibility evaluation engine and decision representations.
 """
+
+from .decision import EligibilityDecision
+from .engine import EligibilityEngine
+
+__all__ = [
+    "EligibilityEngine",
+    "EligibilityDecision",
+]
