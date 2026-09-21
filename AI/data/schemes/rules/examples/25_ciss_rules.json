@@ -1,0 +1,136 @@
+{
+  "scheme_id": "05490a0d-ded8-50e4-90e8-8b0296ce1280",
+  "scheme_slug": "25-ciss",
+  "scheme_name": "25% Capital Investment Subsidy Scheme",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_25-ciss_01",
+      "scheme_id": "05490a0d-ded8-50e4-90e8-8b0296ce1280",
+      "rule_type": "eligibility",
+      "field": "age",
+      "operator": ">=",
+      "expected_value": 18,
+      "value_type": "numeric",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "age",
+        "op": ">=",
+        "val": 18,
+        "unit": "years"
+      },
+      "raw_text": "Any individual above 18 years of age including Women, ex-servicemen & physically handicapped is eligible to apply under the scheme.",
+      "source_url": "https://www.myscheme.gov.in/schemes/25-ciss",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_25-ciss_02",
+      "scheme_id": "05490a0d-ded8-50e4-90e8-8b0296ce1280",
+      "rule_type": "eligibility",
+      "field": "enterprise_type",
+      "operator": "in",
+      "expected_value": [
+        "Micro",
+        "Small"
+      ],
+      "value_type": "list_string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "enterprise_type",
+        "op": "in",
+        "val": [
+          "Micro",
+          "Small"
+        ],
+        "unit": null
+      },
+      "raw_text": "New Micro or Small units engaged in manufacturing/servicing except the activities specified in the Negative List are eligible.",
+      "source_url": "https://www.myscheme.gov.in/schemes/25-ciss",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 0.95,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_25-ciss_03",
+      "scheme_id": "05490a0d-ded8-50e4-90e8-8b0296ce1280",
+      "rule_type": "eligibility",
+      "field": "capital_investment_machinery_building",
+      "operator": "<",
+      "expected_value": 2500000,
+      "value_type": "numeric",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "capital_investment_machinery_building",
+        "op": "<",
+        "val": 2500000,
+        "unit": "INR"
+      },
+      "raw_text": "Machinery and Building below ₹25.00 Lakhs is only eligible under this Scheme.",
+      "source_url": "https://www.myscheme.gov.in/schemes/25-ciss",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_25-ciss_04",
+      "scheme_id": "05490a0d-ded8-50e4-90e8-8b0296ce1280",
+      "rule_type": "exclusion",
+      "field": "availed_other_institutional_subsidy",
+      "operator": "is_false",
+      "expected_value": false,
+      "value_type": "boolean",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "availed_other_institutional_subsidy",
+        "op": "is_false",
+        "val": false,
+        "unit": null
+      },
+      "raw_text": "The entrepreneurs who enjoyed any other subsidy from any other Institutions such as Lakshadweep Development Cooperation, LKVIB, Coir Board, Coconut Board, NABAD, etc. for the same purpose are not eligible.",
+      "source_url": "https://www.myscheme.gov.in/schemes/25-ciss",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    }
+  ]
+}

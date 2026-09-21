@@ -1,0 +1,100 @@
+{
+  "scheme_id": "68bbb29c-c104-51cc-ad80-f6b5b6cbf028",
+  "scheme_slug": "ab-pmjay",
+  "scheme_name": "Ayushman Bharat - Pradhan Mantri Jan Arogya Yojana",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_ab-pmjay_01",
+      "scheme_id": "68bbb29c-c104-51cc-ad80-f6b5b6cbf028",
+      "rule_type": "eligibility",
+      "field": "secc_deprivation_status",
+      "operator": "manual_review",
+      "expected_value": "Eligible per SECC 2011 Rural D1-D7 or Urban 11 occupational categories",
+      "value_type": "unstructured",
+      "logic_group": "SECC_CRITERIA",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "secc_deprivation_status",
+        "op": "manual_review",
+        "val": "SECC_2011_MATCH",
+        "unit": null
+      },
+      "raw_text": "Automatically included Households without shelter, destitute, living on alms, manual scavenger families, primitive tribal groups.",
+      "source_url": "https://www.myscheme.gov.in/schemes/ab-pmjay",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 0.7,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "UNSTRUCTURED_REQUIRES_LLM_OR_MANUAL_REVIEW"
+      }
+    },
+    {
+      "rule_id": "rule_ab-pmjay_02",
+      "scheme_id": "68bbb29c-c104-51cc-ad80-f6b5b6cbf028",
+      "rule_type": "exclusion",
+      "field": "owns_motorized_vehicle",
+      "operator": "is_false",
+      "expected_value": false,
+      "value_type": "boolean",
+      "logic_group": "EXCLUSIONS_GROUP",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "owns_motorized_vehicle",
+        "op": "is_false",
+        "val": false,
+        "unit": null
+      },
+      "raw_text": "Those who own a two, three, or four-wheeler or a motorized fishing boat.",
+      "source_url": "https://www.myscheme.gov.in/schemes/ab-pmjay",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_ab-pmjay_03",
+      "scheme_id": "68bbb29c-c104-51cc-ad80-f6b5b6cbf028",
+      "rule_type": "exclusion",
+      "field": "owns_mechanized_farming_equipment",
+      "operator": "is_false",
+      "expected_value": false,
+      "value_type": "boolean",
+      "logic_group": "EXCLUSIONS_GROUP",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "owns_mechanized_farming_equipment",
+        "op": "is_false",
+        "val": false,
+        "unit": null
+      },
+      "raw_text": "Those who own mechanized farming equipment.",
+      "source_url": "https://www.myscheme.gov.in/schemes/ab-pmjay",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    }
+  ]
+}

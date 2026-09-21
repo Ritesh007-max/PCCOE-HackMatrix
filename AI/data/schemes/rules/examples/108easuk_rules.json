@@ -1,0 +1,70 @@
+{
+  "scheme_id": "5b7a1596-c32e-5858-8ccf-7b28b885e5cb",
+  "scheme_slug": "108easuk",
+  "scheme_name": "108, Emergency Ambulance Service - Uttarakhand",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_108easuk_01",
+      "scheme_id": "5b7a1596-c32e-5858-8ccf-7b28b885e5cb",
+      "rule_type": "eligibility",
+      "field": "state",
+      "operator": "=",
+      "expected_value": "Uttarakhand",
+      "value_type": "string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "state",
+        "op": "=",
+        "val": "Uttarakhand",
+        "unit": null
+      },
+      "raw_text": "The beneficiary must be a resident of Uttarakhand.",
+      "source_url": "https://www.myscheme.gov.in/schemes/108easuk",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_108easuk_02",
+      "scheme_id": "5b7a1596-c32e-5858-8ccf-7b28b885e5cb",
+      "rule_type": "eligibility",
+      "field": "requires_emergency_medical_care",
+      "operator": "is_true",
+      "expected_value": true,
+      "value_type": "boolean",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": false,
+      "condition": {
+        "field": "requires_emergency_medical_care",
+        "op": "is_true",
+        "val": true,
+        "unit": null
+      },
+      "raw_text": "The benefit is provided to accident victims and individuals requiring emergency services.",
+      "source_url": "https://www.myscheme.gov.in/schemes/108easuk",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 0.85,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "UNSTRUCTURED_REQUIRES_LLM_OR_MANUAL_REVIEW"
+      }
+    }
+  ]
+}

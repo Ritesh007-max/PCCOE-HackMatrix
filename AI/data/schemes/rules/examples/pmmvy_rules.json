@@ -1,0 +1,130 @@
+{
+  "scheme_id": "17dd7e73-af41-5b15-ab6f-8467f5fcc192",
+  "scheme_slug": "pmmvy",
+  "scheme_name": "Pradhan Mantri Matru Vandana Yojana",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_pmmvy_01",
+      "scheme_id": "17dd7e73-af41-5b15-ab6f-8467f5fcc192",
+      "rule_type": "eligibility",
+      "field": "gender",
+      "operator": "=",
+      "expected_value": "Female",
+      "value_type": "string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "gender",
+        "op": "=",
+        "val": "Female",
+        "unit": null
+      },
+      "raw_text": "The applicant should be of at least 19 years old and a pregnant women.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pmmvy",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_pmmvy_02",
+      "scheme_id": "17dd7e73-af41-5b15-ab6f-8467f5fcc192",
+      "rule_type": "eligibility",
+      "field": "age",
+      "operator": ">=",
+      "expected_value": 19,
+      "value_type": "numeric",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "age",
+        "op": ">=",
+        "val": 19,
+        "unit": "years"
+      },
+      "raw_text": "The applicant should be of at least 19 years old and a pregnant women.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pmmvy",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_pmmvy_03",
+      "scheme_id": "17dd7e73-af41-5b15-ab6f-8467f5fcc192",
+      "rule_type": "eligibility",
+      "field": "is_pregnant_or_lactating",
+      "operator": "is_true",
+      "expected_value": true,
+      "value_type": "boolean",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "is_pregnant_or_lactating",
+        "op": "is_true",
+        "val": true,
+        "unit": null
+      },
+      "raw_text": "All pregnant women and lactating mothers who have experienced wage loss due to pregnancy.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pmmvy",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 0.95,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_pmmvy_04",
+      "scheme_id": "17dd7e73-af41-5b15-ab6f-8467f5fcc192",
+      "rule_type": "exclusion",
+      "field": "is_regular_govt_employee",
+      "operator": "is_false",
+      "expected_value": false,
+      "value_type": "boolean",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "is_regular_govt_employee",
+        "op": "is_false",
+        "val": false,
+        "unit": null
+      },
+      "raw_text": "Pregnant women and lactating mothers who are in regular employment with the Central Government or State Governments or Public Sector Undertakings are excluded.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pmmvy",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    }
+  ]
+}
