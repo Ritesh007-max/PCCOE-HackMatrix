@@ -71,6 +71,7 @@ class TestRAGFilters(unittest.TestCase):
         q = RetrievalQuery(query_text="assam grant", state_filter="Assam")
         filt = build_metadata_filter(q)
         self.assertIsNotNone(filt)
+        assert filt is not None
 
         # Matching state
         self.assertTrue(filt({"state": "Assam"}))
@@ -87,6 +88,8 @@ class TestRAGFilters(unittest.TestCase):
         """Filter matches exact content type."""
         q = RetrievalQuery(query_text="faq only", content_type_filter="faq")
         filt = build_metadata_filter(q)
+        self.assertIsNotNone(filt)
+        assert filt is not None
         self.assertTrue(filt({"content_type": "faq"}))
         self.assertFalse(filt({"content_type": "scheme_overview"}))
 

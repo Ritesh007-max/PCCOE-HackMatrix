@@ -9,8 +9,22 @@ Unsupported claims are safely flagged and isolated.
 
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
-from .models import FactualClaim, ClaimSupportStatus, GroundedExplanation
-from .errors import UngroundedClaimError
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import FactualClaim, ClaimSupportStatus, GroundedExplanation
+    from .errors import UngroundedClaimError
+except (ImportError, ValueError):
+    from src.llm.models import FactualClaim, ClaimSupportStatus, GroundedExplanation
+    from src.llm.errors import UngroundedClaimError
 
 
 class GroundingVerifier:

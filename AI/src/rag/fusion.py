@@ -5,7 +5,20 @@ weighted fusion and Reciprocal Rank Fusion (RRF). Eliminates NaN/Inf errors.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-from .models import RetrievedChunk, SourceTier
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import RetrievedChunk, SourceTier
+except (ImportError, ValueError):
+    from src.rag.models import RetrievedChunk, SourceTier
 
 
 def normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:

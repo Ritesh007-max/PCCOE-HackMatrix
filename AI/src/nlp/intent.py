@@ -5,7 +5,20 @@ Deterministic + LLM-assisted classification of citizen intents across English, H
 
 import re
 from typing import Optional, Tuple
-from ..llm.models import UserIntent
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from ..llm.models import UserIntent
+except (ImportError, ValueError):
+    from src.llm.models import UserIntent
 
 
 # High-precision deterministic regular expressions for governance query intents

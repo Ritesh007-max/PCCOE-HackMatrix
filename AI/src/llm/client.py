@@ -7,10 +7,26 @@ input truncation checks, and strict failure isolation.
 import time
 import uuid
 from typing import Any, Dict, Optional, Type, TypeVar
-from .config import LLMConfig, DEFAULT_LLM_CONFIG
-from .models import LLMMetadata
-from .providers import LLMProvider, get_llm_provider
-from .errors import LLMError, ProviderUnavailableError
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .config import LLMConfig, DEFAULT_LLM_CONFIG
+    from .models import LLMMetadata
+    from .providers import LLMProvider, get_llm_provider
+    from .errors import LLMError, ProviderUnavailableError
+except (ImportError, ValueError):
+    from src.llm.config import LLMConfig, DEFAULT_LLM_CONFIG
+    from src.llm.models import LLMMetadata
+    from src.llm.providers import LLMProvider, get_llm_provider
+    from src.llm.errors import LLMError, ProviderUnavailableError
 
 T = TypeVar("T")
 

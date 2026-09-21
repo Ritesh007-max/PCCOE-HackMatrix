@@ -21,8 +21,8 @@ def compute_mrr(retrieved_slugs: Sequence[str], ground_truth_slug: str) -> float
 
 
 def evaluate_batch(
-    predictions: List[Sequence[str]],
-    ground_truths: List[str],
+    predictions: Sequence[Sequence[str]],
+    ground_truths: Sequence[str],
     k_list: Sequence[int] = (1, 3, 5)
 ) -> Dict[str, float]:
     """

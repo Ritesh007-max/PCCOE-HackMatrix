@@ -4,7 +4,8 @@ PolicySetu Rule Engine Data Models and State Enumerations.
 
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
-from dataclasses import dataclass, field
+import dataclasses
+from dataclasses import dataclass
 
 class RuleStatus(str, Enum):
     """
@@ -37,14 +38,14 @@ class Rule:
     logic_group: str = "DEFAULT"
     required: bool = True
     hard_constraint: bool = True
-    condition: Dict[str, Any] = field(default_factory=dict)
+    condition: Dict[str, Any] = dataclasses.field(default_factory=dict)
     raw_text: str = ""
     source_url: str = ""
     source_document: str = "schemes_canonical.parquet"
     source_page: Optional[int] = None
     source_section: str = "eligibility"
     confidence: float = 1.0
-    provenance: Dict[str, Any] = field(default_factory=dict)
+    provenance: Dict[str, Any] = dataclasses.field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Rule":
@@ -117,8 +118,8 @@ class SchemeRuleSet:
     version: str = "1.0.0"
     last_updated: Optional[str] = None
     root_logic: str = "AND"
-    rules: List[Rule] = field(default_factory=list)
-    logic_groups: List[LogicGroup] = field(default_factory=list)
+    rules: List[Rule] = dataclasses.field(default_factory=list)
+    logic_groups: List[LogicGroup] = dataclasses.field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SchemeRuleSet":

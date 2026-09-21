@@ -62,6 +62,7 @@ class TestEvidence(unittest.TestCase):
         # Assert consolidated fact takes highest trust tier
         consolidated = registry.get_consolidated_fact("annual_family_income")
         self.assertIsNotNone(consolidated)
+        assert consolidated is not None
         self.assertEqual(consolidated.normalized_value, 420000.0)
         self.assertEqual(consolidated.verification_status, FactVerificationStatus.ISSUER_VERIFIED)
 
@@ -112,6 +113,7 @@ class TestEvidence(unittest.TestCase):
 
         consolidated = registry.get_consolidated_fact("annual_family_income")
         self.assertIsNotNone(consolidated)
+        assert consolidated is not None
         self.assertEqual(consolidated.verification_status, FactVerificationStatus.CONFLICTED)
         self.assertIsNone(consolidated.normalized_value)
 

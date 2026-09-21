@@ -7,7 +7,7 @@ Numpy (fallback / testing) backends. Decoupled from proprietary platforms.
 from abc import ABC, abstractmethod
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 import numpy as np
 
 
@@ -88,7 +88,10 @@ class FAISSVectorStore(VectorStore):
         norms[norms == 0] = 1.0
         vec_normalized = vec_f32 / norms
 
-        self._index.add(vec_normalized)
+        if self._index is None:
+            self._init_index()
+        assert self._index is not None
+        cast(Any, self._index).add(vec_normalized)
         self._metadata.extend(metadata)
 
     def search(
@@ -97,18 +100,18 @@ class FAISSVectorStore(VectorStore):
         top_k: int = 10,
         filter_fn: Optional[Any] = None
     ) -> List[Tuple[str, float, Dict[str, Any]]]:
-        if self.count == 0 or query_vector is None:
+        if self.count == 0 or query_vector is None or self._index is None:
             return []
 
         # Format and normalize query vector
         q_vec = np.ascontiguousarray(query_vector.reshape(1, -1), dtype=np.float32)
         q_norm = np.linalg.norm(q_vec)
         if q_norm > 0:
-            q_vec = q_vec / q_norm
+            q_vec = (q_vec / q_norm).astype(np.float32)
 
         # Search more candidates if post-filtering is active
         fetch_k = min(self.count, top_k * 5 if filter_fn else top_k)
-        scores, indices = self._index.search(q_vec, fetch_k)
+        scores, indices = cast(Any, self._index).search(q_vec, fetch_k)
 
         results: List[Tuple[str, float, Dict[str, Any]]] = []
         for score, idx in zip(scores[0], indices[0]):
@@ -135,7 +138,8 @@ class FAISSVectorStore(VectorStore):
         index_file = str(dir_path / "faiss_index.bin")
         meta_file = str(dir_path / "faiss_meta.json")
 
-        faiss.write_index(self._index, index_file)
+        assert self._index is not None
+        faiss.write_index(cast(Any, self._index), index_file)
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump({
                 "dimension": self.dimension,
