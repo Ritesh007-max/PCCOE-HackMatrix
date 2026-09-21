@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { TricolorRibbon } from '../common/BrandAssets';
@@ -6,6 +6,35 @@ import indiaGateHero from '../../assets/india_gate_hero.jpg';
 import namaskaraImg from '../../assets/namaskara.png';
 
 export default function HeroBanner() {
+  const [userName, setUserName] = useState(() => {
+    try {
+      const stored = localStorage.getItem('fin_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.fullName) return parsed.fullName;
+        if (parsed.name) return parsed.name;
+      }
+    } catch (e) {}
+    return 'UserName';
+  });
+
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      try {
+        const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
+        if (user.fullName) setUserName(user.fullName);
+        else if (user.name) setUserName(user.name);
+      } catch (err) {}
+    };
+
+    window.addEventListener('fin_user_updated', handleUserUpdate);
+    window.addEventListener('storage', handleUserUpdate);
+    return () => {
+      window.removeEventListener('fin_user_updated', handleUserUpdate);
+      window.removeEventListener('storage', handleUserUpdate);
+    };
+  }, []);
+
   return (
     <section className="dashboard-hero-card" aria-label="Welcome Banner">
       {/* Background panoramic India Gate visual */}
@@ -19,7 +48,7 @@ export default function HeroBanner() {
       <div className="hero-left-content">
         <span className="hero-date">Thu, 18 Sep 2026</span>
         <h1 className="hero-main-greeting">
-          <span>Namaste, UserName</span>
+          <span>Namaste, {userName}</span>
           <img
             src={namaskaraImg}
             alt="🙏"

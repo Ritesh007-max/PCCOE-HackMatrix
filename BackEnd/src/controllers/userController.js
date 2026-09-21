@@ -22,7 +22,8 @@ const validateRegistrationInput = ({ email, password, fullName }) => {
         errors.push('Invalid email format');
     }
 
-    if (password && password.length < MIN_PASSWORD_LENGTH) {
+    const pwdStr = password !== undefined && password !== null ? String(password) : '';
+    if (pwdStr && pwdStr.length < MIN_PASSWORD_LENGTH) {
         errors.push(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
     }
 
@@ -32,7 +33,7 @@ const validateRegistrationInput = ({ email, password, fullName }) => {
 const validateLoginInput = ({ email, password }) => {
     const errors = [];
 
-    if (!email || !password) {
+    if (!email || password === undefined || password === null || password === '') {
         errors.push('Email and password are required');
     }
 
@@ -45,7 +46,10 @@ const validateLoginInput = ({ email, password }) => {
 
 const registerUser = async (req, res, next) => {
     try {
-        const { email, password, fullName, phone } = req.body;
+        const email = req.body.email;
+        const password = req.body.password !== undefined && req.body.password !== null ? String(req.body.password) : '';
+        const fullName = req.body.fullName || req.body.name || req.body.full_name;
+        const phone = req.body.phone || req.body.mobile;
 
         const validationErrors = validateRegistrationInput({ email, password, fullName });
         if (validationErrors.length > 0) {
@@ -70,7 +74,8 @@ const registerUser = async (req, res, next) => {
 
 const loginUser = async (req, res, next) => {
     try {
-        const { email, password } = req.body;
+        const email = req.body.email;
+        const password = req.body.password !== undefined && req.body.password !== null ? String(req.body.password) : '';
 
         const validationErrors = validateLoginInput({ email, password });
         if (validationErrors.length > 0) {
