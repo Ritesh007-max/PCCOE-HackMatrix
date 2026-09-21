@@ -3,6 +3,13 @@ Unit tests for PolicySetu Embedding Abstraction.
 Verifies dimension consistency, deterministic mock generation, and batch handling.
 """
 
+import sys
+from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 import unittest
 import numpy as np
 from src.rag.embeddings import (

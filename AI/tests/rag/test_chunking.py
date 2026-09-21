@@ -3,6 +3,13 @@ Unit tests for PolicySetu Section-Aware Chunking.
 Verifies section preservation, atomic FAQs, chunk overlap, and stable deterministic IDs.
 """
 
+import sys
+from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 import unittest
 from src.rag.chunking import (
     chunk_scheme_record,

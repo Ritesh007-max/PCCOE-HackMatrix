@@ -4,12 +4,18 @@ Tests all 13 core requirements using official statutory scheme rule examples.
 """
 
 import unittest
+import sys
 from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 from src.eligibility.engine import EligibilityEngine
 from src.eligibility.decision import EligibilityDecision
 from src.rules.models import RuleStatus, ApplicantProfile
 
-RULES_EXAMPLES_DIR = Path("data/schemes/rules/examples")
+RULES_EXAMPLES_DIR = _AI_DIR / "data" / "schemes" / "rules" / "examples"
 
 class TestEligibilityEngine(unittest.TestCase):
 
