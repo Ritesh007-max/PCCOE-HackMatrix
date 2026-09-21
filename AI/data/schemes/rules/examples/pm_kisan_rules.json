@@ -1,0 +1,130 @@
+{
+  "scheme_id": "9f760605-d17e-5f82-b7cd-a15b625d689f",
+  "scheme_slug": "pm-kisan",
+  "scheme_name": "Pradhan Mantri Kisan Samman Nidhi",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_pm-kisan_01",
+      "scheme_id": "9f760605-d17e-5f82-b7cd-a15b625d689f",
+      "rule_type": "eligibility",
+      "field": "owns_cultivable_land",
+      "operator": "is_true",
+      "expected_value": true,
+      "value_type": "boolean",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "owns_cultivable_land",
+        "op": "is_true",
+        "val": true,
+        "unit": null
+      },
+      "raw_text": "All landholding farmers' families, which have cultivable land holding in their names are eligible to get benefit under the scheme.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pm-kisan",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_pm-kisan_02",
+      "scheme_id": "9f760605-d17e-5f82-b7cd-a15b625d689f",
+      "rule_type": "exclusion",
+      "field": "is_institutional_landholder",
+      "operator": "is_false",
+      "expected_value": false,
+      "value_type": "boolean",
+      "logic_group": "EXCLUSIONS_GROUP",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "is_institutional_landholder",
+        "op": "is_false",
+        "val": false,
+        "unit": null
+      },
+      "raw_text": "The following categories of beneficiaries of higher economic status shall not be eligible for benefit under the scheme: a) All Institutional Landholders.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pm-kisan",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_pm-kisan_03",
+      "scheme_id": "9f760605-d17e-5f82-b7cd-a15b625d689f",
+      "rule_type": "exclusion",
+      "field": "is_taxpayer",
+      "operator": "is_false",
+      "expected_value": false,
+      "value_type": "boolean",
+      "logic_group": "EXCLUSIONS_GROUP",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "is_taxpayer",
+        "op": "is_false",
+        "val": false,
+        "unit": null
+      },
+      "raw_text": "All Persons who paid Income Tax in last assessment year are excluded.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pm-kisan",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_pm-kisan_04",
+      "scheme_id": "9f760605-d17e-5f82-b7cd-a15b625d689f",
+      "rule_type": "exclusion",
+      "field": "monthly_pension_amount",
+      "operator": "<=",
+      "expected_value": 10000,
+      "value_type": "numeric",
+      "logic_group": "EXCLUSIONS_GROUP",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "monthly_pension_amount",
+        "op": "<=",
+        "val": 10000,
+        "unit": "INR/month"
+      },
+      "raw_text": "All Retired/pensioners whose monthly pension is Rs.10,000/-or more are excluded.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pm-kisan",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    }
+  ]
+}

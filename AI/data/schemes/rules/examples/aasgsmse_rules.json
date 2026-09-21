@@ -1,0 +1,166 @@
+{
+  "scheme_id": "05b08f3a-2c6a-52d4-bc60-a49ed378bfb6",
+  "scheme_slug": "aasgsmse",
+  "scheme_name": "Award of Attendance Scholarship to Girl Students in the Middle Stage of Education",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_aasgsmse_01",
+      "scheme_id": "05b08f3a-2c6a-52d4-bc60-a49ed378bfb6",
+      "rule_type": "eligibility",
+      "field": "citizenship",
+      "operator": "=",
+      "expected_value": "India",
+      "value_type": "string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "citizenship",
+        "op": "=",
+        "val": "India",
+        "unit": null
+      },
+      "raw_text": "The applicant should be a citizen of India.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aasgsmse",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_aasgsmse_02",
+      "scheme_id": "05b08f3a-2c6a-52d4-bc60-a49ed378bfb6",
+      "rule_type": "eligibility",
+      "field": "state",
+      "operator": "=",
+      "expected_value": "Puducherry",
+      "value_type": "string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "state",
+        "op": "=",
+        "val": "Puducherry",
+        "unit": null
+      },
+      "raw_text": "The applicant should be a native of the Union Territory of Puducherry by birth or by continuous residence for not less than 5 years.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aasgsmse",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_aasgsmse_03",
+      "scheme_id": "05b08f3a-2c6a-52d4-bc60-a49ed378bfb6",
+      "rule_type": "eligibility",
+      "field": "gender",
+      "operator": "=",
+      "expected_value": "Female",
+      "value_type": "string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "gender",
+        "op": "=",
+        "val": "Female",
+        "unit": null
+      },
+      "raw_text": "The applicant should be a Girl.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aasgsmse",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_aasgsmse_04",
+      "scheme_id": "05b08f3a-2c6a-52d4-bc60-a49ed378bfb6",
+      "rule_type": "eligibility",
+      "field": "age",
+      "operator": "between",
+      "expected_value": {
+        "min": 11,
+        "max": 14
+      },
+      "value_type": "range",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "age",
+        "op": "between",
+        "val": {
+          "min": 11,
+          "max": 14
+        },
+        "unit": "years"
+      },
+      "raw_text": "The applicant should be in the age group of 11 to 14 years.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aasgsmse",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_aasgsmse_05",
+      "scheme_id": "05b08f3a-2c6a-52d4-bc60-a49ed378bfb6",
+      "rule_type": "eligibility",
+      "field": "school_attendance_percentage",
+      "operator": ">=",
+      "expected_value": 80,
+      "value_type": "numeric",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "school_attendance_percentage",
+        "op": ">=",
+        "val": 80,
+        "unit": "percent"
+      },
+      "raw_text": "The applicant should have a minimum attendance of 80% in the previous academic year.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aasgsmse",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    }
+  ]
+}

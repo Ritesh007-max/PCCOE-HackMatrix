@@ -1,0 +1,130 @@
+{
+  "scheme_id": "d7897276-ab5f-513e-8280-0ae823f0a804",
+  "scheme_slug": "aag",
+  "scheme_name": "Aponar Apon Ghar",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_aag_01",
+      "scheme_id": "d7897276-ab5f-513e-8280-0ae823f0a804",
+      "rule_type": "eligibility",
+      "field": "state",
+      "operator": "=",
+      "expected_value": "Assam",
+      "value_type": "string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "state",
+        "op": "=",
+        "val": "Assam",
+        "unit": null
+      },
+      "raw_text": "The applicants must be permanent residents of Assam state.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aag",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_aag_02",
+      "scheme_id": "d7897276-ab5f-513e-8280-0ae823f0a804",
+      "rule_type": "eligibility",
+      "field": "annual_family_income",
+      "operator": "<=",
+      "expected_value": 2000000,
+      "value_type": "numeric",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "annual_family_income",
+        "op": "<=",
+        "val": 2000000,
+        "unit": "INR"
+      },
+      "raw_text": "The total family income of the applicant (from all sources) must not exceed ₹ 20,00,000.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aag",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_aag_03",
+      "scheme_id": "d7897276-ab5f-513e-8280-0ae823f0a804",
+      "rule_type": "eligibility",
+      "field": "housing_loan_amount",
+      "operator": ">",
+      "expected_value": 500000,
+      "value_type": "numeric",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "housing_loan_amount",
+        "op": ">",
+        "val": 500000,
+        "unit": "INR"
+      },
+      "raw_text": "The housing loan must be of more than ₹ 5,00,000 and sanctioned by bank on or after 1st April 2019.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aag",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_aag_04",
+      "scheme_id": "d7897276-ab5f-513e-8280-0ae823f0a804",
+      "rule_type": "exclusion",
+      "field": "already_benefited_apon_ghar",
+      "operator": "is_false",
+      "expected_value": false,
+      "value_type": "boolean",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "already_benefited_apon_ghar",
+        "op": "is_false",
+        "val": false,
+        "unit": null
+      },
+      "raw_text": "Those who already benefited under the Apon Ghar scheme are not eligible.",
+      "source_url": "https://www.myscheme.gov.in/schemes/aag",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "scheme_id": "50b4b505-afde-5d1f-bdd0-a5fdef549b7e",
+  "scheme_slug": "pm-svanidhi",
+  "scheme_name": "PM Street Vendor’s AtmaNirbhar Nidhi (PM SVANidhi)",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_pm-svanidhi_01",
+      "scheme_id": "50b4b505-afde-5d1f-bdd0-a5fdef549b7e",
+      "rule_type": "eligibility",
+      "field": "occupation",
+      "operator": "=",
+      "expected_value": "Street Vendor",
+      "value_type": "string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "occupation",
+        "op": "=",
+        "val": "Street Vendor",
+        "unit": null
+      },
+      "raw_text": "Street vendors in possession of Certificate of Vending / Identity Card issued by Urban Local Bodies (ULBs).",
+      "source_url": "https://www.myscheme.gov.in/schemes/pm-svanidhi",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 0.95,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_pm-svanidhi_02",
+      "scheme_id": "50b4b505-afde-5d1f-bdd0-a5fdef549b7e",
+      "rule_type": "eligibility",
+      "field": "area_type",
+      "operator": "in",
+      "expected_value": [
+        "Urban",
+        "Peri-Urban"
+      ],
+      "value_type": "list_string",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "area_type",
+        "op": "in",
+        "val": [
+          "Urban",
+          "Peri-Urban"
+        ],
+        "unit": null
+      },
+      "raw_text": "The vendors of surrounding development/ peri-urban/rural areas vending in the geographical limits of the ULBs.",
+      "source_url": "https://www.myscheme.gov.in/schemes/pm-svanidhi",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 0.9,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_pm-svanidhi_03",
+      "scheme_id": "50b4b505-afde-5d1f-bdd0-a5fdef549b7e",
+      "rule_type": "conditional",
+      "field": "has_vending_certificate_or_lor",
+      "operator": "is_true",
+      "expected_value": true,
+      "value_type": "boolean",
+      "logic_group": "VENDING_PROOF",
+      "required": true,
+      "hard_constraint": false,
+      "condition": {
+        "field": "has_vending_certificate_or_lor",
+        "op": "is_true",
+        "val": true,
+        "unit": null
+      },
+      "raw_text": "Street Vendors who have been issued Letter of Recommendation (LoR) by ULB / Town Vending Committee (TVC).",
+      "source_url": "https://www.myscheme.gov.in/schemes/pm-svanidhi",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 0.9,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    }
+  ]
+}

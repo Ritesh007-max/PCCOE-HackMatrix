@@ -1,0 +1,106 @@
+{
+  "scheme_id": "bc6a1f2a-7ece-5588-b15b-b2f06ba81fb4",
+  "scheme_slug": "apy",
+  "scheme_name": "Atal Pension Yojana",
+  "version": "1.0.0",
+  "last_updated": "2026-09-21T16:30:00Z",
+  "root_logic": "AND",
+  "rules": [
+    {
+      "rule_id": "rule_apy_01",
+      "scheme_id": "bc6a1f2a-7ece-5588-b15b-b2f06ba81fb4",
+      "rule_type": "eligibility",
+      "field": "age",
+      "operator": "between",
+      "expected_value": {
+        "min": 18,
+        "max": 40
+      },
+      "value_type": "range",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "age",
+        "op": "between",
+        "val": {
+          "min": 18,
+          "max": 40
+        },
+        "unit": "years"
+      },
+      "raw_text": "The minimum age of joining APY is 18 years and maximum is 40 years.",
+      "source_url": "https://www.myscheme.gov.in/schemes/apy",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_apy_02",
+      "scheme_id": "bc6a1f2a-7ece-5588-b15b-b2f06ba81fb4",
+      "rule_type": "eligibility",
+      "field": "has_bank_account",
+      "operator": "is_true",
+      "expected_value": true,
+      "value_type": "boolean",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "has_bank_account",
+        "op": "is_true",
+        "val": true,
+        "unit": null
+      },
+      "raw_text": "Subscriber contribution to APY shall be made through the facility of “auto-debit” of the prescribed contribution amount from the savings bank account/ post office savings bank account of the subscriber.",
+      "source_url": "https://www.myscheme.gov.in/schemes/apy",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "eligibility",
+      "confidence": 0.95,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    },
+    {
+      "rule_id": "rule_apy_03",
+      "scheme_id": "bc6a1f2a-7ece-5588-b15b-b2f06ba81fb4",
+      "rule_type": "exclusion",
+      "field": "is_taxpayer",
+      "operator": "is_false",
+      "expected_value": false,
+      "value_type": "boolean",
+      "logic_group": "DEFAULT",
+      "required": true,
+      "hard_constraint": true,
+      "condition": {
+        "field": "is_taxpayer",
+        "op": "is_false",
+        "val": false,
+        "unit": null
+      },
+      "raw_text": "From 1st October, 2022, any citizen who is or has been an income tax payer, shall not be eligible to join APY.",
+      "source_url": "https://www.myscheme.gov.in/schemes/apy",
+      "source_document": "schemes_canonical.parquet",
+      "source_page": null,
+      "source_section": "exclusions",
+      "confidence": 1.0,
+      "provenance": {
+        "source_dataset": "schemes_canonical.parquet",
+        "extractor": "policy_rule_extractor_v1",
+        "extraction_timestamp": "2026-09-21T16:30:00Z",
+        "review_status": "VERIFIED_DETERMINISTIC"
+      }
+    }
+  ]
+}
