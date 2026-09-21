@@ -42,10 +42,16 @@ include = ["src*"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+pythonpath = ["."]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-ra -q --strict-markers"
+
+[tool.pyright]
+include = ["src", "tests"]
+extraPaths = [".", "src"]
+pythonVersion = "3.10"
 
 [tool.ruff]
 line-length = 88

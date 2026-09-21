@@ -3,6 +3,13 @@ Tests for PolicySetu RAG Evaluation Suite (AI/src/rag/evaluation/).
 Validates Hit@K, MRR, batch evaluation, and benchmark execution harness.
 """
 
+import sys
+from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 import unittest
 from src.rag.evaluation.metrics import compute_hit_at_k, compute_mrr, evaluate_batch
 from src.rag.evaluation.test_cases import RetrievalTestCase

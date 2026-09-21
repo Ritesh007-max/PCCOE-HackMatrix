@@ -3,6 +3,13 @@ Tests for PolicySetu Query Normalization & Metadata Filtering (AI/src/rag/filter
 Validates language detection, entity extraction, and metadata filter predicates.
 """
 
+import sys
+from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 import unittest
 from src.rag.filters import detect_language, normalize_query_intent, build_metadata_filter
 from src.rag.models import RetrievalQuery

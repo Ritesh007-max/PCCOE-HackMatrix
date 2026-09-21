@@ -4,6 +4,13 @@ Validates cryptographic content hashing, deterministic chunk ID generation,
 provenance record construction, and integrity verification.
 """
 
+import sys
+from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 import unittest
 from src.rag.provenance import (
     compute_content_hash,

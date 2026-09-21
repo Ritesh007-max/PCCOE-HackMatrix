@@ -3,6 +3,13 @@ Unit tests for PolicySetu deterministic operators and multi-valued status handli
 """
 
 import unittest
+import sys
+from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 from src.rules.operators import evaluate_operator, SUPPORTED_OPERATORS
 from src.rules.models import RuleStatus
 from src.rules.exceptions import InvalidOperatorError

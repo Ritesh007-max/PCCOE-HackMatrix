@@ -3,6 +3,13 @@ Unit tests for PolicySetu Vector Store Abstraction.
 Verifies FAISS backend and Numpy fallback backend indexing, search, and persistence.
 """
 
+import sys
+from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 import unittest
 import tempfile
 from pathlib import Path

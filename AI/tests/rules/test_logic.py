@@ -3,6 +3,13 @@ Unit tests for PolicySetu Kleene multi-valued logic (AND, OR, NOT) and nested gr
 """
 
 import unittest
+import sys
+from pathlib import Path
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
 from src.rules.logic import evaluate_and, evaluate_or, evaluate_not, evaluate_group_operator
 from src.rules.models import RuleStatus
 

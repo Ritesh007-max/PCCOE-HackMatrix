@@ -73,15 +73,15 @@ def normalize_inr(value: Any) -> Optional[float]:
     multiplier = 1.0
     lower_raw = cleaned.lower()
 
-    if re.search(r"(?:\bcrores?\b|\bcr\.?\b|(?<=\d)cr\.?\b)", lower_raw):
+    if re.search(r"(?:\bcrores?\b|\bcr\.?\b|(?<=\d)cr\.?\b|करोड़)", lower_raw):
         multiplier = 10_000_000.0
-        cleaned = re.sub(r"(?:\bcrores?\b|\bcr\.?\b|(?<=\d)cr\.?\b)", "", cleaned, flags=re.IGNORECASE).strip()
-    elif re.search(r"(?:\blakhs?\b|\blacs?\b|(?<=\d)lakhs?\b|(?<=\d)lacs?\b)", lower_raw):
+        cleaned = re.sub(r"(?:\bcrores?\b|\bcr\.?\b|(?<=\d)cr\.?\b|करोड़)", "", cleaned, flags=re.IGNORECASE).strip()
+    elif re.search(r"(?:\blakhs?\b|\blacs?\b|(?<=\d)lakhs?\b|(?<=\d)lacs?\b|लाख)", lower_raw):
         multiplier = 100_000.0
-        cleaned = re.sub(r"(?:\blakhs?\b|\blacs?\b|(?<=\d)lakhs?\b|(?<=\d)lacs?\b)", "", cleaned, flags=re.IGNORECASE).strip()
-    elif re.search(r"(?:\bthousands?\b|(?<=\d)k\b|\bk\b)", lower_raw):
+        cleaned = re.sub(r"(?:\blakhs?\b|\blacs?\b|(?<=\d)lakhs?\b|(?<=\d)lacs?\b|लाख)", "", cleaned, flags=re.IGNORECASE).strip()
+    elif re.search(r"(?:\bthousands?\b|(?<=\d)k\b|\bk\b|हज़ार|हजार)", lower_raw):
         multiplier = 1_000.0
-        cleaned = re.sub(r"(?:\bthousands?\b|(?<=\d)k\b|\bk\b)", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"(?:\bthousands?\b|(?<=\d)k\b|\bk\b|हज़ार|हजार)", "", cleaned, flags=re.IGNORECASE).strip()
     elif re.search(r"(?:\bmillions?\b|(?<=\d)m\b|\bm\b)", lower_raw):
         multiplier = 1_000_000.0
         cleaned = re.sub(r"(?:\bmillions?\b|(?<=\d)m\b|\bm\b)", "", cleaned, flags=re.IGNORECASE).strip()
