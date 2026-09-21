@@ -1,0 +1,145 @@
+# ==========================================
+# PolicySetu AI Module - Git Ignore Rules
+# ==========================================
+
+# --- Python & Bytecode ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Virtual Environments ---
+venv/
+.venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+.env/
+.virtualenv/
+
+# --- Environment & Secret Variables ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+credentials.json
+secrets.json
+service_account.json
+
+# --- Model Weights, Checkpoints & Artifacts ---
+models/embeddings/*
+!models/embeddings/.gitkeep
+models/reranker/*
+!models/reranker/.gitkeep
+models/classifiers/*
+!models/classifiers/.gitkeep
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+*.h5
+*.ckpt
+*.joblib
+*.pkl
+*.pickle
+*.weights
+
+# --- Vector Stores & Databases ---
+vectorstore/*
+!vectorstore/.gitkeep
+!vectorstore/README.md
+*.faiss
+*.index
+*.sqlite
+*.sqlite3
+chroma.sqlite3
+*.chromadb/
+chroma/
+qdrant_storage/
+weaviate_data/
+
+# --- Datasets & Document Storage ---
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/schemes/documents/*
+!data/schemes/documents/.gitkeep
+
+# Exclude bulk document & dataset formats in data folders
+*.pdf
+*.docx
+*.xlsx
+*.csv
+*.parquet
+*.feather
+*.tar
+*.gz
+*.zip
+*.7z
+
+# Retain tracked sample files in test suites
+!data/samples/**
+!data/test_cases/**
+
+# --- Temporary & Uploaded User Documents ---
+uploads/
+tmp/
+temp/
+*.tmp
+*.log
+
+# --- Jupyter Notebooks & Prototyping ---
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# --- Testing, Coverage & Profiling ---
+.cache
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# --- IDEs & OS Specific Files ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
