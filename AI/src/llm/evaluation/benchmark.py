@@ -9,6 +9,13 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+_rec_out = getattr(sys.stdout, "reconfigure", None)
+if callable(_rec_out):
+    _rec_out(encoding="utf-8")
+_rec_err = getattr(sys.stderr, "reconfigure", None)
+if callable(_rec_err):
+    _rec_err(encoding="utf-8")
+
 # Ensure AI directory is on sys.path
 _AI_DIR = Path(__file__).resolve().parents[3]
 if str(_AI_DIR) not in sys.path:
@@ -42,7 +49,7 @@ def run_benchmark(verbose: bool = True) -> Dict[str, Any]:
     if verbose:
         print("=" * 75)
         print("  PolicySetu Phase 6 Intelligence Layer Benchmark")
-        print("  [Offline deterministic MockLLMProvider benchmark — NOT real production LLM]")
+        print("  [Offline deterministic MockLLMProvider benchmark - NOT real production LLM]")
         print("=" * 75)
 
     # 1. Query Understanding Benchmark (Retrieval Hints ONLY)

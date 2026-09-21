@@ -4,18 +4,47 @@ Executes deterministic AST condition trees against citizen profiles.
 """
 
 from typing import Dict, Any, List, Tuple, Union, Optional
-from .models import (
-    Rule,
-    LogicGroup,
-    SchemeRuleSet,
-    RuleStatus,
-    RuleEvaluationResult,
-    ApplicantProfile,
-    RuleType
-)
-from .operators import evaluate_operator
-from .logic import evaluate_and, evaluate_or, evaluate_not, evaluate_group_operator
-from .exceptions import RuleEngineError
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import (
+        Rule,
+        LogicGroup,
+        SchemeRuleSet,
+        RuleStatus,
+        RuleEvaluationResult,
+        ApplicantProfile,
+        RuleType
+    )
+    from .operators import evaluate_operator
+    from .logic import evaluate_and, evaluate_or, evaluate_not, evaluate_group_operator
+    from .exceptions import RuleEngineError
+except (ImportError, ValueError):
+    from src.rules.models import (
+        Rule,
+        LogicGroup,
+        SchemeRuleSet,
+        RuleStatus,
+        RuleEvaluationResult,
+        ApplicantProfile,
+        RuleType,
+    )
+    from src.rules.operators import evaluate_operator
+    from src.rules.logic import (
+        evaluate_and,
+        evaluate_or,
+        evaluate_not,
+        evaluate_group_operator,
+    )
+    from src.rules.exceptions import RuleEngineError
 
 class RuleEvaluator:
     """Evaluates rules and rule sets deterministically with zero hallucinations."""

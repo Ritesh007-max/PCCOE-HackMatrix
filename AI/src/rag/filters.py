@@ -6,7 +6,20 @@ metadata filter predicates for vector and sparse search.
 
 import re
 from typing import Any, Callable, Dict, List, Optional
-from .models import RetrievalIntent, RetrievalQuery
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import RetrievalIntent, RetrievalQuery
+except (ImportError, ValueError):
+    from src.rag.models import RetrievalIntent, RetrievalQuery
 
 # Re-use Indian States and Social Categories
 INDIAN_STATES_KEYWORDS = {

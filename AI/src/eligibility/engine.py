@@ -5,13 +5,21 @@ Evaluates citizen profiles against statutory government policy rules with zero h
 
 import json
 from pathlib import Path
+import sys
 from typing import Dict, Any, List, Optional, Union
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
 
 from src.rules.models import SchemeRuleSet, RuleStatus, ApplicantProfile
 from src.rules.evaluator import RuleEvaluator
 from src.rules.operators import SUPPORTED_OPERATORS
 from src.rules.exceptions import RuleEngineError
-from .decision import EligibilityDecision
+try:
+    from .decision import EligibilityDecision
+except (ImportError, ValueError):
+    from src.eligibility.decision import EligibilityDecision
 
 class EligibilityEngine:
     """

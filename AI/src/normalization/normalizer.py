@@ -6,7 +6,20 @@ Strictly adheres to canonical standards and conservative parsing invariants.
 
 import re
 from typing import Any, Dict, Optional, Union
-from .validators import validate_field_value, ValidationError
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .validators import validate_field_value, ValidationError
+except (ImportError, ValueError):
+    from src.normalization.validators import validate_field_value, ValidationError
 
 # Authoritative standard Indian States and Union Territories (28 States + 8 UTs)
 INDIAN_STATES_AND_UTS = {

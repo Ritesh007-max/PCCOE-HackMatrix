@@ -19,7 +19,10 @@ try:
 except (ImportError, ValueError):
     from src.rules.models import RuleStatus
 
-from .errors import DecisionContradictionError
+try:
+    from .errors import DecisionContradictionError
+except (ImportError, ValueError):
+    from src.llm.errors import DecisionContradictionError
 
 
 # Signatures indicative of prompt injection, instruction overrides, or jailbreaks

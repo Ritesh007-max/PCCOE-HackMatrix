@@ -4,11 +4,29 @@ Executes ground-truth test queries through the hybrid retriever, computes
 Hit@1, Hit@3, Hit@5, and MRR, and produces structured evaluation reports.
 """
 
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
-from ..retriever import HybridRetriever
-from ..models import RetrievalQuery
-from .test_cases import EVALUATION_TEST_CASES, RetrievalTestCase
-from .metrics import evaluate_batch, compute_hit_at_k, compute_mrr
+
+_rec_out = getattr(sys.stdout, "reconfigure", None)
+if callable(_rec_out):
+    _rec_out(encoding="utf-8")
+
+# Ensure AI directory is on sys.path
+_AI_DIR = Path(__file__).resolve().parents[3]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from ..retriever import HybridRetriever
+    from ..models import RetrievalQuery
+    from .test_cases import EVALUATION_TEST_CASES, RetrievalTestCase
+    from .metrics import evaluate_batch, compute_hit_at_k, compute_mrr
+except (ImportError, ValueError):
+    from src.rag.retriever import HybridRetriever
+    from src.rag.models import RetrievalQuery
+    from src.rag.evaluation.test_cases import EVALUATION_TEST_CASES, RetrievalTestCase
+    from src.rag.evaluation.metrics import evaluate_batch, compute_hit_at_k, compute_mrr
 
 
 class RetrievalBenchmarkRunner:
@@ -91,3 +109,7 @@ class RetrievalBenchmarkRunner:
             "by_query_type": type_metrics,
             "detailed_queries": per_query_results,
         }
+
+
+if __name__ == "__main__":
+    print("RetrievalBenchmarkRunner module verified successfully.")

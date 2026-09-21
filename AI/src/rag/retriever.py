@@ -9,22 +9,46 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import numpy as np
 
-from .models import (
-    RAGDocument,
-    RetrievedChunk,
-    RetrievalQuery,
-    SchemeRetrievalResult,
-    RetrievalIntent,
-    SourceTier,
-)
-from .config import RAGConfig, DEFAULT_RAG_CONFIG
-from .embeddings import EmbeddingModel, get_embedding_model
-from .sparse import BM25Retriever
-from .store import VectorStore, create_vector_store
-from .filters import normalize_query_intent, build_metadata_filter
-from .fusion import fuse_results
-from .reranker import BaseReranker, MetadataAwareReranker
-from .provenance import build_provenance_record
+import sys
+
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import (
+        RAGDocument,
+        RetrievedChunk,
+        RetrievalQuery,
+        SchemeRetrievalResult,
+        RetrievalIntent,
+        SourceTier,
+    )
+    from .config import RAGConfig, DEFAULT_RAG_CONFIG
+    from .embeddings import EmbeddingModel, get_embedding_model
+    from .sparse import BM25Retriever
+    from .store import VectorStore, create_vector_store
+    from .filters import normalize_query_intent, build_metadata_filter
+    from .fusion import fuse_results
+    from .reranker import BaseReranker, MetadataAwareReranker
+    from .provenance import build_provenance_record
+except (ImportError, ValueError):
+    from src.rag.models import (
+        RAGDocument,
+        RetrievedChunk,
+        RetrievalQuery,
+        SchemeRetrievalResult,
+        RetrievalIntent,
+        SourceTier,
+    )
+    from src.rag.config import RAGConfig, DEFAULT_RAG_CONFIG
+    from src.rag.embeddings import EmbeddingModel, get_embedding_model
+    from src.rag.sparse import BM25Retriever
+    from src.rag.store import VectorStore, create_vector_store
+    from src.rag.filters import normalize_query_intent, build_metadata_filter
+    from src.rag.fusion import fuse_results
+    from src.rag.reranker import BaseReranker, MetadataAwareReranker
+    from src.rag.provenance import build_provenance_record
 
 
 class HybridRetriever:

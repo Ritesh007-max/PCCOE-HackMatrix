@@ -9,7 +9,20 @@ import pickle
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
-from .models import RAGDocument
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import RAGDocument
+except (ImportError, ValueError):
+    from src.rag.models import RAGDocument
 
 
 def tokenize_text(text: str) -> List[str]:

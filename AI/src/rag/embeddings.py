@@ -9,7 +9,20 @@ import hashlib
 from typing import List, Optional
 import numpy as np
 
-from .config import RAGConfig, DEFAULT_RAG_CONFIG
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .config import RAGConfig, DEFAULT_RAG_CONFIG
+except (ImportError, ValueError):
+    from src.rag.config import RAGConfig, DEFAULT_RAG_CONFIG
 
 
 class EmbeddingModel(ABC):
@@ -79,6 +92,8 @@ class SentenceTransformerEmbeddingModel(EmbeddingModel):
 
     def encode_documents(self, texts: List[str], batch_size: int = 64) -> np.ndarray:
         self._load_model()
+        if self._model is None:
+            raise RuntimeError(f"Model {self._model_name} failed to initialize.")
         if not texts:
             return np.empty((0, self._dimension), dtype=np.float32)
 
@@ -93,6 +108,8 @@ class SentenceTransformerEmbeddingModel(EmbeddingModel):
 
     def encode_query(self, query: str) -> np.ndarray:
         self._load_model()
+        if self._model is None:
+            raise RuntimeError(f"Model {self._model_name} failed to initialize.")
         if not query.strip():
             return np.zeros(self._dimension, dtype=np.float32)
 

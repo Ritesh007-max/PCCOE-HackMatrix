@@ -4,8 +4,22 @@ Handles AND, OR, NOT operations and nested logic groups.
 """
 
 from typing import List, Dict, Any, Optional
-from .models import RuleStatus
-from .exceptions import RuleEngineError
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import RuleStatus
+    from .exceptions import RuleEngineError
+except (ImportError, ValueError):
+    from src.rules.models import RuleStatus
+    from src.rules.exceptions import RuleEngineError
 
 def evaluate_and(statuses: List[RuleStatus]) -> RuleStatus:
     """

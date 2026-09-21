@@ -3,7 +3,8 @@ PolicySetu Extraction Layer Data Models.
 Defines canonical applicant profile fields, verification statuses, and fact representations.
 """
 
-from dataclasses import dataclass, field
+import dataclasses
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Union
 
@@ -155,7 +156,7 @@ class ApplicantFact:
     text_span: Optional[str] = None
     extraction_method: str = ExtractionMethod.EXTRACTED.value
     verification_status: FactVerificationStatus = FactVerificationStatus.EXTRACTED
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def __post_init__(self):
         # Ensure confidence is clamped between 0.0 and 1.0
@@ -214,8 +215,8 @@ class CanonicalApplicantProfile:
     Canonical representation of applicant profile facts consolidated from evidence.
     Directly compatible with the Phase 3 RuleEvaluator and EligibilityEngine.
     """
-    facts: Dict[str, ApplicantFact] = field(default_factory=dict)
-    conflicted_fields: Set[str] = field(default_factory=set)
+    facts: Dict[str, ApplicantFact] = dataclasses.field(default_factory=dict)
+    conflicted_fields: Set[str] = dataclasses.field(default_factory=set)
 
     def add_fact(self, fact: ApplicantFact) -> None:
         """Adds or updates a fact in the canonical profile."""

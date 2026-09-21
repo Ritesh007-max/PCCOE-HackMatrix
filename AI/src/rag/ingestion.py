@@ -4,14 +4,24 @@ Loads audited datasets across explicit source tiers, executes section-aware chun
 deduplicates content, and persists normalized RAG documents to processed storage.
 """
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
-import pandas as pd
 import json
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, cast
+import pandas as pd
 
-from .models import RAGDocument, SourceTier, ContentType
-from .config import RAGConfig, DEFAULT_RAG_CONFIG
-from .chunking import chunk_scheme_record, chunk_faq_record
+_AI_DIR = Path(__file__).resolve().parents[2]
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import RAGDocument, SourceTier, ContentType
+    from .config import RAGConfig, DEFAULT_RAG_CONFIG
+    from .chunking import chunk_scheme_record, chunk_faq_record
+except (ImportError, ValueError):
+    from src.rag.models import RAGDocument, SourceTier, ContentType
+    from src.rag.config import RAGConfig, DEFAULT_RAG_CONFIG
+    from src.rag.chunking import chunk_scheme_record, chunk_faq_record
 
 
 class RAGIngestionPipeline:
@@ -23,10 +33,10 @@ class RAGIngestionPipeline:
 
     def __init__(self, config: RAGConfig = DEFAULT_RAG_CONFIG):
         self.config = config
-        self.ai_root = Path(config.ai_root)
+        self.ai_root = Path(config.ai_root) if config.ai_root else Path(".")
         self.raw_dir = self.ai_root / "data" / "raw"
         self.processed_dir = self.ai_root / "data" / "processed"
-        self.rag_output_dir = Path(config.processed_rag_dir)
+        self.rag_output_dir = Path(config.processed_rag_dir) if config.processed_rag_dir else self.processed_dir / "rag"
 
     def load_primary_schemes(
         self,
@@ -50,7 +60,7 @@ class RAGIngestionPipeline:
                 df = pd.concat([slug_df, other_df], ignore_index=True)
             elif limit:
                 df = df.head(limit)
-            records = df.to_dict(orient="records")
+            records = cast(Any, df).to_dict(orient="records")
         else:
             raw_csv = self.raw_dir / "schemes.csv"
             if not raw_csv.exists():
@@ -64,7 +74,7 @@ class RAGIngestionPipeline:
                 df = pd.concat([slug_df, other_df], ignore_index=True)
             elif limit:
                 df = df.head(limit)
-            records = df.to_dict(orient="records")
+            records = cast(Any, df).to_dict(orient="records")
 
         for rec in records:
             chunks = chunk_scheme_record(
@@ -96,7 +106,7 @@ class RAGIngestionPipeline:
             df = pd.concat([slug_df, other_df], ignore_index=True)
         elif limit:
             df = df.head(limit)
-        records = df.to_dict(orient="records")
+        records = cast(Any, df).to_dict(orient="records")
         docs: List[RAGDocument] = []
 
         for rec in records:

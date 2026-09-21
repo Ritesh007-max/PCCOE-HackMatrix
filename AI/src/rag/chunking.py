@@ -5,9 +5,24 @@ Preserves scheme identity, section headers, FAQ atomicity, and provenance.
 """
 
 from typing import Any, Dict, List, Optional
-from .models import RAGDocument, ContentType, SourceTier
-from .config import RAGConfig, DEFAULT_RAG_CONFIG
-from .provenance import compute_content_hash, generate_stable_chunk_id
+import sys
+from pathlib import Path
+
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
+if str(_AI_DIR) not in sys.path:
+    sys.path.insert(0, str(_AI_DIR))
+
+try:
+    from .models import RAGDocument, ContentType, SourceTier
+    from .config import RAGConfig, DEFAULT_RAG_CONFIG
+    from .provenance import compute_content_hash, generate_stable_chunk_id
+except (ImportError, ValueError):
+    from src.rag.models import RAGDocument, ContentType, SourceTier
+    from src.rag.config import RAGConfig, DEFAULT_RAG_CONFIG
+    from src.rag.provenance import compute_content_hash, generate_stable_chunk_id
 
 
 def split_text_with_overlap(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
@@ -84,17 +99,19 @@ def chunk_scheme_record(
     cat_val = record.get("categories")
     if cat_val is None or (hasattr(cat_val, "__len__") and len(cat_val) == 0):
         cat_val = record.get("category")
-    if isinstance(cat_val, (list, tuple)) or hasattr(cat_val, "tolist"):
-        if hasattr(cat_val, "tolist"):
-            cat_val = cat_val.tolist()
+    cat_tolist = getattr(cat_val, "tolist", None)
+    if callable(cat_tolist):
+        cat_val = cat_tolist()
+    if isinstance(cat_val, (list, tuple)):
         category = ", ".join(str(c) for c in cat_val) if cat_val else None
     else:
         category = str(cat_val) if cat_val is not None else None
 
     ben_val = record.get("beneficiary_type")
-    if isinstance(ben_val, (list, tuple)) or hasattr(ben_val, "tolist"):
-        if hasattr(ben_val, "tolist"):
-            ben_val = ben_val.tolist()
+    ben_tolist = getattr(ben_val, "tolist", None)
+    if callable(ben_tolist):
+        ben_val = ben_tolist()
+    if isinstance(ben_val, (list, tuple)):
         beneficiary_type = ", ".join(str(b) for b in ben_val) if ben_val else None
     else:
         beneficiary_type = str(ben_val) if ben_val is not None else None
