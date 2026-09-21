@@ -18,6 +18,7 @@ import {
   FileText,
 } from 'lucide-react';
 import '../styles/signup.css';
+import { registerUser, loginUser, storeAuthSession } from '../services/authService';
 
 // Assets
 import indiaGateHero from '../assets/india_gate_hero.jpg';
@@ -130,69 +131,77 @@ export default function SignupPage({ initialMode = 'signup' }) {
     setIsSubmitting(true);
 
     try {
-      // Attempt backend authentication
-      const endpoint = isSignIn ? '/api/users/login' : '/api/users/register';
-      const payload = isSignIn
-        ? { email: formData.email, password: formData.password }
-        : {
-            fullName: formData.fullName,
-            email: formData.email,
-            phone: `${selectedCountry.code}${formData.mobile}`,
-            password: formData.password,
-          };
+      let authResult;
 
-      let response;
-      try {
-        const res = await fetch(`http://localhost:5000${endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+      if (isSignIn) {
+        // Call BackEnd /api/users/login
+        authResult = await loginUser({
+          email: formData.email,
+          password: formData.password,
         });
-        response = await res.json();
-      } catch (err) {
-        // Backend not reachable, continue in standalone demo mode
-        response = null;
+      } else {
+        // Call BackEnd /api/users/register
+        authResult = await registerUser({
+          email: formData.email,
+          password: formData.password,
+          fullName: formData.fullName,
+          phone: `${selectedCountry.code}${formData.mobile}`,
+        });
+
+        // Upon successful registration, auto-login to obtain session access tokens
+        if (authResult.success) {
+          const autoLogin = await loginUser({
+            email: formData.email,
+            password: formData.password,
+          });
+          if (autoLogin.success && autoLogin.data?.access_token) {
+            authResult.data.access_token = autoLogin.data.access_token;
+            authResult.data.refresh_token = autoLogin.data.refresh_token;
+            if (autoLogin.data.user) {
+              authResult.data.user = autoLogin.data.user;
+            }
+          }
+        }
       }
 
-      if (response && !response.success && response.message) {
-        setErrorMsg(response.message);
-        setIsSubmitting(false);
-        return;
+      // Check for backend errors (validation, invalid credentials, existing user, etc.)
+      if (!authResult.success) {
+        if (!authResult.isNetworkError) {
+          setErrorMsg(authResult.message);
+          setIsSubmitting(false);
+          return;
+        }
+
+        // If backend server is not running on port 5000, inform citizen clearly with demo fallback
+        console.warn('Backend server offline, continuing with local session:', authResult.message);
       }
 
-      // Save user session
-      const userData = (response && response.user) || {
-        fullName: formData.fullName || formData.email.split('@')[0],
-        email: formData.email,
-        phone: `${selectedCountry.code}${formData.mobile}`,
-      };
-      localStorage.setItem('fin_user', JSON.stringify(userData));
-      if (response && response.access_token) {
-        localStorage.setItem('fin_token', response.access_token);
-      }
+      // Store authenticated session
+      storeAuthSession({
+        user: authResult.data?.user,
+        accessToken: authResult.data?.access_token,
+        refreshToken: authResult.data?.refresh_token,
+        fallbackName: formData.fullName.trim() || formData.email.split('@')[0],
+      });
 
       setSuccessMsg(isSignIn ? 'Welcome back! Redirecting...' : 'Account created successfully! Redirecting...');
       setTimeout(() => {
         navigate('/dashboard');
       }, 700);
     } catch (err) {
-      setSuccessMsg(isSignIn ? 'Signed in! Redirecting...' : 'Account created! Redirecting...');
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 700);
+      setErrorMsg(err.message || 'An unexpected error occurred. Please try again.');
+      setIsSubmitting(false);
     }
   };
 
   const handleGoogleAuth = () => {
     setSuccessMsg('Connecting with Google Account...');
     setTimeout(() => {
-      localStorage.setItem(
-        'fin_user',
-        JSON.stringify({
-          fullName: 'Google User',
-          email: 'citizen@gov.in',
-        })
-      );
+      storeAuthSession({
+        user: { id: 'google-oauth-demo', email: 'citizen@gov.in' },
+        accessToken: 'google-oauth-demo-token',
+        fallbackName: 'Google User',
+      });
       navigate('/dashboard');
     }, 700);
   };
