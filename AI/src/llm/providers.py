@@ -284,15 +284,22 @@ class OpenRouterProvider(LLMProvider):
         try:
             with urllib.request.urlopen(req, timeout=self.config.timeout_seconds) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
+                if "error" in result:
+                    err_msg = result["error"].get("message", str(result["error"]))
+                    raise ProviderUnavailableError(f"OpenRouter returned error: {err_msg}")
                 choices = result.get("choices", [])
                 if not choices or "message" not in choices[0]:
                     raise ProviderInvalidResponseError("OpenRouter returned invalid response payload structure.")
-                return choices[0]["message"].get("content", "").strip()
+                message = choices[0]["message"]
+                content = message.get("content")
+                if not content:
+                    content = message.get("reasoning") or ""
+                return content.strip()
         except urllib.error.HTTPError as exc:
             self._translate_http_error(exc)
             raise exc
-        except urllib.error.URLError as exc:
-            reason = str(exc.reason).lower()
+        except (urllib.error.URLError, TimeoutError) as exc:
+            reason = str(getattr(exc, "reason", exc)).lower()
             if "timed out" in reason or "timeout" in reason:
                 raise ProviderTimeoutError(f"OpenRouter request timed out: {exc}") from exc
             raise ProviderNetworkError(f"Failed to connect to OpenRouter endpoint: {exc}") from exc

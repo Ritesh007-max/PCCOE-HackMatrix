@@ -110,7 +110,7 @@ class ClaimSupportStatus(str, Enum):
 @dataclass
 class AmbiguityRecord:
     """Represents a specific ambiguity detected in user input."""
-    ambiguity_type: AmbiguityType
+    ambiguity_type: AmbiguityType = AmbiguityType.APPROXIMATE_VALUE
     field: Optional[str] = None
     raw_span: str = ""
     description: str = ""
@@ -126,9 +126,22 @@ class AmbiguityRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AmbiguityRecord":
+    def from_dict(cls, data: Any) -> "AmbiguityRecord":
+        if isinstance(data, str):
+            return cls(
+                ambiguity_type=AmbiguityType.APPROXIMATE_VALUE,
+                raw_span=data,
+                description=data,
+            )
+        if not isinstance(data, dict):
+            return cls()
+        amb_type_val = data.get("ambiguity_type", AmbiguityType.APPROXIMATE_VALUE.value)
+        try:
+            amb_type = AmbiguityType(amb_type_val)
+        except (ValueError, TypeError):
+            amb_type = AmbiguityType.APPROXIMATE_VALUE
         return cls(
-            ambiguity_type=AmbiguityType(data.get("ambiguity_type", AmbiguityType.APPROXIMATE_VALUE.value)),
+            ambiguity_type=amb_type,
             field=data.get("field"),
             raw_span=data.get("raw_span", ""),
             description=data.get("description", ""),
@@ -164,6 +177,15 @@ class QueryIntent:
         self.intent = UserIntent.from_str(self.intent)
         if self.secondary_intent is not None:
             self.secondary_intent = UserIntent.from_str(self.secondary_intent)
+        normalized_ambiguities = []
+        for a in self.ambiguities:
+            if isinstance(a, AmbiguityRecord):
+                normalized_ambiguities.append(a)
+            elif isinstance(a, (dict, str)):
+                normalized_ambiguities.append(AmbiguityRecord.from_dict(a))
+            else:
+                normalized_ambiguities.append(AmbiguityRecord(description=str(a)))
+        self.ambiguities = normalized_ambiguities
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -179,14 +201,18 @@ class QueryIntent:
             "benefit_type": self.benefit_type,
             "keywords": self.keywords,
             "confidence": self.confidence,
-            "ambiguities": [a.to_dict() for a in self.ambiguities],
+            "ambiguities": [
+                a.to_dict() if hasattr(a, "to_dict")
+                else (a if isinstance(a, dict) else {"description": str(a)})
+                for a in self.ambiguities
+            ],
             "is_search_hint_only": self.is_search_hint_only,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "QueryIntent":
         ambiguities = [
-            AmbiguityRecord.from_dict(a) if isinstance(a, dict) else a
+            AmbiguityRecord.from_dict(a) if isinstance(a, (dict, str)) else a
             for a in data.get("ambiguities", [])
         ]
         return cls(
@@ -294,11 +320,34 @@ class FactExtractionResult:
     source_text: str = ""
     warnings: List[str] = field(default_factory=list)
 
+    def __post_init__(self):
+        normalized_facts = []
+        for f in self.facts:
+            if isinstance(f, ApplicantFactCandidate):
+                normalized_facts.append(f)
+            elif isinstance(f, dict):
+                normalized_facts.append(ApplicantFactCandidate.from_dict(f))
+        self.facts = normalized_facts
+
+        normalized_ambiguities = []
+        for a in self.ambiguities:
+            if isinstance(a, AmbiguityRecord):
+                normalized_ambiguities.append(a)
+            elif isinstance(a, (dict, str)):
+                normalized_ambiguities.append(AmbiguityRecord.from_dict(a))
+            else:
+                normalized_ambiguities.append(AmbiguityRecord(description=str(a)))
+        self.ambiguities = normalized_ambiguities
+
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "facts": [f.to_dict() for f in self.facts],
+            "facts": [f.to_dict() if hasattr(f, "to_dict") else f for f in self.facts],
             "candidate_missing_fields": self.candidate_missing_fields,
-            "ambiguities": [a.to_dict() for a in self.ambiguities],
+            "ambiguities": [
+                a.to_dict() if hasattr(a, "to_dict")
+                else (a if isinstance(a, dict) else {"description": str(a)})
+                for a in self.ambiguities
+            ],
             "extraction_confidence": self.extraction_confidence.value,
             "source_text": self.source_text,
             "warnings": self.warnings,
@@ -312,7 +361,7 @@ class FactExtractionResult:
             for f in raw_list
         ]
         ambiguities = [
-            AmbiguityRecord.from_dict(a) if isinstance(a, dict) else a
+            AmbiguityRecord.from_dict(a) if isinstance(a, (dict, str)) else a
             for a in data.get("ambiguities", [])
         ]
         return cls(
@@ -384,12 +433,23 @@ class GroundedExplanation:
     review_required: bool = False
     rejection_fallback_used: bool = False
 
+    def __post_init__(self):
+        normalized_claims = []
+        for c in self.claims:
+            if isinstance(c, FactualClaim):
+                normalized_claims.append(c)
+            elif isinstance(c, dict):
+                normalized_claims.append(FactualClaim.from_dict(c))
+            elif isinstance(c, str):
+                normalized_claims.append(FactualClaim(statement=c))
+        self.claims = normalized_claims
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "authoritative_decision": self.authoritative_decision,
             "scheme_id": self.scheme_id,
             "answer": self.answer,
-            "claims": [c.to_dict() for c in self.claims],
+            "claims": [c.to_dict() if hasattr(c, "to_dict") else c for c in self.claims],
             "supporting_chunk_ids": self.supporting_chunk_ids,
             "supporting_source_urls": self.supporting_source_urls,
             "decision_reference": self.decision_reference,
@@ -405,7 +465,9 @@ class GroundedExplanation:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "GroundedExplanation":
         claims = [
-            FactualClaim.from_dict(c) if isinstance(c, dict) else c
+            FactualClaim.from_dict(c) if isinstance(c, dict) else (
+                FactualClaim(statement=c) if isinstance(c, str) else c
+            )
             for c in data.get("claims", [])
         ]
         return cls(

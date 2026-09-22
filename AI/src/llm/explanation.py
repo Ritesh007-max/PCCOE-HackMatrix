@@ -8,9 +8,12 @@ CRITICAL INVARIANTS:
 4. Factual claims are verified against retrieved Phase 5 chunks.
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 import sys
 from pathlib import Path
+
+logger = logging.getLogger("policysetu.llm.explanation")
 
 # Ensure AI directory is on sys.path
 _AI_DIR = Path(__file__).resolve().parents[2]
@@ -87,19 +90,40 @@ class GroundedExplanationGenerator:
         )
 
         # Call LLM client
-        explanation: GroundedExplanation = self.llm_client.generate_structured(
-            prompt=prompt,
-            schema_cls=GroundedExplanation,
-            system_prompt=SYSTEM_PROMPT_GROUNDED_EXPLANATION,
-            operation="grounded_explanation",
-            authoritative_decision=rule_status.value,
-            scheme_id=ruleset.scheme_id,
-            retrieved_chunks=chunks,
-            passed_rules=passed_rules,
-            failed_rules=failed_rules,
-            missing_fields=missing_fields,
-            conflicted_fields=conflicted_fields,
-        )
+        try:
+            explanation = self.llm_client.generate_structured(
+                prompt=prompt,
+                schema_cls=GroundedExplanation,
+                system_prompt=SYSTEM_PROMPT_GROUNDED_EXPLANATION,
+                operation="grounded_explanation",
+                authoritative_decision=rule_status.value,
+                scheme_id=ruleset.scheme_id,
+                retrieved_chunks=chunks,
+                passed_rules=passed_rules,
+                failed_rules=failed_rules,
+                missing_fields=missing_fields,
+                conflicted_fields=conflicted_fields,
+            )
+        except Exception as exc:
+            logger.warning("LLM explanation generation failed (%s); using deterministic template explanation.", exc)
+            fallback_text = DecisionImmutabilityGuard.generate_fallback_explanation(
+                scheme_id=ruleset.scheme_id,
+                phase3_status=rule_status,
+                failed_rules=failed_reasons,
+                missing_fields=missing_fields,
+                conflicted_fields=conflicted_fields,
+            )
+            return GroundedExplanation(
+                authoritative_decision=rule_status.value,
+                scheme_id=ruleset.scheme_id,
+                answer=fallback_text,
+                passed_rules=passed_rules,
+                failed_rules=failed_rules,
+                missing_fields=missing_fields,
+                conflicted_fields=conflicted_fields,
+                review_required=(rule_status == RuleStatus.REVIEW),
+                rejection_fallback_used=True,
+            )
 
         # 1. Structural Decision Immutability: force authoritative decision
         explanation.authoritative_decision = rule_status.value

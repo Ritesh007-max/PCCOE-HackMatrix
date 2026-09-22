@@ -35,10 +35,14 @@ def clean_json_text(text: str) -> str:
     cleaned = text.strip()
 
     # 1. Strip markdown code fences (```json ... ``` or ``` ... ```)
-    code_block_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
-    match = re.search(code_block_pattern, cleaned, re.IGNORECASE)
-    if match:
-        cleaned = match.group(1).strip()
+    code_blocks = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned, re.IGNORECASE)
+    if code_blocks:
+        chosen = None
+        for b in reversed(code_blocks):
+            if "{" in b and "}" in b:
+                chosen = b.strip()
+                break
+        cleaned = chosen or code_blocks[-1].strip()
     else:
         # Fallback: find outermost curly braces or square brackets
         first_brace = cleaned.find("{")
@@ -50,6 +54,10 @@ def clean_json_text(text: str) -> str:
             cleaned = cleaned[first_brace : last_brace + 1]
         elif first_bracket != -1 and last_bracket != -1:
             cleaned = cleaned[first_bracket : last_bracket + 1]
+
+    # Remove comments (// ...)
+    cleaned = re.sub(r"(?m)^\s*//.*$", "", cleaned)
+    cleaned = re.sub(r",\s*//.*", ",", cleaned)
 
     # Remove trailing commas before closing braces/brackets (common LLM JSON issue)
     cleaned = re.sub(r",\s*([\]}])", r"\1", cleaned)
@@ -65,8 +73,18 @@ def parse_structured_json(text: str) -> Any:
         if not isinstance(data, (dict, list)):
             raise MalformedOutputError(f"Expected JSON object or array, got {type(data).__name__}")
         return data
-    except json.JSONDecodeError as exc:
-        raise MalformedOutputError(f"Failed to parse LLM JSON: {exc.msg} at line {exc.lineno} col {exc.colno}") from exc
+    except json.JSONDecodeError:
+        # Repair unquoted keys: e.g. { facts: [...] } -> { "facts": [...] }
+        repaired = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', cleaned)
+        # Clean trailing commas again if any exposed
+        repaired = re.sub(r",\s*([\]}])", r"\1", repaired)
+        try:
+            data = json.loads(repaired)
+            if isinstance(data, (dict, list)):
+                return data
+            raise MalformedOutputError(f"Expected JSON object or array, got {type(data).__name__}")
+        except json.JSONDecodeError as exc:
+            raise MalformedOutputError(f"Failed to parse LLM JSON: {exc.msg} at line {exc.lineno} col {exc.colno}") from exc
 
 
 def validate_and_instantiate(data: Dict[str, Any], target_cls: Type[T]) -> T:

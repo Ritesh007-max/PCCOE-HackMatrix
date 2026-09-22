@@ -166,7 +166,7 @@ class LLMRouter:
             )
 
         # 2. Explicit Gemini-Only Mode (no fallback)
-        if mode == "gemini":
+        if mode in ("gemini_only", "gemini-only"):
             start = time.perf_counter()
             res = call_fn(self.gemini_provider)
             lat = (time.perf_counter() - start) * 1000.0
