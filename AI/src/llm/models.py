@@ -33,6 +33,34 @@ class UserIntent(str, Enum):
     GENERAL_INFORMATION = "GENERAL_INFORMATION"
     UNKNOWN = "UNKNOWN"
 
+    @classmethod
+    def from_str(cls, val: Any) -> "UserIntent":
+        if isinstance(val, UserIntent):
+            return val
+        if not val or not isinstance(val, str):
+            return cls.UNKNOWN
+        v = val.strip().upper()
+        for item in cls:
+            if item.value == v or item.name == v:
+                return item
+        if any(s in v for s in ("SCHEME", "SEARCH", "FIND", "DISCOVERY", "EXPLORE", "SCHOLARSHIP")):
+            return cls.SCHEME_DISCOVERY
+        if "ELIGIB" in v or "QUALIF" in v:
+            return cls.ELIGIBILITY_QUESTION
+        if "BENEFIT" in v or "SUBSIDY" in v or "MONEY" in v:
+            return cls.BENEFIT_QUESTION
+        if "APPLY" in v or "APPLICATION" in v or "PROCESS" in v:
+            return cls.APPLICATION_PROCESS
+        if "DOC" in v:
+            return cls.DOCUMENT_REQUIREMENTS
+        if "STATUS" in v or "TRACK" in v:
+            return cls.STATUS_QUERY
+        if "COMPARE" in v or "COMPARISON" in v:
+            return cls.COMPARISON
+        if "INFO" in v:
+            return cls.GENERAL_INFORMATION
+        return cls.UNKNOWN
+
 
 class ExtractionConfidence(str, Enum):
     """Categorical confidence for fact extraction."""
@@ -40,6 +68,24 @@ class ExtractionConfidence(str, Enum):
     MEDIUM = "MEDIUM"
     LOW = "LOW"
     UNKNOWN = "UNKNOWN"
+
+    @classmethod
+    def from_str(cls, val: Any) -> "ExtractionConfidence":
+        if isinstance(val, ExtractionConfidence):
+            return val
+        if not val or not isinstance(val, str):
+            return cls.UNKNOWN
+        v = val.strip().upper()
+        for item in cls:
+            if item.value == v or item.name == v:
+                return item
+        if "HIGH" in v:
+            return cls.HIGH
+        if "MED" in v:
+            return cls.MEDIUM
+        if "LOW" in v:
+            return cls.LOW
+        return cls.UNKNOWN
 
 
 class AmbiguityType(str, Enum):
@@ -115,10 +161,9 @@ class QueryIntent:
 
     def __post_init__(self):
         self.confidence = max(0.0, min(1.0, float(self.confidence)))
-        if isinstance(self.intent, str):
-            self.intent = UserIntent(self.intent)
-        if isinstance(self.secondary_intent, str):
-            self.secondary_intent = UserIntent(self.secondary_intent)
+        self.intent = UserIntent.from_str(self.intent)
+        if self.secondary_intent is not None:
+            self.secondary_intent = UserIntent.from_str(self.secondary_intent)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -148,8 +193,8 @@ class QueryIntent:
             original_query=data.get("original_query", ""),
             normalized_query=data.get("normalized_query", ""),
             language=data.get("language", "unknown"),
-            intent=UserIntent(data.get("intent", UserIntent.UNKNOWN.value)),
-            secondary_intent=UserIntent(data["secondary_intent"]) if data.get("secondary_intent") else None,
+            intent=UserIntent.from_str(data.get("intent", UserIntent.UNKNOWN.value)),
+            secondary_intent=UserIntent.from_str(data["secondary_intent"]) if data.get("secondary_intent") else None,
             state=data.get("state"),
             social_category=data.get("social_category"),
             beneficiary_type=data.get("beneficiary_type"),
@@ -200,18 +245,42 @@ class ApplicantFactCandidate:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ApplicantFactCandidate":
+        status_raw = data.get("suggested_verification_status")
+        try:
+            status = FactVerificationStatus(status_raw) if status_raw else FactVerificationStatus.SELF_REPORTED
+        except (ValueError, KeyError):
+            status = FactVerificationStatus.SELF_REPORTED
+
+        field_raw = data.get("field") or data.get("fact_type") or data.get("field_name") or "unknown"
+        f_lower = str(field_raw).strip().lower()
+        canonical_map = {
+            "family_income": "annual_family_income",
+            "annual_income": "annual_family_income",
+            "income": "annual_family_income",
+            "age": "age",
+            "state": "state",
+            "state_of_residence": "state",
+            "gender": "gender",
+            "social_category": "social_category",
+            "caste": "social_category",
+            "disability_percentage": "disability_percentage",
+            "disability": "disability_percentage",
+            "occupation": "occupation",
+            "marital_status": "marital_status",
+            "landholding_acres": "landholding_acres",
+        }
+        field = canonical_map.get(f_lower, f_lower)
+
         return cls(
-            field=data["field"],
-            raw_value=data.get("raw_value"),
+            field=field,
+            raw_value=data.get("raw_value") or data.get("value"),
             data_type=data.get("data_type", "string"),
             confidence=float(data.get("confidence", 1.0)),
             evidence_text=data.get("evidence_text", ""),
             extraction_source=data.get("extraction_source", "user_text"),
             ambiguity=data.get("ambiguity"),
             needs_confirmation=bool(data.get("needs_confirmation", False)),
-            suggested_verification_status=FactVerificationStatus(
-                data.get("suggested_verification_status", FactVerificationStatus.SELF_REPORTED.value)
-            ),
+            suggested_verification_status=status,
         )
 
 
@@ -237,9 +306,10 @@ class FactExtractionResult:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FactExtractionResult":
+        raw_list = data.get("facts") or data.get("extracted_facts") or []
         facts = [
             ApplicantFactCandidate.from_dict(f) if isinstance(f, dict) else f
-            for f in data.get("facts", [])
+            for f in raw_list
         ]
         ambiguities = [
             AmbiguityRecord.from_dict(a) if isinstance(a, dict) else a
@@ -249,7 +319,7 @@ class FactExtractionResult:
             facts=facts,
             candidate_missing_fields=data.get("candidate_missing_fields", []),
             ambiguities=ambiguities,
-            extraction_confidence=ExtractionConfidence(
+            extraction_confidence=ExtractionConfidence.from_str(
                 data.get("extraction_confidence", ExtractionConfidence.HIGH.value)
             ),
             source_text=data.get("source_text", ""),
