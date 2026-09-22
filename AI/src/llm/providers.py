@@ -1,8 +1,7 @@
 """
-PolicySetu LLM Provider Abstraction Layer.
-Provides a pluggable interface for language models.
-Includes MockLLMProvider (offline, deterministic, rule-assisted) and OpenAICompatibleProvider.
-CRITICAL INVARIANT: Production provider failure MUST NOT silently fall back to Mock.
+PolicySetu LLM Provider Layer.
+Implements Google Gemini (Primary), OpenRouter (Fallback), and MockLLMProvider (Offline).
+Strictly classifies operational failures vs authentication/configuration errors.
 """
 
 from abc import ABC, abstractmethod
@@ -15,7 +14,10 @@ import sys
 from pathlib import Path
 
 # Ensure AI directory is on sys.path
-_AI_DIR = Path(__file__).resolve().parents[2]
+_CUR = Path(__file__).resolve()
+while _CUR.name != "AI" and _CUR.parent != _CUR:
+    _CUR = _CUR.parent
+_AI_DIR = _CUR
 if str(_AI_DIR) not in sys.path:
     sys.path.insert(0, str(_AI_DIR))
 
@@ -34,6 +36,12 @@ try:
     from .errors import (
         ProviderUnavailableError,
         ProviderTimeoutError,
+        ProviderRateLimitError,
+        ProviderNetworkError,
+        ProviderAuthenticationError,
+        ProviderConfigurationError,
+        ProviderInvalidResponseError,
+        ProviderStructuredOutputError,
         MalformedOutputError,
         SchemaValidationError,
     )
@@ -54,6 +62,12 @@ except (ImportError, ValueError):
     from src.llm.errors import (
         ProviderUnavailableError,
         ProviderTimeoutError,
+        ProviderRateLimitError,
+        ProviderNetworkError,
+        ProviderAuthenticationError,
+        ProviderConfigurationError,
+        ProviderInvalidResponseError,
+        ProviderStructuredOutputError,
         MalformedOutputError,
         SchemaValidationError,
     )
@@ -64,7 +78,7 @@ T = TypeVar("T")
 
 
 class LLMProvider(ABC):
-    """Abstract base class for LLM providers."""
+    """Abstract base class for all LLM providers."""
 
     def __init__(self, config: LLMConfig):
         self.config = config
@@ -101,6 +115,308 @@ class LLMProvider(ABC):
     ) -> T:
         """Generates and validates structured output conforming to schema_cls."""
         pass
+
+
+class GeminiProvider(LLMProvider):
+    """
+    Primary Provider: Google Gemini API via the official `google-genai` SDK.
+    Used for multimodal document understanding, structured candidate fact extraction,
+    and grounded policy explanations.
+    """
+
+    def __init__(self, config: LLMConfig):
+        super().__init__(config)
+        self.api_key = config.gemini_api_key or config.api_key
+        self._model = config.gemini_model or "gemini-2.5-flash"
+        self._client = None
+
+    @property
+    def provider_name(self) -> str:
+        return "gemini"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        return bool(self.api_key and self.api_key.strip())
+
+    def _get_client(self):
+        if not self.is_available():
+            raise ProviderConfigurationError("Gemini API key is not configured. Set GEMINI_API_KEY.")
+        if self._client is None:
+            try:
+                from google import genai
+                self._client = genai.Client(api_key=self.api_key)
+            except Exception as exc:
+                raise ProviderConfigurationError(f"Failed to initialize google-genai client: {exc}") from exc
+        return self._client
+
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+        client = self._get_client()
+        try:
+            from google.genai import types
+            config = types.GenerateContentConfig(
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_tokens,
+                system_instruction=system_prompt if system_prompt else None,
+            )
+            resp = client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=config,
+            )
+            if not resp or not resp.text:
+                raise ProviderInvalidResponseError("Gemini returned an empty response.")
+            return resp.text.strip()
+        except ProviderConfigurationError:
+            raise
+        except Exception as exc:
+            self._translate_and_raise_error(exc)
+            raise exc
+
+    def generate_structured(
+        self,
+        prompt: str,
+        schema_cls: Type[T],
+        system_prompt: Optional[str] = None,
+        **kwargs
+    ) -> T:
+        json_instruction = (
+            f"\nYou must output your response STRICTLY as a valid JSON object conforming to "
+            f"the {schema_cls.__name__} schema. Do not include markdown preamble or conversational text. "
+            f"Enclose strictly in ```json ```."
+        )
+        full_prompt = f"{prompt}\n{json_instruction}"
+        raw_text = self.generate(full_prompt, system_prompt=system_prompt, **kwargs)
+
+        try:
+            parsed_dict = parse_structured_json(raw_text)
+            return validate_and_instantiate(parsed_dict, schema_cls)
+        except Exception as exc:
+            raise ProviderStructuredOutputError(
+                f"Failed to parse Gemini structured JSON into {schema_cls.__name__}: {exc}. Output was: {raw_text[:200]}"
+            ) from exc
+
+    def _translate_and_raise_error(self, exc: Exception) -> None:
+        """Classifies Gemini exceptions strictly into typed operational or auth errors."""
+        err_str = str(exc).lower()
+        err_type = type(exc).__name__
+
+        # Authentication / Configuration errors (NEVER fallback on auth errors)
+        if any(w in err_str for w in ("api_key_invalid", "unauthenticated", "401", "403", "permission_denied", "invalid api key")):
+            raise ProviderAuthenticationError(f"Gemini authentication failed: {exc}") from exc
+
+        # Rate limits / Quota
+        if "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str or "rate limit" in err_str:
+            raise ProviderRateLimitError(f"Gemini rate limit exceeded: {exc}") from exc
+
+        # Timeout
+        if "timeout" in err_str or "timed out" in err_str or "deadline_exceeded" in err_str:
+            raise ProviderTimeoutError(f"Gemini request timed out: {exc}") from exc
+
+        # Network / Transport
+        if any(w in err_str for w in ("connection", "network", "socket", "dns", "unreachable", "handshake")):
+            raise ProviderNetworkError(f"Gemini network transport failure: {exc}") from exc
+
+        # 5xx Server Error / Outage
+        if any(w in err_str for w in ("500", "502", "503", "504", "internal_server_error", "unavailable")):
+            raise ProviderUnavailableError(f"Gemini service unavailable (5xx): {exc}") from exc
+
+        # Default provider operational failure
+        raise ProviderUnavailableError(f"Gemini provider failure ({err_type}): {exc}") from exc
+
+
+class OpenRouterProvider(LLMProvider):
+    """
+    Fallback Provider: OpenRouter API (OpenAI-compatible REST endpoint).
+    Invoked strictly when Gemini suffers eligible operational failures.
+    """
+
+    def __init__(self, config: LLMConfig):
+        super().__init__(config)
+        self.api_key = config.openrouter_api_key
+        self.base_url = (config.openrouter_base_url or "https://openrouter.ai/api/v1").rstrip("/")
+        self._model = config.openrouter_model or "google/gemini-2.5-flash"
+
+    @property
+    def provider_name(self) -> str:
+        return "openrouter"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        return bool(self.api_key and self.api_key.strip())
+
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+        if not self.is_available():
+            raise ProviderConfigurationError("OpenRouter API key is not configured. Set OPENROUTER_API_KEY.")
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "HTTP-Referer": "https://policysetu.gov.in",
+            "X-Title": "PolicySetu AI Subsystem",
+        }
+
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=data_bytes,
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.config.timeout_seconds) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                choices = result.get("choices", [])
+                if not choices or "message" not in choices[0]:
+                    raise ProviderInvalidResponseError("OpenRouter returned invalid response payload structure.")
+                return choices[0]["message"].get("content", "").strip()
+        except urllib.error.HTTPError as exc:
+            self._translate_http_error(exc)
+            raise exc
+        except urllib.error.URLError as exc:
+            reason = str(exc.reason).lower()
+            if "timed out" in reason or "timeout" in reason:
+                raise ProviderTimeoutError(f"OpenRouter request timed out: {exc}") from exc
+            raise ProviderNetworkError(f"Failed to connect to OpenRouter endpoint: {exc}") from exc
+        except Exception as exc:
+            raise ProviderUnavailableError(f"OpenRouter request failed: {exc}") from exc
+
+    def generate_structured(
+        self,
+        prompt: str,
+        schema_cls: Type[T],
+        system_prompt: Optional[str] = None,
+        **kwargs
+    ) -> T:
+        json_instruction = (
+            f"\nYou must output your response STRICTLY as a valid JSON object conforming to "
+            f"the {schema_cls.__name__} schema. Do not include preamble or conversational text. "
+            f"Enclose strictly in ```json ```."
+        )
+        full_prompt = f"{prompt}\n{json_instruction}"
+        raw_text = self.generate(full_prompt, system_prompt=system_prompt, **kwargs)
+
+        try:
+            parsed_dict = parse_structured_json(raw_text)
+            return validate_and_instantiate(parsed_dict, schema_cls)
+        except Exception as exc:
+            raise ProviderStructuredOutputError(
+                f"Failed to parse OpenRouter structured JSON into {schema_cls.__name__}: {exc}. Output: {raw_text[:200]}"
+            ) from exc
+
+    def _translate_http_error(self, exc: urllib.error.HTTPError) -> None:
+        code = exc.code
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+
+        if code in (401, 403):
+            raise ProviderAuthenticationError(f"OpenRouter authentication failed (HTTP {code}): {body}") from exc
+        elif code in (402, 429):
+            raise ProviderRateLimitError(f"OpenRouter rate limit / quota / payment required (HTTP {code}): {body}") from exc
+        elif code in (500, 502, 503, 504):
+            raise ProviderUnavailableError(f"OpenRouter upstream service error (HTTP {code}): {body}") from exc
+        else:
+            raise ProviderUnavailableError(f"OpenRouter HTTP {code} error: {body}") from exc
+
+
+class OpenAICompatibleProvider(LLMProvider):
+    """
+    Standard OpenAI-compatible provider for generic custom deployments (vLLM, Ollama, OpenAI).
+    """
+
+    def __init__(self, config: LLMConfig):
+        super().__init__(config)
+        self.api_base = (config.api_base or "https://api.openai.com/v1").rstrip("/")
+        self.api_key = config.api_key
+
+    @property
+    def provider_name(self) -> str:
+        return "openai"
+
+    @property
+    def model_name(self) -> str:
+        return self.config.model
+
+    def is_available(self) -> bool:
+        return bool(self.api_key or "localhost" in self.api_base or "127.0.0.1" in self.api_base)
+
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+        if not self.is_available():
+            raise ProviderUnavailableError("OpenAI API key or reachable endpoint is not configured.")
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        req = urllib.request.Request(
+            f"{self.api_base}/chat/completions",
+            data=data_bytes,
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.config.timeout_seconds) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                return result["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise ProviderAuthenticationError(f"OpenAI authentication failed: {exc}") from exc
+            elif exc.code == 429:
+                raise ProviderRateLimitError(f"OpenAI rate limit: {exc}") from exc
+            raise ProviderUnavailableError(f"OpenAI HTTP {exc.code}: {exc.reason}") from exc
+        except Exception as exc:
+            raise ProviderUnavailableError(f"OpenAI error: {exc}") from exc
+
+    def generate_structured(
+        self,
+        prompt: str,
+        schema_cls: Type[T],
+        system_prompt: Optional[str] = None,
+        **kwargs
+    ) -> T:
+        json_instruction = (
+            f"\nYou must output your response STRICTLY as a valid JSON object conforming to "
+            f"the {schema_cls.__name__} schema. Do not enclose in anything other than ```json ```."
+        )
+        full_prompt = f"{prompt}\n{json_instruction}"
+        raw_output = self.generate(full_prompt, system_prompt=system_prompt, **kwargs)
+        parsed_dict = parse_structured_json(raw_output)
+        return validate_and_instantiate(parsed_dict, schema_cls)
 
 
 class MockLLMProvider(LLMProvider):
@@ -208,8 +524,28 @@ class MockLLMProvider(LLMProvider):
                 )
             )
 
-        # 2. State extraction (first-person only!)
-        if self.query_parser.is_self_declaration(raw) or re.search(r"\b(from|rehta|rehti|live\s+in|resident\s+of)\b", raw, re.IGNORECASE):
+        # 2. Income extraction
+        inc_match = re.search(
+            r"(?:income|aamdani|आय)\s*(?:is|=|:)?\s*(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?\s*(?:lakh|lac|crore|hazaar|k|cr)?)|"
+            r"(?:₹|rs\.?|inr)\s*([\d,]+(?:\.\d+)?\s*(?:lakh|lac|crore)?)",
+            raw,
+            re.IGNORECASE
+        )
+        if inc_match:
+            val = inc_match.group(1) or inc_match.group(2)
+            facts.append(
+                ApplicantFactCandidate(
+                    field="annual_family_income",
+                    raw_value=val.strip(),
+                    data_type="numeric",
+                    confidence=0.95,
+                    evidence_text=inc_match.group(0),
+                    suggested_verification_status=FactVerificationStatus.SELF_REPORTED,
+                )
+            )
+
+        # 3. State extraction
+        if self.query_parser.is_self_declaration(raw):
             hints = self.query_parser.extract_search_hints(raw)
             if hints["state"]:
                 facts.append(
@@ -223,30 +559,8 @@ class MockLLMProvider(LLMProvider):
                     )
                 )
 
-        # 3. Income extraction
-        income_match = re.search(
-            r"(?:income\s*(?:is|=|:)?\s*|आय\s*|aay\s*|earns?\s*|कमाई\s*|family\s+income\s*(?:is|=|:)?\s*)"
-            r"([₹\d\.,\s]+(?:\s*(?:lakh|lakhs|lac|crore|k|thousand|लाख|रुपये|rupaye|rs))?)",
-            raw,
-            re.IGNORECASE
-        )
-        if income_match:
-            val_str = income_match.group(1).strip()
-            # If val_str has digits, create fact candidate
-            if re.search(r"\d", val_str):
-                facts.append(
-                    ApplicantFactCandidate(
-                        field="annual_family_income",
-                        raw_value=val_str,
-                        data_type="numeric",
-                        confidence=0.90,
-                        evidence_text=income_match.group(0),
-                        suggested_verification_status=FactVerificationStatus.SELF_REPORTED,
-                    )
-                )
-
-        # 4. Social Category extraction (first-person declaration only)
-        if re.search(r"\b(?:i\s+am\s+(?:an?\s+)?|my\s+(?:social\s+)?category\s+is\s+|belong\s+to\s+(?:the\s+)?|caste\s*:\s*|category\s*:\s*|main\s+[a-z\u0900-\u097F]+\s+(?:se|hoon)|मेरी\s+जाति\s*|mera\s+caste\s*)\b", raw, re.IGNORECASE) or (self.query_parser.is_self_declaration(raw) and re.search(r"\b(certificate|category|caste|जाति|वर्ग)\b", raw, re.IGNORECASE)):
+        # 4. Social Category extraction
+        if self.query_parser.is_self_declaration(raw):
             hints = self.query_parser.extract_search_hints(raw)
             if hints["social_category"]:
                 facts.append(
@@ -310,7 +624,7 @@ class MockLLMProvider(LLMProvider):
         status_val = kwargs.get("authoritative_decision", "UNKNOWN")
         scheme_id = kwargs.get("scheme_id", "scheme_default")
         retrieved_chunks = kwargs.get("retrieved_chunks", [])
-        
+
         chunk_ids = [c.get("id") or c.get("chunk_id") for c in retrieved_chunks if c.get("id") or c.get("chunk_id")]
         urls = [c.get("source_url") for c in retrieved_chunks if c.get("source_url")]
 
@@ -318,7 +632,7 @@ class MockLLMProvider(LLMProvider):
         if chunk_ids:
             claims.append(
                 FactualClaim(
-                    statement=f"Statutory criteria according to official policy documentation.",
+                    statement="Statutory criteria according to official policy documentation.",
                     cited_chunk_ids=chunk_ids[:2],
                     cited_urls=urls[:2],
                     support_status=ClaimSupportStatus.SUPPORTED,
@@ -346,98 +660,28 @@ class MockLLMProvider(LLMProvider):
         )
 
 
-class OpenAICompatibleProvider(LLMProvider):
-    """
-    Production OpenAI-compatible API provider (supports OpenAI, vLLM, Ollama, etc.).
-    CRITICAL INVARIANT: On network or HTTP error, raises explicit exceptions;
-    NEVER silently falls back to MockLLMProvider.
-    """
-
-    def __init__(self, config: LLMConfig):
-        super().__init__(config)
-        self.api_base = (config.api_base or "https://api.openai.com/v1").rstrip("/")
-        self.api_key = config.api_key
-
-    @property
-    def provider_name(self) -> str:
-        return "openai"
-
-    @property
-    def model_name(self) -> str:
-        return self.config.model
-
-    def is_available(self) -> bool:
-        return bool(self.api_key or "localhost" in self.api_base or "127.0.0.1" in self.api_base)
-
-    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
-        if not self.is_available():
-            raise ProviderUnavailableError("OpenAI API key or reachable endpoint is not configured.")
-
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        payload = {
-            "model": self.model_name,
-            "messages": messages,
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
-        }
-
-        data_bytes = json.dumps(payload).encode("utf-8")
-        headers = {
-            "Content-Type": "application/json",
-        }
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
-        req = urllib.request.Request(
-            f"{self.api_base}/chat/completions",
-            data=data_bytes,
-            headers=headers,
-            method="POST"
-        )
-
-        try:
-            with urllib.request.urlopen(req, timeout=self.config.timeout_seconds) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                return result["choices"][0]["message"]["content"]
-        except urllib.error.HTTPError as exc:
-            raise ProviderUnavailableError(f"OpenAI API HTTP Error {exc.code}: {exc.reason}") from exc
-        except urllib.error.URLError as exc:
-            if "timed out" in str(exc.reason).lower():
-                raise ProviderTimeoutError(f"OpenAI API request timed out after {self.config.timeout_seconds}s") from exc
-            raise ProviderUnavailableError(f"Failed to reach OpenAI API: {exc.reason}") from exc
-        except Exception as exc:
-            raise ProviderUnavailableError(f"Unexpected error communicating with LLM provider: {exc}") from exc
-
-    def generate_structured(
-        self,
-        prompt: str,
-        schema_cls: Type[T],
-        system_prompt: Optional[str] = None,
-        **kwargs
-    ) -> T:
-        """Generates structured response by instructing JSON format and validating."""
-        json_instruction = (
-            f"\nYou must output your response STRICTLY as a valid JSON object conforming to "
-            f"the {schema_cls.__name__} schema. Do not enclose in anything other than ```json ```."
-        )
-        full_prompt = prompt + "\n" + json_instruction
-        raw_output = self.generate(full_prompt, system_prompt=system_prompt, **kwargs)
-        parsed_dict = parse_structured_json(raw_output)
-        return validate_and_instantiate(parsed_dict, schema_cls)
-
-
 def get_llm_provider(config: Optional[LLMConfig] = None) -> LLMProvider:
-    """Factory function for instantiating the configured LLM provider."""
+    """Factory function returning the configured primary LLM provider."""
     cfg = config or LLMConfig.from_env()
     provider_type = cfg.provider.strip().lower()
 
-    if provider_type == "mock":
-        return MockLLMProvider(cfg)
+    if provider_type in ("gemini", "auto"):
+        return GeminiProvider(cfg)
+    elif provider_type == "openrouter":
+        return OpenRouterProvider(cfg)
     elif provider_type == "openai":
         return OpenAICompatibleProvider(cfg)
+    elif provider_type == "mock":
+        return MockLLMProvider(cfg)
     else:
-        raise ValueError(f"Unsupported LLM provider: '{cfg.provider}'. Supported: 'mock', 'openai'")
+        raise ValueError(f"Unsupported LLM provider: '{cfg.provider}'. Supported: 'auto', 'gemini', 'openrouter', 'openai', 'mock'")
+
+
+__all__ = [
+    "LLMProvider",
+    "GeminiProvider",
+    "OpenRouterProvider",
+    "OpenAICompatibleProvider",
+    "MockLLMProvider",
+    "get_llm_provider",
+]

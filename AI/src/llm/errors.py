@@ -1,6 +1,6 @@
 """
 PolicySetu LLM & NLP Exception Hierarchy.
-Clear, typed exceptions for provider issues, parsing failures, and safety violations.
+Clear, typed exceptions for provider issues, authentication failures, parsing errors, and safety violations.
 """
 
 class LLMError(Exception):
@@ -9,12 +9,48 @@ class LLMError(Exception):
 
 
 class ProviderUnavailableError(LLMError):
-    """Raised when an LLM provider is unreachable or missing credentials."""
+    """Raised when an LLM provider is unreachable due to outage or 5xx error."""
     pass
 
 
 class ProviderTimeoutError(LLMError):
     """Raised when an LLM provider call exceeds the configured timeout."""
+    pass
+
+
+class ProviderRateLimitError(LLMError):
+    """Raised when an LLM provider returns HTTP 429 / quota exceeded."""
+    pass
+
+
+class ProviderNetworkError(LLMError):
+    """Raised when network transport fails (DNS, socket timeout, connection reset)."""
+    pass
+
+
+class ProviderAuthenticationError(LLMError):
+    """
+    Raised on HTTP 401/403 or invalid API credentials.
+    CRITICAL INVARIANT: Authentication errors MUST NOT trigger silent fallback.
+    """
+    pass
+
+
+class ProviderConfigurationError(LLMError):
+    """
+    Raised when required configuration or API keys are missing.
+    CRITICAL INVARIANT: Configuration errors MUST NOT trigger silent fallback.
+    """
+    pass
+
+
+class ProviderInvalidResponseError(LLMError):
+    """Raised when provider returns an empty, corrupted, or unexpected response format."""
+    pass
+
+
+class ProviderStructuredOutputError(LLMError):
+    """Raised when structured JSON parsing or validation fails after reasonable retry."""
     pass
 
 
@@ -41,3 +77,21 @@ class DecisionContradictionError(LLMError):
 class UngroundedClaimError(LLMError):
     """Raised or flagged when a factual claim lacks provenance or evidence support."""
     pass
+
+
+__all__ = [
+    "LLMError",
+    "ProviderUnavailableError",
+    "ProviderTimeoutError",
+    "ProviderRateLimitError",
+    "ProviderNetworkError",
+    "ProviderAuthenticationError",
+    "ProviderConfigurationError",
+    "ProviderInvalidResponseError",
+    "ProviderStructuredOutputError",
+    "MalformedOutputError",
+    "SchemaValidationError",
+    "PromptInjectionDetectedError",
+    "DecisionContradictionError",
+    "UngroundedClaimError",
+]
