@@ -9,13 +9,13 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_ROLE_KEY;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl) {
+if (!supabaseUrl){
     throw new Error('Missing required environment variable: SUPABASE_URL');
 }
-if (!supabaseAnonKey) {
+if (!supabaseAnonKey){
     throw new Error('Missing required environment variable: SUPABASE_ANON_ROLE_KEY');
 }
-if (!supabaseServiceRoleKey) {
+if (!supabaseServiceRoleKey){
     throw new Error('Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY');
 }
 
