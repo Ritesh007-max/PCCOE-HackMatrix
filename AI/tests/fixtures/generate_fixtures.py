@@ -27,10 +27,11 @@ def create_sample_income_cert():
         "INCOME CERTIFICATE\n\n"
         "Certificate No: GUJ/INC/2026/98214\n"
         "Issue Date: 15/01/2026\n\n"
-        "This is to certify that Shri Rajesh Patel, resident of Ahmedabad, Gujarat, "
-        "has a total annual family income of Rs. 1,80,000 (Rupees One Lakh Eighty Thousand only) "
-        "from all sources.\n\n"
-        "Category: General / SEBC\n"
+        "This is to certify that Shri Rajesh Patel,\n"
+        "resident of Ahmedabad, Gujarat,\n"
+        "has a total annual family income of Rs. 1,80,000\n"
+        "(Rupees One Lakh Eighty Thousand only) from all sources.\n\n"
+        "Category: SC / Scheduled Caste\n"
         "Authority: Mamlatdar Office, Ahmedabad"
     )
     page.insert_text((50, 80), text, fontsize=12)

@@ -209,8 +209,13 @@ def main(args: Optional[List[str]] = None) -> int:
             for mf in result.missing_information.get("missing_fields", []):
                 print(f"  - Field required: {mf}")
 
+        summary = (
+            result.explanation.get("answer")
+            or result.explanation.get("plain_language_summary")
+            or "Decision evaluated successfully."
+        )
         print(f"\nExplanation Summary:")
-        print(f"  {result.explanation.get('plain_language_summary')}")
+        print(f"  {summary}")
         print("=" * 60)
 
     return 0
