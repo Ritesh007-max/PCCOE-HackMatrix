@@ -11,6 +11,7 @@ import ProfilePage from '../pages/ProfilePage';
 import NotFoundPage from '../pages/NotFoundPage';
 
 import SignupPage from '../pages/SignupPage';
+import ProtectedRoute from '../components/common/ProtectedRoute';
 
 export default function AppRoutes() {
   return (
@@ -25,7 +26,13 @@ export default function AppRoutes() {
       <Route path="/signin" element={<SignupPage initialMode="signin" />} />
 
       {/* Main Authenticated Dashboard Pages */}
-      <Route element={<AppLayout />}>
+      <Route
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      >
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/discover" element={<DiscoverPage />} />
         <Route path="/schemes/:schemeId" element={<SchemeDetailsPage />} />

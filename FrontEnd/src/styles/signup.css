@@ -760,6 +760,16 @@
   color: #065F46;
 }
 
+.signup-alert-warning {
+  background-color: #FFFBEB;
+  border: 1px solid #FCD34D;
+  color: #92400E;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+}
+
 /* ==========================================================================
    Modal Overlay Dialog (Terms, Privacy, Forgot Password)
    ========================================================================== */
