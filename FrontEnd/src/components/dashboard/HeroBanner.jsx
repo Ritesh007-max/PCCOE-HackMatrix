@@ -36,6 +36,9 @@ export default function HeroBanner() {
     };
   }, []);
 
+  // Extract only the first name for this specific greeting spot on the dashboard
+  const firstName = userName ? userName.trim().split(/\s+/)[0] : 'Hemang';
+
   return (
     <section className="dashboard-hero-card" aria-label="Welcome Banner">
       {/* Background panoramic India Gate visual */}
@@ -49,7 +52,7 @@ export default function HeroBanner() {
       <div className="hero-left-content">
         <span className="hero-date">Thu, 18 Sep 2026</span>
         <h1 className="hero-main-greeting">
-          <span>Namaste, {userName}</span>
+          <span>Namaste, {firstName}</span>
           <img
             src={namaskaraImg}
             alt="🙏"

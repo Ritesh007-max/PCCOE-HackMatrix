@@ -93,27 +93,39 @@ export function getRegisteredUserByEmail(email) {
 /**
  * Save or update registered citizen profile into persistent registry
  */
-export function saveRegisteredUser({ email, fullName, name, phone, id }) {
-  if (!email || typeof email !== 'string') return;
-  try {
-    const normalized = email.trim().toLowerCase();
-    const currentUsers = getRegisteredUsers();
-    const existing = currentUsers[normalized] || {};
-    const resolvedName = (fullName || name || existing.fullName || existing.name || '').trim();
+export function saveRegisteredUser(profileOrUser) {
+  if (!profileOrUser) return null;
+  const email = (profileOrUser.email || '').trim().toLowerCase();
+  if (!email) return null;
 
-    currentUsers[normalized] = {
+  try {
+    const currentUsers = getRegisteredUsers();
+    const existing = currentUsers[email] || {};
+    const fullName = (profileOrUser.fullName || profileOrUser.name || existing.fullName || existing.name || '').trim();
+
+    currentUsers[email] = {
       ...existing,
-      id: id || existing.id || `citizen-${Date.now()}`,
-      email: normalized,
-      fullName: resolvedName || existing.fullName || '',
-      name: resolvedName || existing.name || '',
-      phone: phone || existing.phone || '',
+      ...profileOrUser,
+      id: profileOrUser.id || existing.id || `citizen-${Date.now()}`,
+      email,
+      fullName: fullName || existing.fullName || '',
+      name: fullName || existing.name || '',
+      phone: profileOrUser.phone !== undefined ? profileOrUser.phone : (existing.phone || ''),
+      state: profileOrUser.state !== undefined ? profileOrUser.state : (existing.state || ''),
+      district: profileOrUser.district !== undefined ? profileOrUser.district : (existing.district || ''),
+      occupation: profileOrUser.occupation !== undefined ? profileOrUser.occupation : (existing.occupation || ''),
+      income: profileOrUser.income !== undefined ? profileOrUser.income : (existing.income || ''),
+      applicantType: profileOrUser.applicantType !== undefined ? profileOrUser.applicantType : (existing.applicantType || ''),
+      dob: profileOrUser.dob !== undefined ? profileOrUser.dob : (existing.dob || ''),
+      gender: profileOrUser.gender !== undefined ? profileOrUser.gender : (existing.gender || ''),
       updatedAt: new Date().toISOString(),
     };
 
     localStorage.setItem(STORAGE_KEY_REGISTERED_USERS, JSON.stringify(currentUsers));
+    return currentUsers[email];
   } catch (e) {
     console.warn('Unable to persist registered citizen to registry:', e);
+    return null;
   }
 }
 
@@ -244,14 +256,19 @@ export async function loginUser({ email, password }) {
     if (data?.user) {
       const meta = data.user.user_metadata || {};
       const backendName = meta.full_name || meta.fullName || data.user.fullName;
-      if (backendName) {
-        saveRegisteredUser({
-          email: data.user.email || email,
-          fullName: backendName,
-          phone: meta.phone || data.user.phone,
-          id: data.user.id,
-        });
-      }
+      saveRegisteredUser({
+        email: data.user.email || email,
+        fullName: backendName,
+        phone: meta.phone || data.user.phone,
+        state: meta.state || data.user.state,
+        district: meta.district || data.user.district,
+        occupation: meta.occupation || data.user.occupation,
+        income: meta.income || meta.annual_income || data.user.income,
+        applicantType: meta.applicantType || data.user.applicantType,
+        dob: meta.dob || data.user.dob,
+        gender: meta.gender || data.user.gender,
+        id: data.user.id,
+      });
     }
 
     return {
@@ -294,22 +311,22 @@ export function storeAuthSession({ user, accessToken, refreshToken, fallbackName
     fullName: resolvedName,
     name: resolvedName,
     email: user?.email || registered?.email || userEmail,
-    phone: meta.phone || user?.phone || registered?.phone || '',
+    phone: user?.phone || meta.phone || registered?.phone || '',
+    state: user?.state || meta.state || registered?.state || '',
+    district: user?.district || meta.district || registered?.district || '',
+    occupation: user?.occupation || meta.occupation || registered?.occupation || '',
+    income: user?.income || meta.income || registered?.income || '',
+    applicantType: user?.applicantType || meta.applicantType || registered?.applicantType || 'Individual',
+    dob: user?.dob || meta.dob || registered?.dob || '',
+    gender: user?.gender || meta.gender || registered?.gender || '',
   };
 
   localStorage.setItem('fin_user', JSON.stringify(userData));
   if (accessToken) localStorage.setItem('fin_token', accessToken);
   if (refreshToken) localStorage.setItem('fin_refresh_token', refreshToken);
 
-  // Automatically save/update in registered user registry if resolvedName is valid
-  if (userData.email && resolvedName && !isEmailOrPrefix(resolvedName, userData.email)) {
-    saveRegisteredUser({
-      email: userData.email,
-      fullName: resolvedName,
-      phone: userData.phone,
-      id: userData.id,
-    });
-  }
+  // Automatically save/update in registered user registry
+  saveRegisteredUser(userData);
 
   window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: userData }));
   window.dispatchEvent(new Event('storage'));
@@ -472,4 +489,42 @@ export async function authenticatedFetch(url, options = {}) {
   }
 
   return response;
+}
+
+/**
+ * Update profile on backend API if available
+ */
+export async function updateBackendProfile(profileData) {
+  try {
+    const res = await authenticatedFetch(`${API_BASE}/api/users/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      return { success: true, data };
+    }
+    return { success: false, status: res.status };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Fetch profile from backend API if available
+ */
+export async function fetchBackendProfile() {
+  try {
+    const res = await authenticatedFetch(`${API_BASE}/api/users/profile`, {
+      method: 'GET',
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      return { success: true, data: data?.data };
+    }
+    return { success: false, status: res.status };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
