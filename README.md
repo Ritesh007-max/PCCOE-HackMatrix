@@ -4,8 +4,6 @@
 
 > **Turning complex government policies into clear, personalized financial opportunities.**
 
-**Team:** `hexSlyerz`
-
 ---
 
 ## 🏆 The Problem
@@ -918,6 +916,6 @@ What to do next
 
 # 👥 Team
 
-## **hexSlyerz**
+## **hexSlayerz**
 
 Building technology that makes complex financial policies easier to discover, understand, and act upon.
