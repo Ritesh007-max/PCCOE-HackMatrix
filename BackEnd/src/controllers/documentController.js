@@ -1,6 +1,9 @@
 const documentServices = require("../services/documentServices");
 
 const uploadDocument = async (req, res, next) => {
+    if (!req.file) {
+        return next(httpError(400, "File is required"));
+    }
     try {
         const document = await documentServices.uploadDocument({
             file: req.file,
