@@ -11,16 +11,15 @@ export default function Header({ onToggleSidebar }) {
         const parsed = JSON.parse(stored);
         const resolved = resolveDisplayName(parsed, parsed?.email);
         if (resolved) {
-          const name = resolved.trim();
-          const parts = name.split(' ').filter(Boolean);
-          const initials = parts.length > 1
-            ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-            : name.substring(0, 2).toUpperCase();
+          const fullName = resolved.trim();
+          const parts = fullName.split(' ').filter(Boolean);
+          const initials = fullName.length >= 2 ? fullName.substring(0, 2).toUpperCase() : fullName.toUpperCase();
+          const name = parts[0] || fullName;
           return { name, initials };
         }
       }
     } catch (e) {}
-    return { name: 'Hemang Singh', initials: 'HS' };
+    return { name: 'Hemang', initials: 'HE' };
   });
 
   useEffect(() => {
@@ -29,11 +28,10 @@ export default function Header({ onToggleSidebar }) {
         const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
         const resolved = resolveDisplayName(user, user?.email);
         if (resolved) {
-          const name = resolved.trim();
-          const parts = name.split(' ').filter(Boolean);
-          const initials = parts.length > 1
-            ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-            : name.substring(0, 2).toUpperCase();
+          const fullName = resolved.trim();
+          const parts = fullName.split(' ').filter(Boolean);
+          const initials = fullName.length >= 2 ? fullName.substring(0, 2).toUpperCase() : fullName.toUpperCase();
+          const name = parts[0] || fullName;
           setUserInfo({ name, initials });
         }
       } catch (err) {}
