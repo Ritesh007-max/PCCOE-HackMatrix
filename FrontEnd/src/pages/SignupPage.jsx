@@ -19,7 +19,13 @@ import {
   FileText,
 } from 'lucide-react';
 import '../styles/signup.css';
-import { registerUser, loginUser, storeAuthSession } from '../services/authService';
+import {
+  registerUser,
+  loginUser,
+  storeAuthSession,
+  getRegisteredUserByEmail,
+  saveRegisteredUser,
+} from '../services/authService';
 
 // Assets
 import indiaGateHero from '../assets/india_gate_hero.jpg';
@@ -191,12 +197,37 @@ export default function SignupPage({ initialMode = 'signup' }) {
         console.warn('Backend server offline, continuing with local session:', authResult.message);
       }
 
+      // Resolve proper registered citizen name (so login preserves the registration username)
+      const targetEmail = formData.email.trim();
+      const registeredProfile = getRegisteredUserByEmail(targetEmail);
+
+      let citizenFullName = '';
+      if (!isSignIn) {
+        citizenFullName = formData.fullName.trim();
+        saveRegisteredUser({
+          email: targetEmail,
+          fullName: citizenFullName,
+          phone: `${selectedCountry.code}${formData.mobile}`.trim(),
+        });
+      } else {
+        citizenFullName =
+          authResult.data?.user?.user_metadata?.full_name ||
+          authResult.data?.user?.user_metadata?.fullName ||
+          authResult.data?.user?.fullName ||
+          registeredProfile?.fullName ||
+          '';
+      }
+
       // Store authenticated session
       storeAuthSession({
-        user: authResult.data?.user,
+        user: {
+          ...(authResult.data?.user || {}),
+          email: targetEmail,
+          ...(citizenFullName ? { fullName: citizenFullName } : {}),
+        },
         accessToken: authResult.data?.access_token,
         refreshToken: authResult.data?.refresh_token,
-        fallbackName: formData.fullName.trim() || formData.email.split('@')[0],
+        fallbackName: citizenFullName || (isSignIn ? (registeredProfile?.fullName || '') : formData.fullName.trim()),
       });
 
       setSuccessMsg(isSignIn ? 'Welcome back! Redirecting...' : 'Account created successfully! Redirecting...');

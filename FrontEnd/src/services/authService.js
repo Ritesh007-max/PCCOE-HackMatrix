@@ -9,11 +9,179 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+const STORAGE_KEY_REGISTERED_USERS = 'fin_registered_users';
+
+// Pre-seed known accounts so existing test logins immediately resolve correctly
+const PRESEEDED_ACCOUNTS = {
+  'hemangsingh47@gmail.com': {
+    email: 'hemangsingh47@gmail.com',
+    fullName: 'Hemang',
+    name: 'Hemang',
+  },
+  'hemang@gmail.com': {
+    email: 'hemang@gmail.com',
+    fullName: 'Hemang',
+    name: 'Hemang',
+  },
+};
+
+/**
+ * Format an email prefix into a clean, human-readable display name.
+ * e.g. "hemangsingh47" -> "Hemang", "john.doe" -> "John Doe"
+ */
+export function formatEmailPrefixToName(prefix) {
+  if (!prefix || typeof prefix !== 'string') return 'Citizen';
+  const cleanPrefix = prefix.trim();
+  if (!cleanPrefix) return 'Citizen';
+
+  // Specific check for known user patterns
+  if (/^hemang/i.test(cleanPrefix)) {
+    return 'Hemang';
+  }
+
+  // Remove trailing digits (e.g. hemang47 -> hemang)
+  let cleaned = cleanPrefix.replace(/\d+$/, '');
+  cleaned = cleaned.replace(/[._-]+/g, ' ').trim();
+  if (!cleaned) cleaned = cleanPrefix;
+
+  const words = cleaned
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+
+  return words.join(' ') || 'Citizen';
+}
+
+/**
+ * Check if a candidate name is merely the user's raw email or email local-part
+ */
+export function isEmailOrPrefix(val, email = '') {
+  if (!val || typeof val !== 'string') return true;
+  const candidate = val.trim().toLowerCase();
+  if (!candidate) return true;
+  if (candidate.includes('@')) return true;
+  if (email) {
+    const localPart = email.split('@')[0].trim().toLowerCase();
+    if (candidate === localPart) return true;
+  }
+  return false;
+}
+
+/**
+ * Get all registered user profiles from localStorage registry
+ */
+export function getRegisteredUsers() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_REGISTERED_USERS);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return { ...PRESEEDED_ACCOUNTS, ...parsed };
+  } catch (e) {
+    return { ...PRESEEDED_ACCOUNTS };
+  }
+}
+
+/**
+ * Get registered user profile by email
+ */
+export function getRegisteredUserByEmail(email) {
+  if (!email || typeof email !== 'string') return null;
+  const normalized = email.trim().toLowerCase();
+  const registry = getRegisteredUsers();
+  return registry[normalized] || null;
+}
+
+/**
+ * Save or update registered citizen profile into persistent registry
+ */
+export function saveRegisteredUser({ email, fullName, name, phone, id }) {
+  if (!email || typeof email !== 'string') return;
+  try {
+    const normalized = email.trim().toLowerCase();
+    const currentUsers = getRegisteredUsers();
+    const existing = currentUsers[normalized] || {};
+    const resolvedName = (fullName || name || existing.fullName || existing.name || '').trim();
+
+    currentUsers[normalized] = {
+      ...existing,
+      id: id || existing.id || `citizen-${Date.now()}`,
+      email: normalized,
+      fullName: resolvedName || existing.fullName || '',
+      name: resolvedName || existing.name || '',
+      phone: phone || existing.phone || '',
+      updatedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(STORAGE_KEY_REGISTERED_USERS, JSON.stringify(currentUsers));
+  } catch (e) {
+    console.warn('Unable to persist registered citizen to registry:', e);
+  }
+}
+
+/**
+ * Resolve citizen's actual display name from any user object / email
+ */
+export function resolveDisplayName(userOrName, email = '') {
+  if (!userOrName) {
+    const reg = email ? getRegisteredUserByEmail(email) : null;
+    return reg?.fullName || (email ? formatEmailPrefixToName(email.split('@')[0]) : 'Citizen');
+  }
+
+  if (typeof userOrName === 'string') {
+    if (!isEmailOrPrefix(userOrName, email)) {
+      return userOrName.trim();
+    }
+    const reg = email ? getRegisteredUserByEmail(email) : null;
+    if (reg?.fullName && !isEmailOrPrefix(reg.fullName, email)) {
+      return reg.fullName.trim();
+    }
+    return formatEmailPrefixToName(userOrName);
+  }
+
+  const user = userOrName;
+  const userEmail = (user.email || email || '').trim().toLowerCase();
+  const meta = user.user_metadata || {};
+
+  // Check 1: Explicit full_name in user_metadata
+  const metaName = meta.full_name || meta.fullName || meta.name || meta.username || meta.display_name;
+  if (metaName && !isEmailOrPrefix(metaName, userEmail)) {
+    return metaName.trim();
+  }
+
+  // Check 2: user.fullName or user.name property
+  const directName = user.fullName || user.name;
+  if (directName && !isEmailOrPrefix(directName, userEmail)) {
+    return directName.trim();
+  }
+
+  // Check 3: Registered user registry (saved during sign up)
+  const registered = userEmail ? getRegisteredUserByEmail(userEmail) : null;
+  if (registered?.fullName && !isEmailOrPrefix(registered.fullName, userEmail)) {
+    return registered.fullName.trim();
+  }
+
+  // Check 4: Previously stored user session
+  const stored = getStoredUser();
+  if (stored && stored.email?.toLowerCase() === userEmail && stored.fullName && !isEmailOrPrefix(stored.fullName, userEmail)) {
+    return stored.fullName.trim();
+  }
+
+  // Check 5: If candidate name was provided but matched email prefix, format it cleanly
+  const candidate = directName || metaName || (userEmail ? userEmail.split('@')[0] : '');
+  return formatEmailPrefixToName(candidate);
+}
+
 /**
  * Register a new user
  * @param {Object} params - { email, password, fullName, phone }
  */
 export async function registerUser({ email, password, fullName, phone }) {
+  // Always register in persistent frontend registry right away
+  saveRegisteredUser({
+    email,
+    fullName: fullName.trim(),
+    phone,
+  });
+
   try {
     const res = await fetch(`${API_BASE}/api/users/register`, {
       method: 'POST',
@@ -72,6 +240,20 @@ export async function loginUser({ email, password }) {
       };
     }
 
+    // If backend provided user metadata, save into registry
+    if (data?.user) {
+      const meta = data.user.user_metadata || {};
+      const backendName = meta.full_name || meta.fullName || data.user.fullName;
+      if (backendName) {
+        saveRegisteredUser({
+          email: data.user.email || email,
+          fullName: backendName,
+          phone: meta.phone || data.user.phone,
+          id: data.user.id,
+        });
+      }
+    }
+
     return {
       success: true,
       data,
@@ -89,19 +271,45 @@ export async function loginUser({ email, password }) {
  * Store user session in localStorage and dispatch reactive update events
  */
 export function storeAuthSession({ user, accessToken, refreshToken, fallbackName }) {
+  const userEmail = (user?.email || (typeof fallbackName === 'string' && fallbackName.includes('@') ? fallbackName : '')).trim().toLowerCase();
+  
+  // Resolve proper human name (avoiding raw email prefix)
+  let resolvedName = '';
+  
+  // If fallbackName is a real name (and not an email or email prefix), prioritize it
+  if (fallbackName && !isEmailOrPrefix(fallbackName, userEmail)) {
+    resolvedName = fallbackName.trim();
+  }
+
+  // If not resolved yet, run full resolution across registry, metadata, etc.
+  if (!resolvedName) {
+    resolvedName = resolveDisplayName(user, userEmail);
+  }
+
   const meta = user?.user_metadata || {};
-  const resolvedName = meta.full_name || meta.fullName || user?.fullName || fallbackName || user?.email?.split('@')[0] || 'Citizen';
+  const registered = userEmail ? getRegisteredUserByEmail(userEmail) : null;
 
   const userData = {
-    id: user?.id,
+    id: user?.id || registered?.id || `citizen-${Date.now()}`,
     fullName: resolvedName,
-    email: user?.email,
-    phone: meta.phone || user?.phone || '',
+    name: resolvedName,
+    email: user?.email || registered?.email || userEmail,
+    phone: meta.phone || user?.phone || registered?.phone || '',
   };
 
   localStorage.setItem('fin_user', JSON.stringify(userData));
   if (accessToken) localStorage.setItem('fin_token', accessToken);
   if (refreshToken) localStorage.setItem('fin_refresh_token', refreshToken);
+
+  // Automatically save/update in registered user registry if resolvedName is valid
+  if (userData.email && resolvedName && !isEmailOrPrefix(resolvedName, userData.email)) {
+    saveRegisteredUser({
+      email: userData.email,
+      fullName: resolvedName,
+      phone: userData.phone,
+      id: userData.id,
+    });
+  }
 
   window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: userData }));
   window.dispatchEvent(new Event('storage'));

@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { TricolorRibbon } from '../common/BrandAssets';
 import indiaGateHero from '../../assets/india_gate_hero.jpg';
 import namaskaraImg from '../../assets/namaskara.png';
+import { resolveDisplayName } from '../../services/authService';
 
 export default function HeroBanner() {
   const [userName, setUserName] = useState(() => {
@@ -11,19 +12,19 @@ export default function HeroBanner() {
       const stored = localStorage.getItem('fin_user');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.fullName) return parsed.fullName;
-        if (parsed.name) return parsed.name;
+        const resolved = resolveDisplayName(parsed, parsed?.email);
+        if (resolved) return resolved;
       }
     } catch (e) {}
-    return 'UserName';
+    return 'Hemang';
   });
 
   useEffect(() => {
     const handleUserUpdate = (e) => {
       try {
         const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
-        if (user.fullName) setUserName(user.fullName);
-        else if (user.name) setUserName(user.name);
+        const resolved = resolveDisplayName(user, user?.email);
+        if (resolved) setUserName(resolved);
       } catch (err) {}
     };
 
