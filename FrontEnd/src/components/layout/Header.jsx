@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Search, Bell, Menu, ChevronDown } from 'lucide-react';
+import { resolveDisplayName } from '../../services/authService';
 
 export default function Header({ onToggleSidebar }) {
   const [userInfo, setUserInfo] = useState(() => {
@@ -8,8 +9,9 @@ export default function Header({ onToggleSidebar }) {
       const stored = localStorage.getItem('fin_user');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.fullName) {
-          const name = parsed.fullName.trim();
+        const resolved = resolveDisplayName(parsed, parsed?.email);
+        if (resolved) {
+          const name = resolved.trim();
           const parts = name.split(' ').filter(Boolean);
           const initials = parts.length > 1
             ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
@@ -25,8 +27,9 @@ export default function Header({ onToggleSidebar }) {
     const handleUserUpdate = (e) => {
       try {
         const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
-        if (user.fullName) {
-          const name = user.fullName.trim();
+        const resolved = resolveDisplayName(user, user?.email);
+        if (resolved) {
+          const name = resolved.trim();
           const parts = name.split(' ').filter(Boolean);
           const initials = parts.length > 1
             ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()

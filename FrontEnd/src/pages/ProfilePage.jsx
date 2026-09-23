@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PageContainer from '../components/layout/PageContainer';
+import { resolveDisplayName } from '../services/authService';
 
 export default function ProfilePage() {
   const [applicantName, setApplicantName] = useState(() => {
@@ -7,7 +8,8 @@ export default function ProfilePage() {
       const stored = localStorage.getItem('fin_user');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.fullName) return parsed.fullName;
+        const resolved = resolveDisplayName(parsed, parsed?.email);
+        if (resolved) return resolved;
       }
     } catch (e) {}
     return 'Hemang';
@@ -17,7 +19,8 @@ export default function ProfilePage() {
     const handleUserUpdate = (e) => {
       try {
         const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
-        if (user.fullName) setApplicantName(user.fullName);
+        const resolved = resolveDisplayName(user, user?.email);
+        if (resolved) setApplicantName(resolved);
       } catch (err) {}
     };
 
