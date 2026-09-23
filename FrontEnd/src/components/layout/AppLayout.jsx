@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import SessionTimeoutManager from '../common/SessionTimeoutManager';
 
 export default function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -11,6 +12,7 @@ export default function AppLayout() {
 
   return (
     <div className="app-shell">
+      <SessionTimeoutManager />
       <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
       <div className="app-main-canvas">
         <Header onToggleSidebar={toggleSidebar} />

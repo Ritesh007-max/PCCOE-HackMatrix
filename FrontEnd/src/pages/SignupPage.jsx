@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   User,
   Mail,
@@ -14,6 +14,7 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  ShieldAlert,
   ShieldCheck,
   FileText,
 } from 'lucide-react';
@@ -43,7 +44,9 @@ const COUNTRY_OPTIONS = [
 
 export default function SignupPage({ initialMode = 'signup' }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isSignIn, setIsSignIn] = useState(initialMode === 'signin');
+  const [inactivityNotice, setInactivityNotice] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_OPTIONS[0]);
@@ -68,6 +71,18 @@ export default function SignupPage({ initialMode = 'signup' }) {
   const [successMsg, setSuccessMsg] = useState('');
 
   const dropdownRef = useRef(null);
+
+  // Detect session timeout / inactivity redirect reason from query params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const reason = params.get('reason');
+    if (reason === 'timeout' || reason === 'inactivity') {
+      setInactivityNotice(
+        'For your security, your session was automatically ended due to inactivity. Please sign in again to continue.'
+      );
+      setIsSignIn(true);
+    }
+  }, [location.search]);
 
   // Close country dropdown when clicking outside
   useEffect(() => {
@@ -421,6 +436,14 @@ export default function SignupPage({ initialMode = 'signup' }) {
                 ? 'Sign in to access your saved schemes and track applications.'
                 : 'Create your account to access government schemes and personalized recommendations.'}
             </p>
+
+            {/* Session Inactivity Warning Banner */}
+            {inactivityNotice && (
+              <div className="signup-alert signup-alert-warning" role="alert">
+                <ShieldAlert size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>{inactivityNotice}</span>
+              </div>
+            )}
 
             {/* Error or Success Alert */}
             {errorMsg && (

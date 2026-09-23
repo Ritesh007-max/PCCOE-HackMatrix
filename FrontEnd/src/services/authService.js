@@ -154,3 +154,114 @@ export function getStoredUser() {
 export function getStoredToken() {
   return localStorage.getItem('fin_token') || null;
 }
+
+/**
+ * Get stored refresh token
+ */
+export function getStoredRefreshToken() {
+  return localStorage.getItem('fin_refresh_token') || null;
+}
+
+/**
+ * Refresh current session access token using stored refresh token
+ */
+export async function refreshAuthToken() {
+  const refreshToken = getStoredRefreshToken();
+  if (!refreshToken) {
+    return {
+      success: false,
+      message: 'No refresh token available',
+    };
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/users/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || (data && !data.success)) {
+      return {
+        success: false,
+        message: data?.message || 'Token refresh failed',
+      };
+    }
+
+    if (data.access_token) {
+      localStorage.setItem('fin_token', data.access_token);
+    }
+    if (data.refresh_token) {
+      localStorage.setItem('fin_refresh_token', data.refresh_token);
+    }
+    if (data.user) {
+      const existing = getStoredUser() || {};
+      const updatedUser = {
+        ...existing,
+        id: data.user.id || existing.id,
+        email: data.user.email || existing.email,
+      };
+      localStorage.setItem('fin_user', JSON.stringify(updatedUser));
+      window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: updatedUser }));
+    }
+
+    window.dispatchEvent(new Event('storage'));
+
+    return {
+      success: true,
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || 'Network error during token refresh',
+      isNetworkError: true,
+    };
+  }
+}
+
+/**
+ * Clear local session immediately (synchronous for fast logout/timeout)
+ */
+export function clearAuthSession() {
+  localStorage.removeItem('fin_user');
+  localStorage.removeItem('fin_token');
+  localStorage.removeItem('fin_refresh_token');
+  localStorage.removeItem('fin_last_activity');
+
+  window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: null }));
+  window.dispatchEvent(new Event('storage'));
+}
+
+/**
+ * Authenticated Fetch Wrapper
+ * - Automatically attaches Authorization Bearer token
+ * - On 401 Unauthorized, automatically triggers refreshAuthToken() and retries once
+ */
+export async function authenticatedFetch(url, options = {}) {
+  const token = getStoredToken();
+  const headers = new Headers(options.headers || {});
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  let response = await fetch(url, { ...options, headers });
+
+  // If unauthorized and we have a refresh token, try refreshing and retry
+  if (response.status === 401 && getStoredRefreshToken()) {
+    const refreshResult = await refreshAuthToken();
+    if (refreshResult.success && refreshResult.accessToken) {
+      headers.set('Authorization', `Bearer ${refreshResult.accessToken}`);
+      response = await fetch(url, { ...options, headers });
+    } else {
+      // Refresh failed, clean session
+      clearAuthSession();
+    }
+  }
+
+  return response;
+}
