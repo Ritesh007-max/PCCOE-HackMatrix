@@ -1,6 +1,6 @@
 const path = require("path");
 const crypto = require("crypto");
-const supabase = require("../config/supabaseConfig");
+const { supabaseClient: supabase, supabaseAdmin } = require("../config/supabaseConfig");
 const { throwIfError } = require("../utils/supabaseErrors");
 
 const DOCUMENTS_BUCKET = process.env.SUPABASE_DOCUMENTS_BUCKET || "documents";
@@ -60,7 +60,7 @@ const getSignedFileUrl = async (storagePath) => {
         return null;
     }
 
-    const { data, error } = await supabase.storage
+    const { data, error } = await supabaseAdmin.storage
         .from(DOCUMENTS_BUCKET)
         .createSignedUrl(storagePath, 60 * 60);
 
@@ -149,7 +149,7 @@ const uploadDocument = async ({ file, documentType }) => {
     const ext = path.extname(file.originalname) || "";
     const storagePath = `${id}/${Date.now()}${ext}`;
 
-    const { error: storageError } = await supabase.storage
+    const { error: storageError } = await supabaseAdmin.storage
         .from(DOCUMENTS_BUCKET)
         .upload(storagePath, file.buffer, {
             contentType: file.mimetype,
@@ -182,7 +182,7 @@ const uploadDocument = async ({ file, documentType }) => {
         .single();
 
     if (error) {
-        await supabase.storage.from(DOCUMENTS_BUCKET).remove([storagePath]);
+        await supabaseAdmin.storage.from(DOCUMENTS_BUCKET).remove([storagePath]);
         throwIfError(error);
     }
 
@@ -236,7 +236,7 @@ const deleteDocument = async (id) => {
     const row = await fetchDocumentRow(id);
 
     if (row.storage_path) {
-        const { error: storageError } = await supabase.storage
+        const { error: storageError } = await supabaseAdmin.storage
             .from(DOCUMENTS_BUCKET)
             .remove([row.storage_path]);
         throwIfError(storageError);
