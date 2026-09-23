@@ -1,5 +1,75 @@
 import React from 'react';
 
+// Designed FIN Brand Logo (Stylized Waving Tricolor Ribbon & Balanced Proportions)
+export function FinLogoClear({ className = '' }) {
+  return (
+    <div className={`fin-brand-lockup ${className}`}>
+      {/* Top Brand Row: Designed FIN Wordmark + Stylized National Tricolor Ribbon */}
+      <div className="fin-brand-top-row">
+        <span className="fin-brand-hero-title">FIN</span>
+
+        <svg
+          width="34"
+          height="23"
+          viewBox="0 0 44 30"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className="fin-brand-tricolor-wave"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="finSaffronGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#E65100" />
+              <stop offset="50%" stopColor="#F97316" />
+              <stop offset="100%" stopColor="#FB923C" />
+            </linearGradient>
+            <linearGradient id="finWhiteGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#F1F5F9" />
+              <stop offset="50%" stopColor="#FFFFFF" />
+              <stop offset="100%" stopColor="#E2E8F0" />
+            </linearGradient>
+            <linearGradient id="finGreenGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#047857" />
+              <stop offset="50%" stopColor="#059669" />
+              <stop offset="100%" stopColor="#10B981" />
+            </linearGradient>
+          </defs>
+
+          {/* Saffron Fluid Waving Ribbon */}
+          <path
+            d="M2 13.5 C 9 16.5, 18 10, 28 6.5 C 34 4.5, 39 3, 42 2 C 39.5 5.5, 31 10, 23 13 C 15 16, 7 19.5, 2 17.5 Z"
+            fill="url(#finSaffronGrad)"
+          />
+
+          {/* Center White Ribbon with Ashoka Chakra */}
+          <path
+            d="M2 18 C 9 20.8, 18 14.5, 28 11.2 C 34 9.2, 39 7.8, 42 6.8 C 39.5 10, 31 14.2, 23 17.2 C 15 20.2, 7 23.5, 2 21.5 Z"
+            fill="url(#finWhiteGrad)"
+          />
+          {/* Ashoka Chakra */}
+          <circle cx="21.5" cy="14" r="2.8" stroke="#003366" strokeWidth="0.75" fill="#FFFFFF" />
+          <circle cx="21.5" cy="14" r="0.8" fill="#003366" />
+          <path d="M21.5 11.6 V16.4 M19.1 14 H23.9" stroke="#003366" strokeWidth="0.4" />
+
+          {/* Green Fluid Waving Ribbon */}
+          <path
+            d="M2 22.5 C 9 25.2, 18 19, 28 15.8 C 34 13.8, 39 12.4, 42 11.5 C 39.5 14.8, 31 18.8, 23 21.8 C 15 24.8, 7 28, 2 26 Z"
+            fill="url(#finGreenGrad)"
+          />
+        </svg>
+      </div>
+
+      {/* Subtitle Row directly beneath, aligned with FIN */}
+      <div className="fin-brand-sub-row">
+        <span className="fin-brand-subtitle-full">Financial Policy Intelligence</span>
+      </div>
+
+      {/* Subtle micro tricolor accent line */}
+      <div className="fin-brand-micro-accent" aria-hidden="true" />
+    </div>
+  );
+}
+
 // Tricolor wave next to FIN wordmark
 export function TricolorWave({ className = '', style = {} }) {
   return (

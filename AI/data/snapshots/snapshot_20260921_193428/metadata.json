@@ -1,0 +1,41 @@
+{
+  "sync_run_id": "sync_20260921_193428",
+  "started_at": "2026-09-21T19:34:28.604573+00:00",
+  "completed_at": "2026-09-21T19:34:29.730042+00:00",
+  "status": "SUCCESS",
+  "sources_attempted": [
+    "myscheme_csv_baseline",
+    "myscheme_faqs_baseline",
+    "updated_data_supplementary",
+    "local_bilingual_dataset",
+    "hf_bharatschemes",
+    "hf_smartduke",
+    "hf_gov_myscheme",
+    "eligibility_dataset_eval",
+    "archive_txt_zip",
+    "official_portal_web"
+  ],
+  "sources_succeeded": [
+    "myscheme_csv_baseline",
+    "myscheme_faqs_baseline",
+    "updated_data_supplementary",
+    "local_bilingual_dataset",
+    "hf_bharatschemes",
+    "hf_smartduke",
+    "hf_gov_myscheme",
+    "eligibility_dataset_eval",
+    "archive_txt_zip",
+    "official_portal_web"
+  ],
+  "sources_failed": [],
+  "records_added": 0,
+  "records_modified": 0,
+  "records_removed": 0,
+  "records_unchanged": 4749,
+  "conflicts_detected": 0,
+  "validation_failures": 0,
+  "activated_version": null,
+  "rollback_version": null,
+  "dry_run": false,
+  "notes": "Phase 7 synchronization execution."
+}

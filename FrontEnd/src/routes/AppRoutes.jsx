@@ -10,12 +10,22 @@ import ApplicationsPage from '../pages/ApplicationsPage';
 import ProfilePage from '../pages/ProfilePage';
 import NotFoundPage from '../pages/NotFoundPage';
 
+import SignupPage from '../pages/SignupPage';
+
 export default function AppRoutes() {
   return (
     <Routes>
+      {/* Default route redirects to /signup when starting npm run dev */}
+      <Route path="/" element={<Navigate to="/signup" replace />} />
+
+      {/* Standalone Authentication Pages */}
+      <Route path="/signup" element={<SignupPage initialMode="signup" />} />
+      <Route path="/register" element={<SignupPage initialMode="signup" />} />
+      <Route path="/login" element={<SignupPage initialMode="signin" />} />
+      <Route path="/signin" element={<SignupPage initialMode="signin" />} />
+
+      {/* Main Authenticated Dashboard Pages */}
       <Route element={<AppLayout />}>
-        {/* Default route redirects to /dashboard */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/discover" element={<DiscoverPage />} />
         <Route path="/schemes/:schemeId" element={<SchemeDetailsPage />} />

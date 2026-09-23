@@ -1,7 +1,34 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PageContainer from '../components/layout/PageContainer';
 
 export default function ProfilePage() {
+  const [applicantName, setApplicantName] = useState(() => {
+    try {
+      const stored = localStorage.getItem('fin_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.fullName) return parsed.fullName;
+      }
+    } catch (e) {}
+    return 'Hemang';
+  });
+
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      try {
+        const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
+        if (user.fullName) setApplicantName(user.fullName);
+      } catch (err) {}
+    };
+
+    window.addEventListener('fin_user_updated', handleUserUpdate);
+    window.addEventListener('storage', handleUserUpdate);
+    return () => {
+      window.removeEventListener('fin_user_updated', handleUserUpdate);
+      window.removeEventListener('storage', handleUserUpdate);
+    };
+  }, []);
+
   return (
     <PageContainer>
       <div className="page-placeholder">
@@ -13,7 +40,7 @@ export default function ProfilePage() {
           <div className="placeholder-badge-row">
             <span className="badge badge-success">Foundation Ready</span>
             <span className="badge badge-saffron">Route: /profile</span>
-            <span className="badge badge-blue">Applicant: Hemang</span>
+            <span className="badge badge-blue">Applicant: {applicantName}</span>
           </div>
           <p className="font-body-large">
             Applicant profile settings, income tier criteria, category verification, and location preferences will be integrated in the subsequent implementation step.

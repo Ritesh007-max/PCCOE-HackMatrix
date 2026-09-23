@@ -1,0 +1,20 @@
+{
+  "include": [
+    "src",
+    "tests"
+  ],
+  "extraPaths": [
+    ".",
+    "src"
+  ],
+  "pythonVersion": "3.10",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        ".",
+        "src"
+      ]
+    }
+  ]
+}
