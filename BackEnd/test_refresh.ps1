@@ -1,2 +1,0 @@
-$body = Get-Content 'C:\Users\LENOVO\Desktop\CG\Hackathon Projects\PCCOE-HackMatrix\BackEnd\test_refresh.json' -Raw
-Invoke-RestMethod -Uri 'http://localhost:5000/api/users/refresh' -Method Post -ContentType 'application/json' -Body $body
