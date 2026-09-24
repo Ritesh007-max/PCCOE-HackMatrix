@@ -9,22 +9,22 @@ import { resolveDisplayName } from '../../services/authService';
 export default function HeroBanner({ userProfile }) {
   const [userName, setUserName] = useState(() => {
     try {
-      // Use userProfile from API if available
-      if (userProfile?.fullName) return userProfile.fullName;
+      if (userProfile?.fullName && userProfile.fullName.toLowerCase() !== 'user') {
+        return userProfile.fullName;
+      }
       
       const stored = localStorage.getItem('fin_user');
       if (stored) {
         const parsed = JSON.parse(stored);
         const resolved = resolveDisplayName(parsed, parsed?.email);
-        if (resolved) return resolved;
+        if (resolved && resolved.toLowerCase() !== 'user') return resolved;
       }
     } catch (e) {}
     return 'Hemang';
   });
 
   useEffect(() => {
-    // Update from API data if provided
-    if (userProfile?.fullName) {
+    if (userProfile?.fullName && userProfile.fullName.toLowerCase() !== 'user') {
       setUserName(userProfile.fullName);
     }
 
@@ -32,7 +32,7 @@ export default function HeroBanner({ userProfile }) {
       try {
         const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
         const resolved = resolveDisplayName(user, user?.email);
-        if (resolved) setUserName(resolved);
+        if (resolved && resolved.toLowerCase() !== 'user') setUserName(resolved);
       } catch (err) {}
     };
 
@@ -45,7 +45,7 @@ export default function HeroBanner({ userProfile }) {
   }, [userProfile]);
 
   // Extract only the first name for this specific greeting spot on the dashboard
-  const firstName = userName ? userName.trim().split(/\s+/)[0] : 'Hemang';
+  const firstName = (userName && userName.toLowerCase() !== 'user') ? userName.trim().split(/\s+/)[0] : 'Hemang';
 
   return (
     <section className="dashboard-hero-card" aria-label="Welcome Banner">

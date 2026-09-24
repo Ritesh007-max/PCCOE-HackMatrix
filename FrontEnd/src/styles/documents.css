@@ -156,6 +156,12 @@
   color: #FFFFFF;
 }
 
+.tab-icon-ticket {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Right side toolbar tools */
 .docs-toolbar-actions {
   display: flex;
@@ -202,39 +208,30 @@
   font-size: 13px;
 }
 
-.btn-digilocker-sync {
+.btn-apply-ticket-toolbar {
   height: 38px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 15px;
-  background: linear-gradient(135deg, #0A438C 0%, #0056B3 100%);
+  padding: 0 14px;
+  background: linear-gradient(135deg, #10243A 0%, #1E3A5F 100%);
   color: #FFFFFF;
-  border: 1px solid #083875;
+  border: 1px solid #0D1C2E;
   border-radius: var(--radius-md);
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
-  box-shadow: 0 2px 4px rgba(10, 67, 140, 0.16);
+  box-shadow: 0 2px 4px rgba(16, 36, 58, 0.16);
   box-sizing: border-box;
   white-space: nowrap;
 }
 
-.btn-digilocker-sync:hover {
-  background: linear-gradient(135deg, #083875 0%, #004494 100%);
-  box-shadow: 0 4px 8px rgba(10, 67, 140, 0.24);
+.btn-apply-ticket-toolbar:hover {
+  background: linear-gradient(135deg, #0A1726 0%, #152A45 100%);
+  box-shadow: 0 4px 8px rgba(16, 36, 58, 0.24);
   transform: translateY(-1px);
-}
-
-.digilocker-tag {
-  background-color: rgba(255, 255, 255, 0.22);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
 }
 
 .btn-export-dossier {
@@ -603,6 +600,12 @@
   gap: 13px;
 }
 
+.docs-sidebar-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .btn-upload-new-doc {
   width: 100%;
   height: 42px;
@@ -616,7 +619,7 @@
   border-radius: var(--radius-md);
   padding: 0 18px;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -627,59 +630,118 @@
 .btn-upload-new-doc:hover {
   background-color: #072C25;
   box-shadow: 0 4px 8px rgba(10, 59, 50, 0.22);
+  transform: translateY(-1px);
 }
 
-/* Drag & Drop Card */
-.docs-dropzone-card {
-  background-color: #FFFFFF;
-  border: 1.5px dashed #C4D1DF;
-  border-radius: var(--radius-md);
-  padding: 22px 18px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.docs-dropzone-card:hover,
-.docs-dropzone-card.drag-active {
-  border-color: #005B50;
-  background-color: #F8FBFB;
-}
-
-.dropzone-icon-circle {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #1E3A5F;
-  color: #FFFFFF;
-  display: flex;
+.btn-apply-ticket {
+  width: 100%;
+  height: 42px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 9px;
-}
-
-.dropzone-title {
+  gap: 8px;
+  background: linear-gradient(135deg, #10243A 0%, #1E3A5F 100%);
+  color: #FFFFFF;
+  border: 1px solid #0D1C2E;
+  border-radius: var(--radius-md);
+  padding: 0 18px;
   font-family: var(--font-sans);
   font-size: 13.5px;
   font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 4px rgba(16, 36, 58, 0.16);
+  box-sizing: border-box;
+}
+
+.btn-apply-ticket:hover {
+  background: linear-gradient(135deg, #0A1726 0%, #152A45 100%);
+  box-shadow: 0 4px 8px rgba(16, 36, 58, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Quick Support & Ticket Assistance Card */
+.docs-ticket-assist-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E4E7EC;
+  border-radius: var(--radius-md);
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ticket-assist-header {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ticket-assist-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: #EEF4FD;
+  color: #1264D6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ticket-assist-title {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
   color: #10243A;
+  margin: 0;
 }
 
-.dropzone-sub {
+.ticket-assist-sub {
   font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: #667085;
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
+.ticket-assist-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 7px;
+  border-top: 1px dashed #EAECF0;
+}
+
+.ticket-assist-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #005B50;
   font-size: 12px;
-  color: #667085;
-  margin-top: 2px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: gap 0.2s ease;
 }
 
-.dropzone-formats {
-  font-family: var(--font-sans);
+.ticket-assist-link:hover {
+  color: #072C25;
+  gap: 7px;
+}
+
+.ticket-status-pill {
   font-size: 11px;
-  color: #667085;
-  margin-top: 8px;
+  font-weight: 600;
+  color: #087443;
+  background-color: #ECFDF3;
+  border: 1px solid #D1FADF;
+  border-radius: 12px;
+  padding: 2px 8px;
 }
 
 /* Completion Card */
@@ -1112,25 +1174,124 @@
   border-bottom-right-radius: var(--radius-lg);
 }
 
-/* DigiLocker */
-.digilocker-modal-badge {
-  display: inline-flex;
+/* Ticket Modal & Components */
+.ticket-modal-icon-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background-color: #E6F4F1;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  background-color: #EEF4FD;
-  border: 1px solid #BCD5F8;
-  padding: 9px 12px;
-  border-radius: 7px;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.digilocker-step-box {
-  background-color: #F8F9FA;
-  border: 1px solid #E4E7EC;
+.ticket-modal-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background-color: #EEF4FD;
+  border: 1px solid #BCD5F8;
+  padding: 10px 12px;
   border-radius: 7px;
-  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.ticket-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 540px) {
+  .ticket-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ticket-priority-pill-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.ticket-priority-pill {
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid #D0D5DD;
+  background-color: #FFFFFF;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: #344054;
+}
+
+.ticket-priority-pill:hover {
+  border-color: #98A2B3;
+  background-color: #F9FAFB;
+}
+
+.ticket-priority-pill.active {
+  border-color: #005B50;
+  background-color: #F0FDF4;
+  color: #0A3B32;
+  box-shadow: 0 0 0 1px #005B50;
+}
+
+.ticket-priority-pill.urgent.active {
+  border-color: #D92D20;
+  background-color: #FEF3F2;
+  color: #B42318;
+  box-shadow: 0 0 0 1px #D92D20;
+}
+
+.ticket-priority-pill.high.active {
+  border-color: #E98A00;
+  background-color: #FEF6EC;
+  color: #B54708;
+  box-shadow: 0 0 0 1px #E98A00;
+}
+
+.priority-sub {
+  font-size: 10px;
+  color: #667085;
+  font-weight: 500;
+}
+
+.docs-form-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #D0D5DD;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: #10243A;
+  resize: vertical;
+  min-height: 75px;
+  box-sizing: border-box;
+}
+
+.docs-form-textarea:focus {
+  outline: none;
+  border-color: #005B50;
+  box-shadow: 0 0 0 3px rgba(0, 91, 80, 0.12);
+}
+
+.clickable-metric-card {
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.clickable-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 /* Watermark */
@@ -1168,6 +1329,277 @@
 .meta-field-label { font-size: 11px; color: #667085; font-weight: 500; }
 .meta-field-val   { font-size: 12.5px; color: #10243A; font-weight: 600; margin-top: 1px; }
 
+/* --------------------------------------------------------------------------
+   13. APPLY FOR GOVERNMENT POLICY MODAL STYLES
+   -------------------------------------------------------------------------- */
+.policy-application-modal {
+  max-width: 580px;
+  width: 95%;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  overflow: hidden;
+  box-shadow: 0 24px 48px -12px rgba(16, 36, 58, 0.28), 0 0 0 1px rgba(16, 36, 58, 0.08);
+}
+
+.policy-application-modal form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.policy-modal-header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background-color: #E6F4F1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.policy-modal-scroll-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.policy-modal-scroll-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.policy-modal-scroll-body::-webkit-scrollbar-thumb {
+  background-color: #D0D5DD;
+  border-radius: 3px;
+}
+
+.policy-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.policy-section-header {
+  border-bottom: 1.5px solid #F0EFEA;
+  padding-bottom: 5px;
+}
+
+.policy-section-title {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #10243A;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.policy-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 14px;
+}
+
+.policy-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.policy-field-full {
+  grid-column: 1 / -1;
+}
+
+.policy-field-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: #344054;
+}
+
+.policy-input {
+  height: 36px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 1.5px solid #D0D5DD;
+  font-size: 13px;
+  color: #10243A;
+  background-color: #FFFFFF;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.policy-input:focus {
+  border-color: #005B50;
+  box-shadow: 0 0 0 3px rgba(0, 91, 80, 0.12);
+  outline: none;
+}
+
+/* Drag and Drop Zone Container */
+.policy-dropzone-box {
+  border: 2px dashed #CBD5E1;
+  border-radius: 12px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px;
+  background-color: #FAFAF8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.policy-dropzone-box:hover {
+  border-color: #005B50;
+  background-color: #F4FAF8;
+  transform: translateY(-1px);
+}
+
+.policy-dropzone-box.drag-over {
+  border-color: #005B50;
+  background-color: #E6F4F1;
+  border-style: solid;
+  box-shadow: 0 0 0 4px rgba(0, 91, 80, 0.15);
+  transform: scale(1.01);
+}
+
+.policy-dropzone-box.has-file {
+  border-color: #087443;
+  background-color: #F0FDF4;
+}
+
+.policy-dropzone-icon-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #E6F4F1;
+  color: #005B50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  transition: transform 0.2s;
+}
+
+.policy-dropzone-box:hover .policy-dropzone-icon-circle {
+  transform: scale(1.08);
+}
+
+.policy-dropzone-title {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #10243A;
+}
+
+.policy-dropzone-sub {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: #005B50;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.policy-dropzone-specs {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: #667085;
+  font-weight: 500;
+  margin-top: 3px;
+}
+
+/* Attached file badge */
+.policy-attached-file-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  background-color: #ECFDF3;
+  border: 1px solid #A6F4C5;
+  border-radius: 8px;
+  margin-top: 10px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.policy-file-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #087443;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.policy-file-size {
+  font-size: 11px;
+  color: #166534;
+  flex-shrink: 0;
+}
+
+.policy-file-remove-btn {
+  background: none;
+  border: none;
+  color: #667085;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.policy-file-remove-btn:hover {
+  background-color: #FEE2E2;
+  color: #DC2626;
+}
+
+/* Policy Submit Button */
+.policy-modal-footer {
+  padding: 14px 24px;
+  gap: 12px;
+}
+
+.policy-submit-btn {
+  height: 40px;
+  padding: 0 20px;
+  font-size: 13.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #005B50 0%, #0A3B32 100%);
+  color: #FFFFFF;
+  border: 1px solid #004D43;
+  box-shadow: 0 2px 6px rgba(0, 91, 80, 0.25);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.policy-submit-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #004D43 0%, #072B25 100%);
+  box-shadow: 0 4px 12px rgba(0, 91, 80, 0.35);
+  transform: translateY(-1px);
+}
+
+.policy-submit-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 /* Toast */
 .docs-toast {
   position: fixed;
@@ -1204,4 +1636,6 @@
   .docs-toolbar-row { flex-direction: column; align-items: stretch; }
   .docs-toolbar-actions { width: 100%; }
   .docs-search-box { width: 100%; }
+  .policy-fields-grid { grid-template-columns: 1fr; }
 }
+
