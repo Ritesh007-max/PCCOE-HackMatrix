@@ -10,10 +10,10 @@ const iconMap = {
   applications: Clock,
 };
 
-export default function MetricCardsRow() {
+export default function MetricCardsRow({ metrics = dashboardMetrics }) {
   return (
     <div className="metrics-grid-row" role="region" aria-label="Key Profile Metrics">
-      {dashboardMetrics.map((metric) => {
+      {metrics.map((metric) => {
         const IconComponent = iconMap[metric.id] || BookOpen;
 
         return (
