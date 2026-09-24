@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   User,
@@ -9,11 +9,8 @@ import {
   EyeOff,
   ArrowRight,
   ChevronDown,
-  Users,
-  Search,
   X,
   CheckCircle2,
-  AlertCircle,
   ShieldAlert,
   ShieldCheck,
   FileText,
@@ -27,9 +24,10 @@ import {
   saveRegisteredUser,
 } from '../services/authService';
 
+const DEV_AUTH_BYPASS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH_BYPASS === 'true';
+
 // Assets
 import indiaGateHero from '../assets/india_gate_hero.jpg';
-import tricolorFlag from '../assets/tricolor_flag_original.png';
 import tricolorRibbon from '../assets/tricolor_ribbon_original.png';
 import cardMonumentSketch from '../assets/card_monument_sketch.png';
 
@@ -51,8 +49,14 @@ const COUNTRY_OPTIONS = [
 export default function SignupPage({ initialMode = 'signup' }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isSignIn, setIsSignIn] = useState(initialMode === 'signin');
-  const [inactivityNotice, setInactivityNotice] = useState(null);
+  const inactivityReason = new URLSearchParams(location.search).get('reason');
+  const isInactivityRedirect = inactivityReason === 'timeout' || inactivityReason === 'inactivity';
+  const [isSignIn, setIsSignIn] = useState(initialMode === 'signin' || isInactivityRedirect);
+  const [inactivityNotice] = useState(
+    isInactivityRedirect
+      ? 'For your security, your session was automatically ended due to inactivity. Please sign in again to continue.'
+      : null
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_OPTIONS[0]);
@@ -77,18 +81,6 @@ export default function SignupPage({ initialMode = 'signup' }) {
   const [successMsg, setSuccessMsg] = useState('');
 
   const dropdownRef = useRef(null);
-
-  // Detect session timeout / inactivity redirect reason from query params
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const reason = params.get('reason');
-    if (reason === 'timeout' || reason === 'inactivity') {
-      setInactivityNotice(
-        'For your security, your session was automatically ended due to inactivity. Please sign in again to continue.'
-      );
-      setIsSignIn(true);
-    }
-  }, [location.search]);
 
   // Close country dropdown when clicking outside
   useEffect(() => {
@@ -169,20 +161,6 @@ export default function SignupPage({ initialMode = 'signup' }) {
           phone: `${selectedCountry.code}${formData.mobile}`,
         });
 
-        // Upon successful registration, auto-login to obtain session access tokens
-        if (authResult.success) {
-          const autoLogin = await loginUser({
-            email: formData.email,
-            password: formData.password,
-          });
-          if (autoLogin.success && autoLogin.data?.access_token) {
-            authResult.data.access_token = autoLogin.data.access_token;
-            authResult.data.refresh_token = autoLogin.data.refresh_token;
-            if (autoLogin.data.user) {
-              authResult.data.user = autoLogin.data.user;
-            }
-          }
-        }
       }
 
       // Check for backend errors (validation, invalid credentials, existing user, etc.)
@@ -193,8 +171,13 @@ export default function SignupPage({ initialMode = 'signup' }) {
           return;
         }
 
-        // If backend server is not running on port 5000, inform citizen clearly with demo fallback
-        console.warn('Backend server offline, continuing with local session:', authResult.message);
+        if (!DEV_AUTH_BYPASS_ENABLED) {
+          setErrorMsg(authResult.message);
+          setIsSubmitting(false);
+          return;
+        }
+
+        console.warn('Backend server offline, continuing with local development session:', authResult.message);
       }
 
       // Resolve proper registered citizen name (so login preserves the registration username)
@@ -257,6 +240,20 @@ export default function SignupPage({ initialMode = 'signup' }) {
       });
       navigate('/dashboard');
     }, 700);
+  };
+
+  const handleDevAuthBypass = () => {
+    const email = formData.email.trim() || 'developer@localhost.test';
+    const name = !isSignIn && formData.fullName.trim()
+      ? formData.fullName.trim()
+      : getRegisteredUserByEmail(email)?.fullName || 'Developer';
+    storeAuthSession({
+      user: { id: `dev-${email}`, email, fullName: name, user_metadata: { full_name: name } },
+      accessToken: 'development-only-bypass-token',
+      refreshToken: 'development-only-bypass-refresh-token',
+      fallbackName: name,
+    });
+    navigate('/dashboard');
   };
 
   const handleForgotSubmit = (e) => {
@@ -816,6 +813,16 @@ export default function SignupPage({ initialMode = 'signup' }) {
                 </svg>
                 <span>Continue with Google</span>
               </button>
+
+              {DEV_AUTH_BYPASS_ENABLED && (
+                <button
+                  type="button"
+                  className="signup-dev-bypass-btn"
+                  onClick={handleDevAuthBypass}
+                >
+                  Skip authentication (development only)
+                </button>
+              )}
             </form>
 
             {/* Card Footer Heritage Line Sketch & Quote */}

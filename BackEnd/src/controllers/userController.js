@@ -14,30 +14,16 @@ const sanitizeUser = (user) => ({
 
 const sanitizeUserWithProfile = async (user) => {
     const baseUser = sanitizeUser(user);
-    try {
-        const profile = await profileService.getProfileById(user.id);
-        if (profile) {
-            baseUser.user_metadata = {
-                ...baseUser.user_metadata,
-                full_name: profile.full_name,
-                phone: profile.phone,
-                state: profile.state,
-                district: profile.district,
-                occupation: profile.occupation,
-                annual_income: profile.annual_income,
-                income: profile.annual_income,
-                dob: profile.dob,
-                gender: profile.gender,
-                applicant_type: profile.applicant_type,
-                category: profile.category,
-                age: profile.age,
-                area_type: profile.area_type,
-                land_acres: profile.land_acres,
-                is_disabled: profile.is_disabled
-            };
-        }
-    } catch (err) {
-        // Silently ignore profile fetch errors
+    const profile = await profileService.getOrCreateProfile(user.id, {
+        email: user.email,
+        ...(user.user_metadata || {})
+    });
+    if (profile) {
+        baseUser.user_metadata = {
+            ...baseUser.user_metadata,
+            full_name: profile.full_name || baseUser.user_metadata?.full_name,
+            phone: profile.phone || baseUser.user_metadata?.phone
+        };
     }
     return baseUser;
 };
@@ -90,13 +76,25 @@ const registerUser = async (req, res, next) => {
             });
         }
 
-        const user = await userServices.registerUser({ email, password, fullName, phone });
+        const { user, session } = await userServices.registerUser({ email, password, fullName, phone });
+
+        if (!user) {
+            return res.status(502).json({
+                success: false,
+                message: 'Account could not be created'
+            });
+        }
 
         const userWithProfile = await sanitizeUserWithProfile(user);
 
         return res.status(201).json({
             success: true,
-            message: 'User registered successfully',
+            message: 'Account created successfully. You are now signed in.',
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+            expires_in: session.expires_in,
+            expires_at: session.expires_at,
+            token_type: session.token_type,
             user: userWithProfile
         });
 

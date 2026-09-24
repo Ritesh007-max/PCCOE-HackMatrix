@@ -10,9 +10,10 @@ const notFoundHandler = (req, res, next) => {
 const globalErrorHandler = (error, req, res, next) => {
     console.error(error);
 
-    res.status(error.status || 500).json({
+    const status = error.status || 500;
+    res.status(status).json({
         success: false,
-        message: error.message || "Internal server error"
+        message: status >= 500 ? "Internal server error" : (error.message || "Request failed")
     });
 };
 

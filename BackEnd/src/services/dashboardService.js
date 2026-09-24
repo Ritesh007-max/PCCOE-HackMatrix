@@ -6,9 +6,12 @@ const REQUIRED_DOC_TYPES = [
     'pan',
     'income_cert',
     'caste_cert',
-    'land_records',
+    'land',
     'disability_cert',
-    'bank_passbook'
+    'bank_passbook',
+    'domicile',
+    'photo',
+    'address_proof'
 ];
 
 const isTableMissingError = (err) => {
@@ -45,7 +48,8 @@ const getDocumentStats = async (userId) => {
     }
 
     for (const doc of docs) {
-        docMap.set(doc.doc_type, doc);
+        const normalizedType = doc.doc_type === 'land_records' ? 'land' : doc.doc_type;
+        docMap.set(normalizedType, { ...doc, doc_type: normalizedType });
     }
 
     const allDocs = Array.from(docMap.values());
