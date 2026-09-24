@@ -1,4 +1,5 @@
 const userServices = require('../services/userServices');
+const profileService = require('../services/profileService');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
@@ -10,6 +11,36 @@ const sanitizeUser = (user) => ({
     created_at: user.created_at,
     updated_at: user.updated_at
 });
+
+const sanitizeUserWithProfile = async (user) => {
+    const baseUser = sanitizeUser(user);
+    try {
+        const profile = await profileService.getProfileById(user.id);
+        if (profile) {
+            baseUser.user_metadata = {
+                ...baseUser.user_metadata,
+                full_name: profile.full_name,
+                phone: profile.phone,
+                state: profile.state,
+                district: profile.district,
+                occupation: profile.occupation,
+                annual_income: profile.annual_income,
+                income: profile.annual_income,
+                dob: profile.dob,
+                gender: profile.gender,
+                applicant_type: profile.applicant_type,
+                category: profile.category,
+                age: profile.age,
+                area_type: profile.area_type,
+                land_acres: profile.land_acres,
+                is_disabled: profile.is_disabled
+            };
+        }
+    } catch (err) {
+        // Silently ignore profile fetch errors
+    }
+    return baseUser;
+};
 
 const validateRegistrationInput = ({ email, password, fullName }) => {
     const errors = [];
@@ -61,10 +92,12 @@ const registerUser = async (req, res, next) => {
 
         const user = await userServices.registerUser({ email, password, fullName, phone });
 
+        const userWithProfile = await sanitizeUserWithProfile(user);
+
         return res.status(201).json({
             success: true,
             message: 'User registered successfully',
-            user: sanitizeUser(user)
+            user: userWithProfile
         });
 
     } catch (error) {
@@ -94,6 +127,8 @@ const loginUser = async (req, res, next) => {
             });
         }
 
+        const userWithProfile = await sanitizeUserWithProfile(user);
+
         return res.status(200).json({
             success: true,
             message: 'Login successful',
@@ -102,7 +137,7 @@ const loginUser = async (req, res, next) => {
             expires_in: session.expires_in,
             expires_at: session.expires_at,
             token_type: session.token_type,
-            user: sanitizeUser(user)
+            user: userWithProfile
         });
 
     } catch (error) {
@@ -130,6 +165,8 @@ const refreshToken = async (req, res, next) => {
             });
         }
 
+        const userWithProfile = await sanitizeUserWithProfile(user);
+
         return res.status(200).json({
             success: true,
             message: 'Token refreshed successfully',
@@ -138,7 +175,7 @@ const refreshToken = async (req, res, next) => {
             expires_in: session.expires_in,
             expires_at: session.expires_at,
             token_type: session.token_type,
-            user: sanitizeUser(user)
+            user: userWithProfile
         });
 
     } catch (error) {
@@ -155,9 +192,11 @@ const getMe = async (req, res, next) => {
             });
         }
 
+        const userWithProfile = await sanitizeUserWithProfile(req.user);
+
         return res.status(200).json({
             success: true,
-            user: sanitizeUser(req.user)
+            user: userWithProfile
         });
 
     } catch (error) {

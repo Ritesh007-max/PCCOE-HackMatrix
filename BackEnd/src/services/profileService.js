@@ -3,7 +3,7 @@ const { supabaseAdmin } = require('../config/supabaseConfig');
 const REQUIRED_FIELDS = [
     'full_name', 'phone', 'age', 'gender', 'category',
     'state', 'district', 'area_type', 'occupation',
-    'annual_income'
+    'annual_income', 'dob', 'applicant_type'
 ];
 
 const OPTIONAL_FIELDS = ['land_acres', 'is_disabled'];
@@ -35,6 +35,8 @@ const sanitizeProfile = (profile) => {
         annual_income: profile.annual_income,
         land_acres: profile.land_acres,
         is_disabled: profile.is_disabled,
+        dob: profile.dob,
+        applicant_type: profile.applicant_type,
         profile_completed_percent: profile.profile_completed_percent,
         created_at: profile.created_at,
         updated_at: profile.updated_at
@@ -95,6 +97,8 @@ const createProfile = async (userId, userMetadata = {}) => {
         annual_income: null,
         land_acres: 0,
         is_disabled: false,
+        dob: null,
+        applicant_type: null,
         profile_completed_percent: 0
     };
 
@@ -128,7 +132,7 @@ const createProfile = async (userId, userMetadata = {}) => {
 const updateProfile = async (userId, updates) => {
     const existingProfile = await getOrCreateProfile(userId);
     const allowedUpdates = {};
-    const allFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
+    const allFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS, 'dob', 'applicant_type'];
 
     for (const field of allFields) {
         if (updates[field] !== undefined) {

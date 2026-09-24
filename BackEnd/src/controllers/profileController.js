@@ -34,7 +34,8 @@ const updateProfile = async (req, res, next) => {
         const allowedFields = [
             'full_name', 'phone', 'age', 'gender', 'category',
             'state', 'district', 'area_type', 'occupation',
-            'annual_income', 'land_acres', 'is_disabled'
+            'annual_income', 'land_acres', 'is_disabled',
+            'dob', 'applicant_type', 'income'
         ];
 
         const filteredUpdates = {};
@@ -71,6 +72,14 @@ const updateProfile = async (req, res, next) => {
                 });
             }
             filteredUpdates.annual_income = income;
+        }
+
+        if (filteredUpdates.income !== undefined && filteredUpdates.annual_income === undefined) {
+            const income = parseFloat(filteredUpdates.income);
+            if (!isNaN(income) && income >= 0) {
+                filteredUpdates.annual_income = income;
+            }
+            delete filteredUpdates.income;
         }
 
         if (filteredUpdates.land_acres !== undefined) {
@@ -111,23 +120,82 @@ const updateProfile = async (req, res, next) => {
             });
         }
 
-        const validOccupations = ['farmer', 'msme', 'student', 'salaried', 'self-employed', 'unemployed'];
+        const validOccupations = ['farmer', 'msme', 'student', 'salaried', 'self-employed', 'unemployed', 'Farmer / Agriculture', 'Self Employed / MSME', 'Salaried Employee', 'Unemployed / Job Seeker', 'Other', 'Student'];
         if (filteredUpdates.occupation && !validOccupations.includes(filteredUpdates.occupation)) {
             return res.status(400).json({
                 success: false,
                 message: `Occupation must be one of: ${validOccupations.join(', ')}`
             });
         }
+        // Normalize occupation to lowercase backend format
+        if (filteredUpdates.occupation) {
+            const occupationMap = {
+                'Farmer / Agriculture': 'farmer',
+                'Self Employed / MSME': 'self-employed',
+                'Salaried Employee': 'salaried',
+                'Unemployed / Job Seeker': 'unemployed',
+                'Other': 'unemployed',
+                'Student': 'student',
+                'farmer': 'farmer',
+                'msme': 'msme',
+                'student': 'student',
+                'salaried': 'salaried',
+                'self-employed': 'self-employed',
+                'unemployed': 'unemployed'
+            };
+            filteredUpdates.occupation = occupationMap[filteredUpdates.occupation] || filteredUpdates.occupation.toLowerCase();
+        }
 
-        const validGenders = ['male', 'female', 'other', 'prefer_not_to_say'];
-        if (filteredUpdates.gender && !validGenders.includes(filteredUpdates.gender.toLowerCase())) {
+        const validGenders = ['male', 'female', 'other', 'prefer_not_to_say', 'Male', 'Female', 'Transgender', 'Prefer not to say'];
+        if (filteredUpdates.gender && !validGenders.includes(filteredUpdates.gender)) {
             return res.status(400).json({
                 success: false,
                 message: `Gender must be one of: ${validGenders.join(', ')}`
             });
         }
         if (filteredUpdates.gender) {
-            filteredUpdates.gender = filteredUpdates.gender.toLowerCase();
+            const genderMap = {
+                'Male': 'male',
+                'Female': 'female',
+                'Transgender': 'other',
+                'Prefer not to say': 'prefer_not_to_say',
+                'male': 'male',
+                'female': 'female',
+                'other': 'other',
+                'prefer_not_to_say': 'prefer_not_to_say'
+            };
+            filteredUpdates.gender = genderMap[filteredUpdates.gender] || filteredUpdates.gender.toLowerCase();
+        }
+
+        // Validate dob (date of birth)
+        if (filteredUpdates.dob !== undefined) {
+            if (filteredUpdates.dob !== null && filteredUpdates.dob !== '') {
+                const dobDate = new Date(filteredUpdates.dob);
+                if (isNaN(dobDate.getTime())) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Date of birth must be a valid date (YYYY-MM-DD)'
+                    });
+                }
+                // Optional: ensure not future date
+                if (dobDate > new Date()) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Date of birth cannot be in the future'
+                    });
+                }
+            }
+        }
+
+        // Validate applicant_type
+        const validApplicantTypes = ['Individual', 'Family / Household', 'Small Enterprise (MSME)', 'Self Help Group (SHG)'];
+        if (filteredUpdates.applicant_type !== undefined) {
+            if (filteredUpdates.applicant_type !== null && filteredUpdates.applicant_type !== '' && !validApplicantTypes.includes(filteredUpdates.applicant_type)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Applicant type must be one of: ${validApplicantTypes.join(', ')}`
+                });
+            }
         }
 
         const profile = await profileService.updateProfile(userId, filteredUpdates);
