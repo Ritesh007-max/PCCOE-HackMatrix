@@ -1,4 +1,11 @@
 const documentServices = require("../services/documentServices");
+const authMiddleware = require("../middleware/authMiddleware");
+
+const httpError = (status, message) => {
+    const error = new Error(message);
+    error.status = status;
+    return error;
+};
 
 const uploadDocument = async (req, res, next) => {
     if (!req.file) {
@@ -7,7 +14,8 @@ const uploadDocument = async (req, res, next) => {
     try {
         const document = await documentServices.uploadDocument({
             file: req.file,
-            documentType: req.body.documentType || req.body.type
+            documentType: req.body.documentType || req.body.type,
+            userId: req.user.id
         });
 
         res.status(201).json({
@@ -23,7 +31,8 @@ const uploadDocument = async (req, res, next) => {
 const extractDocument = async (req, res, next) => {
     try {
         const document = await documentServices.extractDocument({
-            documentId: req.body.documentId || req.body.id
+            documentId: req.body.documentId || req.body.id,
+            userId: req.user.id
         });
 
         res.json({
@@ -36,9 +45,9 @@ const extractDocument = async (req, res, next) => {
     }
 };
 
-const listDocuments = async (_req, res, next) => {
+const listDocuments = async (req, res, next) => {
     try {
-        const data = await documentServices.listDocuments();
+        const data = await documentServices.listDocuments(req.user.id);
         res.json({
             success: true,
             count: data.length,
@@ -51,7 +60,7 @@ const listDocuments = async (_req, res, next) => {
 
 const getDocument = async (req, res, next) => {
     try {
-        const document = await documentServices.getDocumentById(req.params.id);
+        const document = await documentServices.getDocumentById(req.params.id, req.user.id);
         res.json({ success: true, data: document });
     } catch (error) {
         next(error);
@@ -60,7 +69,7 @@ const getDocument = async (req, res, next) => {
 
 const deleteDocument = async (req, res, next) => {
     try {
-        const result = await documentServices.deleteDocument(req.params.id);
+        const result = await documentServices.deleteDocument(req.params.id, req.user.id);
         res.json({
             success: true,
             message: "Document deleted",

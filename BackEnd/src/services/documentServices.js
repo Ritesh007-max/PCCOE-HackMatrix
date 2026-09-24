@@ -71,11 +71,12 @@ const getSignedFileUrl = async (storagePath) => {
     return data?.signedUrl || null;
 };
 
-const fetchDocumentRow = async (id) => {
+const fetchDocumentRow = async (id, userId) => {
     const { data, error } = await supabase
         .from("documents")
         .select("*")
         .eq("id", id)
+        .eq("user_id", userId)
         .maybeSingle();
 
     throwIfError(error);
@@ -139,15 +140,18 @@ const mockExtract = (documentType, originalName) => {
     };
 };
 
-const uploadDocument = async ({ file, documentType }) => {
+const uploadDocument = async ({ file, documentType, userId }) => {
     if (!file) {
         throw httpError(400, "Document file is required");
+    }
+    if (!userId) {
+        throw httpError(400, "User ID is required");
     }
 
     const type = normalizeDocumentType(documentType);
     const id = crypto.randomUUID();
     const ext = path.extname(file.originalname) || "";
-    const storagePath = `${id}/${Date.now()}${ext}`;
+    const storagePath = `${userId}/${id}/${Date.now()}${ext}`;
 
     const { error: storageError } = await supabaseAdmin.storage
         .from(DOCUMENTS_BUCKET)
@@ -161,6 +165,7 @@ const uploadDocument = async ({ file, documentType }) => {
     const now = new Date().toISOString();
     const row = {
         id,
+        user_id: userId,
         document_type: type,
         original_name: file.originalname,
         storage_path: storagePath,
@@ -189,12 +194,15 @@ const uploadDocument = async ({ file, documentType }) => {
     return mapDocument(data);
 };
 
-const extractDocument = async ({ documentId }) => {
+const extractDocument = async ({ documentId, userId }) => {
     if (!documentId) {
         throw httpError(400, "documentId is required");
     }
+    if (!userId) {
+        throw httpError(400, "User ID is required");
+    }
 
-    const existing = await fetchDocumentRow(documentId);
+    const existing = await fetchDocumentRow(documentId, userId);
     const extracted = mockExtract(existing.document_type, existing.original_name);
     const updatedAt = new Date().toISOString();
 
@@ -206,6 +214,7 @@ const extractDocument = async ({ documentId }) => {
             updated_at: updatedAt
         })
         .eq("id", documentId)
+        .eq("user_id", userId)
         .select("*")
         .single();
 
@@ -215,10 +224,14 @@ const extractDocument = async ({ documentId }) => {
     return mapDocument(data, signedUrl, { includeExtraction: true });
 };
 
-const listDocuments = async () => {
+const listDocuments = async (userId) => {
+    if (!userId) {
+        throw httpError(400, "User ID is required");
+    }
     const { data, error } = await supabase
         .from("documents")
         .select("*")
+        .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
     throwIfError(error);
@@ -226,14 +239,20 @@ const listDocuments = async () => {
     return (data || []).map((row) => mapDocument(row));
 };
 
-const getDocumentById = async (id) => {
-    const row = await fetchDocumentRow(id);
+const getDocumentById = async (id, userId) => {
+    if (!userId) {
+        throw httpError(400, "User ID is required");
+    }
+    const row = await fetchDocumentRow(id, userId);
     const signedUrl = await getSignedFileUrl(row.storage_path);
     return mapDocument(row, signedUrl, { includeExtraction: true });
 };
 
-const deleteDocument = async (id) => {
-    const row = await fetchDocumentRow(id);
+const deleteDocument = async (id, userId) => {
+    if (!userId) {
+        throw httpError(400, "User ID is required");
+    }
+    const row = await fetchDocumentRow(id, userId);
 
     if (row.storage_path) {
         const { error: storageError } = await supabaseAdmin.storage
@@ -242,7 +261,7 @@ const deleteDocument = async (id) => {
         throwIfError(storageError);
     }
 
-    const { error } = await supabase.from("documents").delete().eq("id", id);
+    const { error } = await supabase.from("documents").delete().eq("id", id).eq("user_id", userId);
     throwIfError(error);
 
     return { id };
