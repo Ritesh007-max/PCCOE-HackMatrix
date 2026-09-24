@@ -868,7 +868,6 @@ The architecture can be extended with:
 * 🏛️ Government API integrations
 * 📚 Automatic policy document updates
 * 👨‍⚖️ Human-review workflow
-* 📈 Analytics for frequently missed schemes
 
 ---
 
@@ -918,4 +917,4 @@ What to do next
 
 ## **hexSlayerz**
 
-Building technology that makes complex financial policies easier to discover, understand, and act upon.
+Building technology that makes complex financial policies easier to discover, understand and act upon.

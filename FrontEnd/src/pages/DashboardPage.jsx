@@ -24,8 +24,11 @@ export default function DashboardPage() {
           if (data.success && data.data) {
             const d = data.data;
             
-            // Transform metrics from backend format
-            if (d.metrics) {
+            // Only update metrics if valid non-empty data is provided
+            if (d.metrics && d.metrics.some(m => {
+              const val = parseInt(m.value) || 0;
+              return val > 0;
+            })) {
               setMetrics(d.metrics.map(m => ({
                 id: m.key,
                 value: m.value,
@@ -37,8 +40,8 @@ export default function DashboardPage() {
               })));
             }
             
-            // Transform opportunities from backend format
-            if (d.topOpportunities) {
+            // Only update opportunities if valid non-empty opportunities are provided
+            if (d.topOpportunities && d.topOpportunities.length > 0) {
               setOpportunities(d.topOpportunities.map((o, idx) => {
                 const emblemTypes = ['ashoka', 'msme', 'kisan'];
                 const badgeClasses = ['badge-success', 'badge-blue', 'badge-saffron'];
@@ -58,8 +61,8 @@ export default function DashboardPage() {
               }));
             }
             
-            // Set user profile for HeroBanner
-            if (d.user) {
+            // Set user profile for HeroBanner if valid name and not generic 'User'
+            if (d.user && d.user.fullName && d.user.fullName !== 'User') {
               setUserProfile(d.user);
             }
           }
