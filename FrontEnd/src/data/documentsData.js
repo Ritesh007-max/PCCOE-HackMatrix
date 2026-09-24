@@ -13,7 +13,7 @@ export const INITIAL_DOCUMENTS = [
     schemesList: ['PMEGP', 'PM-Kisan', 'MSME Support', 'PM Awas', 'Ayushman Bharat'],
     status: 'verified',
     statusLabel: 'Verified',
-    source: 'DigiLocker',
+    source: 'UIDAI Official',
     validity: 'Lifetime',
     uploadedOn: '12 Sep 2026',
     fileType: 'PDF',
@@ -32,7 +32,7 @@ export const INITIAL_DOCUMENTS = [
     schemesList: ['PMEGP', 'MSME Support', 'Mudra Loan', 'Stand-Up India'],
     status: 'verified',
     statusLabel: 'Verified',
-    source: 'DigiLocker',
+    source: 'Income Tax Dept',
     validity: 'Lifetime',
     uploadedOn: '12 Sep 2026',
     fileType: 'PDF',
@@ -89,7 +89,7 @@ export const INITIAL_DOCUMENTS = [
     schemesList: ['Gujarat Startup Grant', 'State Quota Aid', 'Kisan Solar Subsidy'],
     status: 'verified',
     statusLabel: 'Verified',
-    source: 'DigiLocker',
+    source: 'e-District Portal',
     validity: 'Lifetime',
     uploadedOn: '09 Sep 2026',
     fileType: 'PDF',
@@ -186,6 +186,42 @@ export const SCHEMES_CHECKLIST = [
 ];
 
 export const STORAGE_DOCUMENTS_KEY = 'fin_documents_data';
+export const STORAGE_TICKETS_KEY = 'fin_support_tickets_data';
+
+export const INITIAL_TICKETS = [
+  {
+    id: 'TKT-2026-1042',
+    category: 'Document Verification Delay',
+    docId: 'caste',
+    docName: 'Caste Certificate',
+    subject: 'Caste Certificate verification pending over 5 days',
+    description: 'Submitted OBC certificate issued by SDM Ahmedabad. Status is still showing Under Review.',
+    priority: 'High',
+    status: 'Under Review',
+    createdAt: '22 Sep 2026, 03:30 PM',
+  },
+];
+
+export function loadTicketsFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_TICKETS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to load tickets from storage', e);
+  }
+  return INITIAL_TICKETS;
+}
+
+export function saveTicketsToStorage(tickets) {
+  try {
+    localStorage.setItem(STORAGE_TICKETS_KEY, JSON.stringify(tickets));
+  } catch (e) {
+    console.error('Failed to save tickets to storage', e);
+  }
+}
 
 export function loadDocumentsFromStorage() {
   try {
@@ -193,7 +229,18 @@ export function loadDocumentsFromStorage() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        // Sanitize any legacy DigiLocker references
+        return parsed.map((doc) => {
+          if (doc.source && doc.source.includes('DigiLocker')) {
+            let sanitizedSource = 'Verified Authority';
+            if (doc.id === 'aadhaar') sanitizedSource = 'UIDAI Official';
+            if (doc.id === 'pan') sanitizedSource = 'Income Tax Dept';
+            if (doc.id === 'domicile') sanitizedSource = 'e-District Portal';
+            if (doc.id === 'address') sanitizedSource = 'Utility Board';
+            return { ...doc, source: sanitizedSource };
+          }
+          return doc;
+        });
       }
     }
   } catch (e) {

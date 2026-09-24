@@ -28,9 +28,12 @@ import {
   UserCheck,
   FileCheck,
   Search,
-  CloudLightning,
   Sparkles,
   FileDown,
+  Ticket,
+  LifeBuoy,
+  Send,
+  FileQuestion,
 } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
 import {
@@ -38,6 +41,8 @@ import {
   SCHEMES_CHECKLIST,
   loadDocumentsFromStorage,
   saveDocumentsToStorage,
+  loadTicketsFromStorage,
+  saveTicketsToStorage,
 } from '../data/documentsData';
 import '../styles/documents.css';
 
@@ -46,6 +51,9 @@ export default function DocumentsPage() {
 
   // Documents state loaded from localStorage or initialized with 8 items
   const [documents, setDocuments] = useState(loadDocumentsFromStorage);
+
+  // Support Tickets state loaded from localStorage
+  const [tickets, setTickets] = useState(loadTicketsFromStorage);
 
   // Active filter tab: 'all' | 'verified' | 'pending' | 'action_required'
   const [activeTab, setActiveTab] = useState('all');
@@ -59,8 +67,9 @@ export default function DocumentsPage() {
   // Interactive UI modals & dropdown state
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [selectedDocForView, setSelectedDocForView] = useState(null);
+  const [selectedTicketForView, setSelectedTicketForView] = useState(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isDigiLockerModalOpen, setIsDigiLockerModalOpen] = useState(false);
+  const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
   const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
   const [isGuidanceModalOpen, setIsGuidanceModalOpen] = useState(false);
@@ -72,13 +81,17 @@ export default function DocumentsPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
 
-  // DigiLocker pull state
-  const [digiLockerStep, setDigiLockerStep] = useState('aadhaar'); // 'aadhaar' | 'otp' | 'fetching' | 'success'
-  const [digiLockerOtp, setDigiLockerOtp] = useState('482910');
-  const [isFetchingDigiLocker, setIsFetchingDigiLocker] = useState(false);
-
-  // Drag and drop state for right-hand dropzone
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  // Apply for Government Policy Form state
+  const [policyFullName, setPolicyFullName] = useState('Hemang Singh');
+  const [policyDob, setPolicyDob] = useState('1998-05-15');
+  const [policyState, setPolicyState] = useState('Gujarat');
+  const [policyDistrict, setPolicyDistrict] = useState('Ahmedabad');
+  const [policyCategory, setPolicyCategory] = useState('OBC');
+  const [policyIncome, setPolicyIncome] = useState('₹ 2,40,000');
+  const [policyOccupation, setPolicyOccupation] = useState('Student');
+  const [policyDocumentFile, setPolicyDocumentFile] = useState(null);
+  const [policyIsDragging, setPolicyIsDragging] = useState(false);
+  const [isSubmittingPolicy, setIsSubmittingPolicy] = useState(false);
 
   // Reminder settings state
   const [reminderFrequency, setReminderFrequency] = useState('monthly');
@@ -87,13 +100,18 @@ export default function DocumentsPage() {
   // Toast notification state
   const [toastMessage, setToastMessage] = useState(null);
 
-  const fileInputRef = useRef(null);
   const modalFileInputRef = useRef(null);
+  const policyFileInputRef = useRef(null);
 
   // Sync documents to localStorage on changes
   useEffect(() => {
     saveDocumentsToStorage(documents);
   }, [documents]);
+
+  // Sync tickets to localStorage on changes
+  useEffect(() => {
+    saveTicketsToStorage(tickets);
+  }, [tickets]);
 
   // Close open dropdown menu when clicking outside
   useEffect(() => {
@@ -148,6 +166,19 @@ export default function DocumentsPage() {
     );
   });
 
+  // Filter tickets based on live search query
+  const filteredTickets = tickets.filter((t) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      (t.id && t.id.toLowerCase().includes(query)) ||
+      (t.subject && t.subject.toLowerCase().includes(query)) ||
+      (t.category && t.category.toLowerCase().includes(query)) ||
+      (t.docName && t.docName.toLowerCase().includes(query)) ||
+      (t.description && t.description.toLowerCase().includes(query))
+    );
+  });
+
   // Icon renderer per document type
   const renderDocIcon = (iconType) => {
     switch (iconType) {
@@ -181,68 +212,68 @@ export default function DocumentsPage() {
     setIsUploadModalOpen(true);
   };
 
-  // Open DigiLocker sync modal
-  const handleOpenDigiLockerModal = () => {
-    setDigiLockerStep('aadhaar');
-    setIsDigiLockerModalOpen(true);
+  // Open Apply for Government Policy modal
+  const handleOpenTicketModal = () => {
+    setIsTicketModalOpen(true);
   };
 
-  // Simulate DigiLocker sync
-  const handleExecuteDigiLockerSync = () => {
-    setIsFetchingDigiLocker(true);
-    setDigiLockerStep('fetching');
-
-    setTimeout(() => {
-      setIsFetchingDigiLocker(false);
-      setDigiLockerStep('success');
-
-      // Update address proof to verified
-      setDocuments((prevDocs) =>
-        prevDocs.map((doc) => {
-          if (doc.id === 'address') {
-            return {
-              ...doc,
-              status: 'verified',
-              statusLabel: 'Verified',
-              source: 'DigiLocker (Discom)',
-              validity: 'Valid (Bill dated 15 Sep 2026)',
-              uploadedOn: 'Today, 10:55 AM',
-              fileType: 'PDF',
-              fileSize: '1.1 MB',
-              docNumber: 'DISCOM/GJ/BILL-99482',
-              issuer: 'Gujarat State Electricity Distribution Co.',
-            };
-          }
-          return doc;
-        })
-      );
-
-      triggerToast('DigiLocker sync complete! Address Proof verified.');
-    }, 1400);
-  };
-
-  // Handle file drop on the right-side dropzone
-  const handleDragOver = (e) => {
+  // Drag and drop handlers for policy application document
+  const handlePolicyDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDraggingOver(true);
+    setPolicyIsDragging(true);
   };
 
-  const handleDragLeave = (e) => {
+  const handlePolicyDragLeave = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDraggingOver(false);
+    setPolicyIsDragging(false);
   };
 
-  const handleDrop = (e) => {
+  const handlePolicyDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDraggingOver(false);
-
+    setPolicyIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      handleProcessDirectUpload(file);
+      setPolicyDocumentFile(e.dataTransfer.files[0]);
     }
+  };
+
+  // Submit Government Policy Application
+  const handleSubmitPolicyApplication = (e) => {
+    e.preventDefault();
+    if (!policyFullName.trim()) {
+      triggerToast('Please provide your Full Name.');
+      return;
+    }
+    if (!policyDocumentFile) {
+      triggerToast('Please attach or drop your document before submitting.');
+      return;
+    }
+
+    setIsSubmittingPolicy(true);
+    setTimeout(() => {
+      const newAppId = `APP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      const newTicket = {
+        id: newAppId,
+        category: 'Policy Application',
+        docId: 'attached',
+        docName: policyDocumentFile.name,
+        subject: `Policy Application: ${policyFullName} (${policyCategory})`,
+        description: `Applicant: ${policyFullName}, DOB: ${policyDob}, ${policyDistrict}, ${policyState}. Income: ${policyIncome}, Occupation: ${policyOccupation}`,
+        priority: 'Normal',
+        contact: '+91 98765 43210',
+        status: 'Submitted',
+        createdAt: 'Today, Just now',
+      };
+
+      setTickets((prev) => [newTicket, ...prev]);
+      setIsSubmittingPolicy(false);
+      setIsTicketModalOpen(false);
+      setPolicyDocumentFile(null);
+
+      triggerToast(`Application #${newAppId} submitted successfully for Government Policy!`);
+    }, 600);
   };
 
   // Process uploaded file
@@ -395,17 +426,26 @@ export default function DocumentsPage() {
             </div>
           </div>
 
-          {/* Card 4: DigiLocker Linked */}
-          <div className="docs-metric-card">
-            <div className="metric-card-icon-box blue" aria-hidden="true">
-              <CheckCircle2 size={19} />
+          {/* Card 4: Support Tickets */}
+          <div
+            className="docs-metric-card clickable-metric-card"
+            onClick={() => handleOpenTicketModal()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && handleOpenTicketModal()}
+            aria-label="View or Apply Support Tickets"
+            title="Click to apply or view support tickets"
+          >
+            <div className="metric-card-icon-box purple" aria-hidden="true">
+              <Ticket size={19} />
             </div>
             <div className="metric-card-info">
               <div className="metric-card-top-line">
-                <span className="metric-card-val">Connected</span>
+                <span className="metric-card-val">{tickets.length} Active</span>
+                <span className="metric-card-total">Tickets</span>
               </div>
-              <span className="metric-card-title">DigiLocker Linked</span>
-              <span className="metric-card-sub">Instant scheme auto-verification</span>
+              <span className="metric-card-title">Support Tickets</span>
+              <span className="metric-card-sub">Raise ticket for discrepancies</span>
             </div>
           </div>
         </section>
@@ -461,6 +501,17 @@ export default function DocumentsPage() {
               </span>
               <span>Action Required ({actionCount})</span>
             </button>
+
+            <button
+              type="button"
+              className={`docs-filter-tab ${activeTab === 'tickets' ? 'active' : ''}`}
+              onClick={() => setActiveTab('tickets')}
+            >
+              <span className="docs-tab-icon tab-icon-ticket">
+                <Ticket size={14} color={activeTab === 'tickets' ? '#FFFFFF' : '#1264D6'} />
+              </span>
+              <span>Active Ticket ({tickets.length})</span>
+            </button>
           </nav>
 
           {/* Right-aligned Actions & Search */}
@@ -471,10 +522,10 @@ export default function DocumentsPage() {
               <input
                 type="search"
                 className="docs-search-input"
-                placeholder="Search documents..."
+                placeholder={activeTab === 'tickets' ? "Search tickets..." : "Search documents..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Search documents"
+                aria-label={activeTab === 'tickets' ? "Search tickets" : "Search documents"}
               />
               {searchQuery && (
                 <button
@@ -487,17 +538,6 @@ export default function DocumentsPage() {
                 </button>
               )}
             </div>
-
-            <button
-              type="button"
-              className="btn-digilocker-sync"
-              onClick={handleOpenDigiLockerModal}
-              title="Connect and pull documents directly from DigiLocker"
-            >
-              <CloudLightning size={15} />
-              <span>Pull from DigiLocker</span>
-              <span className="digilocker-tag">GOV</span>
-            </button>
 
             <button
               type="button"
@@ -519,7 +559,94 @@ export default function DocumentsPage() {
           <div className="docs-left-column">
             <div className="docs-table-card">
               <div className="docs-table-wrapper">
-                <table className="docs-table" aria-label="Applicant Documents Table">
+                {activeTab === 'tickets' ? (
+                  <table className="docs-table" aria-label="Applicant Active Tickets Table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Ticket / Application ID</th>
+                        <th scope="col">Subject & Category</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Created Date & Priority</th>
+                        <th scope="col">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTickets.map((tkt) => (
+                        <tr key={tkt.id}>
+                          {/* Column 1: Ticket / Application ID */}
+                          <td>
+                            <div className="doc-info-cell">
+                              <div className="doc-type-icon-box icon-blue" aria-hidden="true">
+                                <Ticket size={18} />
+                              </div>
+                              <div className="doc-text-group">
+                                <span className="doc-name">{tkt.id}</span>
+                                <div className="doc-category-line">
+                                  <span className="doc-category">{tkt.category}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Column 2: Subject & Category */}
+                          <td className="doc-purpose-cell">
+                            <div className="doc-purpose-title">{tkt.subject}</div>
+                            {tkt.docName && (
+                              <span className="doc-scheme-count-tag">
+                                Ref: {tkt.docName}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Column 3: Status */}
+                          <td>
+                            <span className="doc-status-badge status-review">
+                              <Clock size={12} />
+                              <span>{tkt.status || 'Under Review'}</span>
+                            </span>
+                          </td>
+
+                          {/* Column 4: Created Date & Priority */}
+                          <td className="doc-date-cell">
+                            <div>{tkt.createdAt || tkt.createdOn || 'Recent'}</div>
+                            <div
+                              className="doc-validity-text"
+                              style={{
+                                fontWeight: 600,
+                                color: tkt.priority === 'High' ? '#D92D20' : '#1264D6',
+                              }}
+                            >
+                              Priority: {tkt.priority || 'Normal'}
+                            </div>
+                          </td>
+
+                          {/* Column 5: Actions */}
+                          <td>
+                            <div className="doc-actions-cell">
+                              <button
+                                type="button"
+                                className="btn-doc-view"
+                                onClick={() => setSelectedTicketForView(tkt)}
+                              >
+                                <Eye size={12} />
+                                <span>View</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {filteredTickets.length === 0 && (
+                        <tr>
+                          <td colSpan="5" style={{ textAlign: 'center', padding: '32px 20px', color: '#667085' }}>
+                            No active tickets match "{searchQuery}". Click "Apply Ticket" to submit an application or query.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="docs-table" aria-label="Applicant Documents Table">
                   <thead>
                     <tr>
                       <th scope="col">Document</th>
@@ -666,6 +793,17 @@ export default function DocumentsPage() {
                                   <RefreshCw size={13} />
                                   <span>Replace Document</span>
                                 </button>
+                                <button
+                                  type="button"
+                                  className="doc-menu-item"
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    handleOpenTicketModal(doc.id);
+                                  }}
+                                >
+                                  <Ticket size={13} />
+                                  <span>Apply Ticket for this Doc</span>
+                                </button>
                                 {doc.status !== 'action_required' && (
                                   <button
                                     type="button"
@@ -692,51 +830,61 @@ export default function DocumentsPage() {
                     )}
                   </tbody>
                 </table>
-              </div>
+              )}
+            </div>
             </div>
           </div>
 
-          {/* Right Column: Upload, Dropzone, Completion, Scheme Checker */}
+          {/* Right Column: Upload, Apply Ticket, Completion, Scheme Checker */}
           <div className="docs-right-column">
-            {/* Top Primary Upload Button */}
-            <button
-              type="button"
-              className="btn-upload-new-doc"
-              onClick={() => handleOpenUploadModal('address')}
-            >
-              <Plus size={16} strokeWidth={2.5} />
-              <span>Upload New Document</span>
-            </button>
+            {/* Primary Action Buttons: Upload & Apply Ticket */}
+            <div className="docs-sidebar-action-stack">
+              <button
+                type="button"
+                className="btn-upload-new-doc"
+                onClick={() => handleOpenUploadModal('address')}
+              >
+                <Plus size={16} strokeWidth={2.5} />
+                <span>Upload New Document</span>
+              </button>
 
-            {/* Drag & Drop Upload Zone */}
-            <div
-              className={`docs-dropzone-card ${isDraggingOver ? 'drag-active' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
-              aria-label="Drag and drop files to upload"
-            >
-              <input
-                type="file"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    handleProcessDirectUpload(e.target.files[0]);
-                  }
-                }}
-              />
-              <div className="dropzone-icon-circle">
-                <UploadCloud size={19} />
+              <button
+                type="button"
+                className="btn-apply-ticket"
+                onClick={() => handleOpenTicketModal()}
+                title="Apply Ticket for document queries or scheme grievances"
+              >
+                <Ticket size={16} />
+                <span>Apply Ticket</span>
+              </button>
+            </div>
+
+            {/* Quick Support & Ticket Assistance Card */}
+            <div className="docs-ticket-assist-card">
+              <div className="ticket-assist-header">
+                <div className="ticket-assist-icon" aria-hidden="true">
+                  <LifeBuoy size={16} />
+                </div>
+                <div className="ticket-assist-title-group">
+                  <h4 className="ticket-assist-title">Need Verification Assistance?</h4>
+                  <p className="ticket-assist-sub">
+                    Facing document delays, errors, or mismatch? Raise a support ticket for quick resolution.
+                  </p>
+                </div>
               </div>
-              <span className="dropzone-title">Drag & drop files here</span>
-              <span className="dropzone-sub">or click to browse</span>
-              <span className="dropzone-formats">Supported formats: PDF, JPG, PNG (Max 5 MB)</span>
+              <div className="ticket-assist-footer">
+                <button
+                  type="button"
+                  className="ticket-assist-link"
+                  onClick={() => handleOpenTicketModal()}
+                >
+                  <span>Raise Ticket</span>
+                  <ArrowRight size={13} />
+                </button>
+                {tickets.length > 0 && (
+                  <span className="ticket-status-pill">{tickets.length} Active</span>
+                )}
+              </div>
             </div>
 
             {/* Document Completion Card */}
@@ -921,128 +1069,253 @@ export default function DocumentsPage() {
         </section>
 
         {/* ------------------------------------------------------------------
-            6. MODAL: DIGILOCKER PULL INTEGRATION
+            6. MODAL: APPLY FOR GOVERNMENT POLICY
             ------------------------------------------------------------------ */}
-        {isDigiLockerModalOpen && (
-          <div className="docs-modal-backdrop" onClick={() => setIsDigiLockerModalOpen(false)}>
-            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        {isTicketModalOpen && (
+          <div className="docs-modal-backdrop" onClick={() => setIsTicketModalOpen(false)}>
+            <div
+              className="docs-modal-card policy-application-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
               <div className="docs-modal-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <CloudLightning size={19} color="#0056B3" />
-                  <h3 className="docs-modal-title">Pull Verified Documents from DigiLocker</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <div className="policy-modal-header-icon">
+                    <ShieldCheck size={20} color="#005B50" />
+                  </div>
+                  <div>
+                    <h3 className="docs-modal-title">Apply for Government Policy</h3>
+                    <span style={{ fontSize: '11.5px', color: '#667085' }}>
+                      Citizen Scheme Application & Document Submission
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
                   className="docs-modal-close-btn"
-                  onClick={() => setIsDigiLockerModalOpen(false)}
+                  onClick={() => setIsTicketModalOpen(false)}
                   aria-label="Close modal"
                 >
                   <X size={17} />
                 </button>
               </div>
 
-              <div className="docs-modal-body">
-                <div className="digilocker-modal-badge">
-                  <ShieldCheck size={19} color="#0056B3" style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: '12.5px', color: '#003366', lineHeight: 1.4 }}>
-                    Official Government of India DigiLocker API integration. Documents fetched are legally valid under IT Act 2000.
-                  </span>
-                </div>
+              <form onSubmit={handleSubmitPolicyApplication}>
+                <div className="docs-modal-body policy-modal-scroll-body">
+                  {/* Section 1: Applicant Information */}
+                  <div className="policy-form-section">
+                    <div className="policy-section-header">
+                      <h4 className="policy-section-title">Applicant Information</h4>
+                    </div>
 
-                <div className="digilocker-step-box">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#475467' }}>
-                      Linked Aadhaar / Mobile ID
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#087443', fontWeight: 600 }}>● Connected</span>
-                  </div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#10243A' }}>
-                    XXXX-XXXX-4921 (Hemang Singh)
-                  </div>
-                </div>
+                    <div className="policy-fields-grid">
+                      <div className="policy-field-group">
+                        <label className="policy-field-label" htmlFor="policy-full-name">
+                          Full Name
+                        </label>
+                        <input
+                          id="policy-full-name"
+                          type="text"
+                          className="docs-form-input policy-input"
+                          placeholder="Enter your full name"
+                          value={policyFullName}
+                          onChange={(e) => setPolicyFullName(e.target.value)}
+                          required
+                        />
+                      </div>
 
-                {digiLockerStep === 'aadhaar' && (
-                  <div>
-                    <p style={{ fontSize: '12.5px', color: '#475467', marginBottom: '10px' }}>
-                      DigiLocker will locate your Electricity Bill / Address Verification from Gujarat State Electricity Distribution Co.:
-                    </p>
-                    <div style={{ padding: '9px 12px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC', fontSize: '12.5px' }}>
-                      <strong>Pending Document to Pull:</strong> Address Proof (Latest Electricity Bill)
+                      <div className="policy-field-group">
+                        <label className="policy-field-label" htmlFor="policy-dob">
+                          Date of Birth
+                        </label>
+                        <input
+                          id="policy-dob"
+                          type="date"
+                          className="docs-form-input policy-input"
+                          value={policyDob}
+                          onChange={(e) => setPolicyDob(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="policy-field-group">
+                        <label className="policy-field-label" htmlFor="policy-state">
+                          State
+                        </label>
+                        <select
+                          id="policy-state"
+                          className="docs-form-select policy-input"
+                          value={policyState}
+                          onChange={(e) => setPolicyState(e.target.value)}
+                          required
+                        >
+                          <option value="Gujarat">Gujarat</option>
+                          <option value="Maharashtra">Maharashtra</option>
+                          <option value="Delhi">Delhi</option>
+                          <option value="Karnataka">Karnataka</option>
+                          <option value="Uttar Pradesh">Uttar Pradesh</option>
+                          <option value="Rajasthan">Rajasthan</option>
+                          <option value="Madhya Pradesh">Madhya Pradesh</option>
+                          <option value="Tamil Nadu">Tamil Nadu</option>
+                        </select>
+                      </div>
+
+                      <div className="policy-field-group">
+                        <label className="policy-field-label" htmlFor="policy-district">
+                          District
+                        </label>
+                        <input
+                          id="policy-district"
+                          type="text"
+                          className="docs-form-input policy-input"
+                          placeholder="e.g. Ahmedabad"
+                          value={policyDistrict}
+                          onChange={(e) => setPolicyDistrict(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="policy-field-group">
+                        <label className="policy-field-label" htmlFor="policy-category">
+                          Category
+                        </label>
+                        <select
+                          id="policy-category"
+                          className="docs-form-select policy-input"
+                          value={policyCategory}
+                          onChange={(e) => setPolicyCategory(e.target.value)}
+                          required
+                        >
+                          <option value="General">General</option>
+                          <option value="OBC">OBC</option>
+                          <option value="SC">SC</option>
+                          <option value="ST">ST</option>
+                          <option value="EWS">EWS</option>
+                        </select>
+                      </div>
+
+                      <div className="policy-field-group">
+                        <label className="policy-field-label" htmlFor="policy-income">
+                          Annual Income
+                        </label>
+                        <input
+                          id="policy-income"
+                          type="text"
+                          className="docs-form-input policy-input"
+                          placeholder="e.g. ₹ 2,40,000"
+                          value={policyIncome}
+                          onChange={(e) => setPolicyIncome(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="policy-field-group policy-field-full">
+                        <label className="policy-field-label" htmlFor="policy-occupation">
+                          Occupation
+                        </label>
+                        <select
+                          id="policy-occupation"
+                          className="docs-form-select policy-input"
+                          value={policyOccupation}
+                          onChange={(e) => setPolicyOccupation(e.target.value)}
+                          required
+                        >
+                          <option value="Student">Student</option>
+                          <option value="Salaried / Employed">Salaried / Employed</option>
+                          <option value="Self Employed">Self Employed</option>
+                          <option value="Farmer / Agriculture">Farmer / Agriculture</option>
+                          <option value="Business / MSME">Business / MSME</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
-                )}
 
-                {digiLockerStep === 'otp' && (
-                  <div className="docs-form-group">
-                    <label className="docs-form-label" htmlFor="digi-otp">
-                      Enter 6-Digit DigiLocker OTP sent to registered mobile
-                    </label>
-                    <input
-                      id="digi-otp"
-                      type="text"
-                      className="docs-form-input"
-                      value={digiLockerOtp}
-                      onChange={(e) => setDigiLockerOtp(e.target.value)}
-                    />
-                    <span style={{ fontSize: '11px', color: '#667085' }}>
-                      Auto-filled demo OTP for Hackathon evaluation.
-                    </span>
-                  </div>
-                )}
-
-                {digiLockerStep === 'fetching' && (
-                  <div style={{ textAlign: 'center', padding: '18px 0' }}>
-                    <div className="completion-linear-track" style={{ marginBottom: '10px' }}>
-                      <div className="completion-linear-fill" style={{ width: '80%' }} />
+                  {/* Section 2: Documents */}
+                  <div className="policy-form-section">
+                    <div className="policy-section-header">
+                      <h4 className="policy-section-title">Documents</h4>
                     </div>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#005B50' }}>
-                      Connecting to State Electricity Board via DigiLocker...
-                    </span>
+
+                    {/* Drag and Drop Zone */}
+                    <div
+                      className={`policy-dropzone-box ${policyIsDragging ? 'drag-over' : ''} ${policyDocumentFile ? 'has-file' : ''}`}
+                      onDragOver={handlePolicyDragOver}
+                      onDragLeave={handlePolicyDragLeave}
+                      onDrop={handlePolicyDrop}
+                      onClick={() => policyFileInputRef.current?.click()}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && policyFileInputRef.current?.click()}
+                      aria-label="Drag and drop your document here or click to browse"
+                    >
+                      <input
+                        type="file"
+                        ref={policyFileInputRef}
+                        style={{ display: 'none' }}
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            setPolicyDocumentFile(e.target.files[0]);
+                          }
+                        }}
+                      />
+
+                      <div className="policy-dropzone-icon-circle">
+                        <UploadCloud size={24} />
+                      </div>
+                      <span className="policy-dropzone-title">Drag & drop your document here</span>
+                      <span className="policy-dropzone-sub">or click to browse</span>
+                      <span className="policy-dropzone-specs">PDF, JPG, PNG • Max 10MB</span>
+                    </div>
+
+                    {/* Attached file chip */}
+                    {policyDocumentFile && (
+                      <div className="policy-attached-file-badge">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <FileCheck size={16} color="#087443" style={{ flexShrink: 0 }} />
+                          <span className="policy-file-name">{policyDocumentFile.name}</span>
+                          <span className="policy-file-size">
+                            ({(policyDocumentFile.size / (1024 * 1024)).toFixed(2)} MB)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="policy-file-remove-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPolicyDocumentFile(null);
+                            if (policyFileInputRef.current) policyFileInputRef.current.value = '';
+                          }}
+                          aria-label="Remove attached document"
+                          title="Remove document"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
-                {digiLockerStep === 'success' && (
-                  <div style={{ textAlign: 'center', padding: '14px', backgroundColor: '#ECFDF3', borderRadius: '7px', border: '1px solid #A6F4C5' }}>
-                    <CheckCircle2 size={28} color="#087443" style={{ margin: '0 auto 6px' }} />
-                    <h4 style={{ color: '#087443', fontSize: '14.5px', fontWeight: 700 }}>
-                      Address Proof Successfully Verified!
-                    </h4>
-                    <p style={{ color: '#166534', fontSize: '12px', marginTop: '3px' }}>
-                      Your document completion has reached 100%. All schemes are now unlocked.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="docs-modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setIsDigiLockerModalOpen(false)}
-                >
-                  {digiLockerStep === 'success' ? 'Done' : 'Cancel'}
-                </button>
-
-                {digiLockerStep === 'aadhaar' && (
+                <div className="docs-modal-footer policy-modal-footer">
                   <button
                     type="button"
-                    className="btn btn-primary"
-                    onClick={() => setDigiLockerStep('otp')}
+                    className="btn btn-outline"
+                    onClick={() => setIsTicketModalOpen(false)}
                   >
-                    Request OTP
+                    Cancel
                   </button>
-                )}
-
-                {digiLockerStep === 'otp' && (
                   <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleExecuteDigiLockerSync}
+                    type="submit"
+                    className="btn btn-primary policy-submit-btn"
+                    disabled={isSubmittingPolicy}
                   >
-                    Authorize & Fetch
+                    <span>{isSubmittingPolicy ? 'Submitting Application...' : 'Submit Application'}</span>
+                    <ArrowRight size={15} />
                   </button>
-                )}
-              </div>
+                </div>
+              </form>
             </div>
           </div>
         )}
@@ -1553,6 +1826,87 @@ export default function DocumentsPage() {
                   onClick={() => setIsSecurityModalOpen(false)}
                 >
                   Understood
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------
+            13. MODAL: VIEW TICKET DETAILS
+            ------------------------------------------------------------------ */}
+        {selectedTicketForView && (
+          <div className="docs-modal-backdrop" onClick={() => setSelectedTicketForView(null)}>
+            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="docs-modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <div className="policy-modal-header-icon">
+                    <Ticket size={20} color="#005B50" />
+                  </div>
+                  <div>
+                    <h3 className="docs-modal-title">Ticket: {selectedTicketForView.id}</h3>
+                    <span style={{ fontSize: '11.5px', color: '#667085' }}>{selectedTicketForView.category}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="docs-modal-close-btn"
+                  onClick={() => setSelectedTicketForView(null)}
+                  aria-label="Close modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="docs-modal-body">
+                <div className="doc-watermark-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#667085', fontWeight: 600 }}>
+                        Official Ticket Details
+                      </span>
+                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#10243A', marginTop: '2px' }}>
+                        {selectedTicketForView.subject}
+                      </h4>
+                    </div>
+                    <span className="doc-status-badge status-review">
+                      <Clock size={11} />
+                      <span>{selectedTicketForView.status || 'Active'}</span>
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: '12.5px', color: '#475467', lineHeight: 1.5, marginTop: '10px' }}>
+                    {selectedTicketForView.description}
+                  </p>
+
+                  <div className="doc-preview-meta-grid" style={{ marginTop: '14px' }}>
+                    <div>
+                      <div className="meta-field-label">Reference ID</div>
+                      <div className="meta-field-val">{selectedTicketForView.id}</div>
+                    </div>
+                    <div>
+                      <div className="meta-field-label">Priority Level</div>
+                      <div className="meta-field-val">{selectedTicketForView.priority || 'Normal'}</div>
+                    </div>
+                    <div>
+                      <div className="meta-field-label">Linked Document / Asset</div>
+                      <div className="meta-field-val">{selectedTicketForView.docName || 'General Policy Submission'}</div>
+                    </div>
+                    <div>
+                      <div className="meta-field-label">Assigned Desk</div>
+                      <div className="meta-field-val">{selectedTicketForView.agent || 'Nodal Grievance Cell'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="docs-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setSelectedTicketForView(null)}
+                >
+                  Close Case View
                 </button>
               </div>
             </div>
