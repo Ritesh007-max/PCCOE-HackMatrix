@@ -10,6 +10,17 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const STORAGE_KEY_REGISTERED_USERS = 'fin_registered_users';
+const STORAGE_KEY_DEV_AUTH_BYPASS = 'fin_dev_auth_bypass';
+const DEV_AUTH_BYPASS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH_BYPASS === 'true';
+
+export function isDevelopmentAuthBypassSession() {
+  if (!DEV_AUTH_BYPASS_ENABLED) return false;
+
+  const token = getStoredToken();
+  return localStorage.getItem(STORAGE_KEY_DEV_AUTH_BYPASS) === 'true' ||
+    token === 'development-only-bypass-token' ||
+    token === 'google-oauth-demo-token';
+}
 
 // Pre-seed known accounts so existing test logins immediately resolve correctly
 const PRESEEDED_ACCOUNTS = {
@@ -286,7 +297,7 @@ export async function loginUser({ email, password }) {
 /**
  * Store user session in localStorage and dispatch reactive update events
  */
-export function storeAuthSession({ user, accessToken, refreshToken, fallbackName }) {
+export function storeAuthSession({ user, accessToken, refreshToken, fallbackName, developmentBypass = false }) {
   const userEmail = (user?.email || (typeof fallbackName === 'string' && fallbackName.includes('@') ? fallbackName : '')).trim().toLowerCase();
   
   // Resolve proper human name (avoiding raw email prefix)
@@ -323,6 +334,11 @@ export function storeAuthSession({ user, accessToken, refreshToken, fallbackName
   localStorage.setItem('fin_user', JSON.stringify(userData));
   if (accessToken) localStorage.setItem('fin_token', accessToken);
   if (refreshToken) localStorage.setItem('fin_refresh_token', refreshToken);
+  if (DEV_AUTH_BYPASS_ENABLED && developmentBypass) {
+    localStorage.setItem(STORAGE_KEY_DEV_AUTH_BYPASS, 'true');
+  } else {
+    localStorage.removeItem(STORAGE_KEY_DEV_AUTH_BYPASS);
+  }
 
   // Automatically save/update in registered user registry
   saveRegisteredUser(userData);
@@ -355,6 +371,7 @@ export async function logoutUser() {
   localStorage.removeItem('fin_user');
   localStorage.removeItem('fin_token');
   localStorage.removeItem('fin_refresh_token');
+  localStorage.removeItem(STORAGE_KEY_DEV_AUTH_BYPASS);
 
   window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: null }));
   window.dispatchEvent(new Event('storage'));
@@ -455,6 +472,7 @@ export function clearAuthSession() {
   localStorage.removeItem('fin_token');
   localStorage.removeItem('fin_refresh_token');
   localStorage.removeItem('fin_last_activity');
+  localStorage.removeItem(STORAGE_KEY_DEV_AUTH_BYPASS);
 
   window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: null }));
   window.dispatchEvent(new Event('storage'));
@@ -476,7 +494,7 @@ export async function authenticatedFetch(url, options = {}) {
   let response = await fetch(url, { ...options, headers });
 
   // If unauthorized and we have a refresh token, try refreshing and retry
-  if (response.status === 401 && getStoredRefreshToken()) {
+  if (response.status === 401 && !isDevelopmentAuthBypassSession() && getStoredRefreshToken()) {
     const refreshResult = await refreshAuthToken();
     if (refreshResult.success && refreshResult.accessToken) {
       headers.set('Authorization', `Bearer ${refreshResult.accessToken}`);

@@ -7,6 +7,7 @@ import {
   clearAuthSession,
   getStoredToken,
   getStoredRefreshToken,
+  isDevelopmentAuthBypassSession,
 } from '../../services/authService';
 
 // Configurable session timeouts (default: 5 minutes idle timeout with 60 seconds warning)
@@ -129,7 +130,7 @@ export default function SessionTimeoutManager() {
   // Registered ONCE on mount — no dependency on isWarningOpen state,
   // so the handler is NEVER torn down and re-registered while the modal is showing.
   useEffect(() => {
-    if (!getStoredToken()) return;
+    if (isDevelopmentAuthBypassSession() || !getStoredToken()) return;
 
     // Initialize activity timestamp
     const now = Date.now();
@@ -189,7 +190,7 @@ export default function SessionTimeoutManager() {
 
   // Main Interval Timer — ticks every second to check idle time
   useEffect(() => {
-    if (!getStoredToken()) return;
+    if (isDevelopmentAuthBypassSession() || !getStoredToken()) return;
 
     const intervalId = setInterval(() => {
       const now = Date.now();
