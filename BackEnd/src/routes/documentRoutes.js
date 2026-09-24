@@ -1,13 +1,14 @@
 const express = require("express");
 const { upload } = require("../middleware/upload");
 const documentController = require("../controllers/documentController");
+const authMiddleware = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-router.post("/process", upload.single("file"), documentController.uploadDocument);
-router.post("/extract", documentController.extractDocument);
-router.get("/", documentController.listDocuments);
-router.get("/:id", documentController.getDocument);
-router.delete("/:id", documentController.deleteDocument);
+router.post("/process", authMiddleware, upload.single("file"), documentController.uploadDocument);
+router.post("/extract", authMiddleware, documentController.extractDocument);
+router.get("/", authMiddleware, documentController.listDocuments);
+router.get("/:id", authMiddleware, documentController.getDocument);
+router.delete("/:id", authMiddleware, documentController.deleteDocument);
 
 module.exports = router;
