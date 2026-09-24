@@ -868,7 +868,6 @@ The architecture can be extended with:
 * 🏛️ Government API integrations
 * 📚 Automatic policy document updates
 * 👨‍⚖️ Human-review workflow
-* 📈 Analytics for frequently missed schemes
 
 ---
 
