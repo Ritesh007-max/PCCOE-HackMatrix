@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { getStoredToken, getStoredUser } from '../../services/authService';
+import { getStoredToken } from '../../services/authService';
 
 /**
  * ProtectedRoute
@@ -10,9 +10,8 @@ import { getStoredToken, getStoredUser } from '../../services/authService';
 export default function ProtectedRoute({ children }) {
   const location = useLocation();
   const token = getStoredToken();
-  const user = getStoredUser();
 
-  if (!token && !user) {
+  if (!token) {
     // Preserve requested path for redirect after login if needed
     return <Navigate to="/login" state={{ from: location }} replace />;
   }

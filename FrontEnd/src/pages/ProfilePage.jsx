@@ -235,6 +235,7 @@ export default function ProfilePage() {
   // Handle save changes
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    let backendProfileResult = { success: false };
     const updated = {
       ...profileData,
       ...editFormData,
@@ -267,9 +268,15 @@ export default function ProfilePage() {
       saveRegisteredUser(fullUserObject);
 
       // Also persist to backend API if active
-      const backendProfileResult = await updateBackendProfile({
+      backendProfileResult = await updateBackendProfile({
         full_name: updated.fullName,
         phone: updated.phone,
+        state: updated.state,
+        district: updated.district,
+        occupation: updated.occupation,
+        income: updated.income,
+        dob: updated.dob,
+        gender: updated.gender,
       });
 
       // Dispatch reactive events for Header, HeroBanner, etc.
@@ -281,8 +288,8 @@ export default function ProfilePage() {
 
     setActiveModal(null);
     showToast(backendProfileResult?.success
-      ? 'Profile name and phone saved successfully.'
-      : 'Profile saved on this device; name and phone could not be saved to the server.');
+      ? 'Profile details saved successfully.'
+      : 'Profile saved on this device; backend persistence failed.');
   };
 
   // Handle password change submit

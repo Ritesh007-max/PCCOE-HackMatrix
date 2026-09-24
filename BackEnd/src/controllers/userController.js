@@ -14,10 +14,7 @@ const sanitizeUser = (user) => ({
 
 const sanitizeUserWithProfile = async (user) => {
     const baseUser = sanitizeUser(user);
-    const profile = await profileService.getOrCreateProfile(user.id, {
-        email: user.email,
-        ...(user.user_metadata || {})
-    });
+    const profile = await profileService.getProfileById(user.id);
     if (profile) {
         baseUser.user_metadata = {
             ...baseUser.user_metadata,

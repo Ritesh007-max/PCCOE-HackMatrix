@@ -1,27 +1,26 @@
-const path = require("path");
-const crypto = require("crypto");
-const { supabaseClient: supabase, supabaseAdmin } = require("../config/supabaseConfig");
-const { throwIfError } = require("../utils/supabaseErrors");
+const path = require('path');
+const crypto = require('crypto');
+const { supabaseAdmin } = require('../config/supabaseConfig');
+const profileService = require('./profileService');
+const { throwIfError } = require('../utils/supabaseErrors');
 
-const DOCUMENTS_BUCKET = process.env.SUPABASE_DOCUMENTS_BUCKET || "documents";
-
+const DOCUMENTS_BUCKET = process.env.SUPABASE_DOCUMENTS_BUCKET || 'documents';
 const ALLOWED_TYPES = new Set([
-    "aadhaar", "pan", "udyam", "itr", "land", "income_cert",
-    "caste_cert", "disability_cert", "domicile", "bank_passbook", "photo", "address_proof"
+    'aadhaar', 'pan', 'udyam', 'itr', 'land', 'income_cert',
+    'caste_cert', 'disability_cert', 'domicile', 'bank_passbook', 'photo', 'address_proof'
 ]);
-
 const TYPE_ALIASES = {
-    aadhar: "aadhaar",
-    adhaar: "aadhaar",
-    "land records": "land",
-    land_records: "land",
-    landrecords: "land",
-    "income certificate": "income_cert",
-    "caste certificate": "caste_cert",
-    "domicile certificate": "domicile",
-    "bank passbook": "bank_passbook",
-    "passport size photo": "photo",
-    "address proof": "address_proof"
+    aadhar: 'aadhaar',
+    adhaar: 'aadhaar',
+    'land records': 'land',
+    land_records: 'land',
+    landrecords: 'land',
+    'income certificate': 'income_cert',
+    'caste certificate': 'caste_cert',
+    'domicile certificate': 'domicile',
+    'bank passbook': 'bank_passbook',
+    'passport size photo': 'photo',
+    'address proof': 'address_proof'
 };
 
 const httpError = (status, message) => {
@@ -30,143 +29,94 @@ const httpError = (status, message) => {
     return error;
 };
 
-const normalizeDocumentType = (value = "") => {
+const normalizeDocumentType = (value = '') => {
     const key = String(value).trim().toLowerCase();
     const type = TYPE_ALIASES[key] || key;
-    if (!ALLOWED_TYPES.has(type)) {
-        throw httpError(400, "Unsupported documentType");
-    }
+    if (!ALLOWED_TYPES.has(type)) throw httpError(400, 'Unsupported documentType');
     return type;
 };
 
-const mapDocument = (row, signedUrl = null, { includeExtraction = false } = {}) => {
-    const payload = {
+const mapDocument = (row, signedUrl = null, { includeFileUrl = false } = {}) => {
+    const result = {
         id: row.id,
+        applicationId: row.application_id,
         documentType: row.document_type,
-        originalName: row.original_name,
-        mimeType: row.mime_type,
-        size: row.size,
+        fileName: row.file_name,
         verificationStatus: row.verification_status,
-        confidenceScore: row.confidence_score,
-        extracted: Boolean(row.extracted_at),
-        createdAt: row.created_at,
+        reviewerRemarks: row.reviewer_remarks,
+        uploadedAt: row.uploaded_at,
         updatedAt: row.updated_at
     };
+    if (includeFileUrl) result.fileUrl = signedUrl;
+    return result;
+};
 
-    if (includeExtraction) {
-        payload.extractedData = row.extracted_data;
-        payload.extractionNotes = row.extraction_notes;
-        payload.extractedAt = row.extracted_at;
-        payload.fileUrl = signedUrl;
-        payload.storagePath = row.storage_path;
-    }
+const getApplicantId = async (userId) => {
+    const profile = await profileService.getProfileById(userId);
+    if (!profile) throw httpError(403, 'Create an applicant profile before attaching documents');
+    return profile.id;
+};
 
-    return payload;
+const getOwnedApplication = async (applicationId, userId) => {
+    if (!applicationId) throw httpError(400, 'applicationId is required');
+    const applicantId = await getApplicantId(userId);
+    const { data, error } = await supabaseAdmin
+        .from('applications')
+        .select('id')
+        .eq('id', applicationId)
+        .eq('applicant_id', applicantId)
+        .maybeSingle();
+    throwIfError(error);
+    if (!data) throw httpError(404, 'Application not found');
+    return data;
+};
+
+const getOwnedApplicationIds = async (userId) => {
+    const profile = await profileService.getProfileById(userId);
+    if (!profile) return [];
+    const { data, error } = await supabaseAdmin
+        .from('applications')
+        .select('id')
+        .eq('applicant_id', profile.id);
+    throwIfError(error);
+    return (data || []).map((application) => application.id);
 };
 
 const getSignedFileUrl = async (storagePath) => {
-    if (!storagePath) {
-        return null;
-    }
-
+    if (!storagePath) return null;
     const { data, error } = await supabaseAdmin.storage
         .from(DOCUMENTS_BUCKET)
         .createSignedUrl(storagePath, 60 * 60);
-
-    if (error) {
-        return null;
-    }
-
+    if (error) throwIfError(error);
     return data?.signedUrl || null;
 };
 
 const fetchDocumentRow = async (id, userId) => {
-    const { data, error } = await supabase
-        .from("documents")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", userId)
+    const { data, error } = await supabaseAdmin
+        .from('documents')
+        .select('*')
+        .eq('id', id)
         .maybeSingle();
-
     throwIfError(error);
+    if (!data) throw httpError(404, 'Document not found');
 
-    if (!data) {
-        throw httpError(404, "Document not found");
+    try {
+        await getOwnedApplication(data.application_id, userId);
+    } catch (error) {
+        if (error.status === 404) throw httpError(404, 'Document not found');
+        throw error;
     }
-
     return data;
 };
 
-const mockExtract = (documentType, originalName) => {
-    const baseName = path.parse(originalName).name;
-
-    const templates = {
-        aadhaar: {
-            applicantName: "Applicant Name",
-            dateOfBirth: null,
-            gender: null,
-            aadhaarLast4: null,
-            address: null,
-            state: null
-        },
-        pan: {
-            applicantName: "Applicant Name",
-            panNumber: null,
-            dateOfBirth: null,
-            fatherName: null
-        },
-        udyam: {
-            enterpriseName: baseName || "Enterprise",
-            udyamNumber: null,
-            organisationType: null,
-            majorActivity: null
-        },
-        itr: {
-            assessmentYear: null,
-            panNumber: null,
-            totalIncome: null,
-            filingStatus: "uploaded"
-        },
-        land: {
-            ownerName: "Applicant Name",
-            surveyNumber: null,
-            village: null,
-            district: null,
-            area: null
-        },
-        disability_cert: {
-            applicantName: "Applicant Name",
-            disabilityType: null,
-            disabilityPercentage: null,
-            issuingAuthority: null
-        }
-    };
-
-    return {
-        extracted_data: {
-            documentType,
-            sourceFile: originalName,
-            fields: templates[documentType],
-            ocrEngine: "heuristic-v1"
-        },
-        confidence_score: 0.62,
-        extraction_notes: "Placeholder OCR/AI extraction. Replace with production OCR to fill verified field values.",
-        verification_status: "under_review"
-    };
-};
-
-const uploadDocument = async ({ file, documentType, userId }) => {
-    if (!file) {
-        throw httpError(400, "Document file is required");
-    }
-    if (!userId) {
-        throw httpError(400, "User ID is required");
-    }
-
+const uploadDocument = async ({ file, documentType, applicationId, userId }) => {
+    if (!file) throw httpError(400, 'Document file is required');
+    if (!userId) throw httpError(400, 'User ID is required');
+    const application = await getOwnedApplication(applicationId, userId);
     const type = normalizeDocumentType(documentType);
     const id = crypto.randomUUID();
-    const ext = path.extname(file.originalname) || "";
-    const storagePath = `${userId}/${id}/${Date.now()}${ext}`;
+    const extension = path.extname(path.basename(file.originalname || '')).slice(0, 16);
+    const storagePath = `${application.id}/${id}${extension}`;
 
     const { error: storageError } = await supabaseAdmin.storage
         .from(DOCUMENTS_BUCKET)
@@ -174,31 +124,19 @@ const uploadDocument = async ({ file, documentType, userId }) => {
             contentType: file.mimetype,
             upsert: false
         });
-
     throwIfError(storageError);
 
-    const now = new Date().toISOString();
-    const row = {
-        id,
-        user_id: userId,
-        document_type: type,
-        original_name: file.originalname,
-        storage_path: storagePath,
-        mime_type: file.mimetype,
-        size: file.size,
-        verification_status: "uploaded",
-        confidence_score: null,
-        extracted_data: null,
-        extraction_notes: null,
-        extracted_at: null,
-        created_at: now,
-        updated_at: now
-    };
-
-    const { data, error } = await supabase
-        .from("documents")
-        .insert(row)
-        .select("*")
+    const { data, error } = await supabaseAdmin
+        .from('documents')
+        .insert({
+            id,
+            application_id: application.id,
+            document_type: type,
+            file_name: path.basename(file.originalname),
+            file_url: storagePath,
+            verification_status: 'PENDING'
+        })
+        .select('*')
         .single();
 
     if (error) {
@@ -209,76 +147,49 @@ const uploadDocument = async ({ file, documentType, userId }) => {
     return mapDocument(data);
 };
 
-const extractDocument = async ({ documentId, userId }) => {
-    if (!documentId) {
-        throw httpError(400, "documentId is required");
-    }
-    if (!userId) {
-        throw httpError(400, "User ID is required");
-    }
-
-    const existing = await fetchDocumentRow(documentId, userId);
-    const extracted = mockExtract(existing.document_type, existing.original_name);
-    const updatedAt = new Date().toISOString();
-
-    const { data, error } = await supabase
-        .from("documents")
-        .update({
-            ...extracted,
-            extracted_at: updatedAt,
-            updated_at: updatedAt
-        })
-        .eq("id", documentId)
-        .eq("user_id", userId)
-        .select("*")
-        .single();
-
-    throwIfError(error);
-
-    const signedUrl = await getSignedFileUrl(data.storage_path);
-    return mapDocument(data, signedUrl, { includeExtraction: true });
+// The supplied documents table has no extraction-result columns. Avoid returning
+// mock extraction as if it were saved; OCR can be wired when its storage contract exists.
+const extractDocument = async () => {
+    throw httpError(501, 'Document extraction is not configured for the current documents schema');
 };
 
 const listDocuments = async (userId) => {
-    if (!userId) {
-        throw httpError(400, "User ID is required");
-    }
-    const { data, error } = await supabase
-        .from("documents")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+    if (!userId) throw httpError(400, 'User ID is required');
+    const applicationIds = await getOwnedApplicationIds(userId);
+    if (applicationIds.length === 0) return [];
 
+    const { data, error } = await supabaseAdmin
+        .from('documents')
+        .select('*')
+        .in('application_id', applicationIds)
+        .order('uploaded_at', { ascending: false });
     throwIfError(error);
-
     return (data || []).map((row) => mapDocument(row));
 };
 
 const getDocumentById = async (id, userId) => {
-    if (!userId) {
-        throw httpError(400, "User ID is required");
-    }
+    if (!userId) throw httpError(400, 'User ID is required');
     const row = await fetchDocumentRow(id, userId);
-    const signedUrl = await getSignedFileUrl(row.storage_path);
-    return mapDocument(row, signedUrl, { includeExtraction: true });
+    const signedUrl = await getSignedFileUrl(row.file_url);
+    return mapDocument(row, signedUrl, { includeFileUrl: true });
 };
 
 const deleteDocument = async (id, userId) => {
-    if (!userId) {
-        throw httpError(400, "User ID is required");
-    }
+    if (!userId) throw httpError(400, 'User ID is required');
     const row = await fetchDocumentRow(id, userId);
 
-    if (row.storage_path) {
+    const { error: deleteError } = await supabaseAdmin
+        .from('documents')
+        .delete()
+        .eq('id', id);
+    throwIfError(deleteError);
+
+    if (row.file_url) {
         const { error: storageError } = await supabaseAdmin.storage
             .from(DOCUMENTS_BUCKET)
-            .remove([row.storage_path]);
+            .remove([row.file_url]);
         throwIfError(storageError);
     }
-
-    const { error } = await supabase.from("documents").delete().eq("id", id).eq("user_id", userId);
-    throwIfError(error);
-
     return { id };
 };
 

@@ -1,40 +1,73 @@
 const { supabaseAdmin } = require('../config/supabaseConfig');
 
-// public.users is the application's only persisted user/profile table.
-const PERSISTED_FIELDS = ['full_name', 'phone'];
-const REQUIRED_FIELDS = ['full_name', 'phone'];
+// Applicant details are optional and live in applicant_profiles. The row ID is
+// the corresponding public.users ID; ordinary account reads never create it.
+const FIELD_TO_COLUMN = {
+    full_name: 'full_name',
+    phone: 'phone',
+    dob: 'date_of_birth',
+    date_of_birth: 'date_of_birth',
+    gender: 'gender',
+    address_line1: 'address_line1',
+    address_line2: 'address_line2',
+    district: 'city',
+    city: 'city',
+    state: 'state',
+    pincode: 'pincode',
+    country: 'country',
+    pan_number: 'pan_number',
+    aadhaar_number: 'aadhaar_number',
+    annual_income: 'annual_income',
+    income: 'annual_income',
+    employment_status: 'employment_status',
+    occupation: 'occupation',
+    employer_name: 'employer_name',
+    category: 'caste_category',
+    caste_category: 'caste_category',
+    is_disabled: 'disability_status',
+    disability_status: 'disability_status',
+    disability_percentage: 'disability_percentage',
+    land_acres: 'land_holding_acres',
+    land_holding_acres: 'land_holding_acres',
+    is_minority: 'is_minority',
+    is_woman_entrepreneur: 'is_woman_entrepreneur',
+    is_ex_serviceman: 'is_ex_serviceman'
+};
+
+const PERSISTED_FIELDS = Object.keys(FIELD_TO_COLUMN);
+const ACCEPTED_FIELDS = [...new Set(PERSISTED_FIELDS)];
+const PROFILE_SELECT = [
+    'id', 'full_name', 'phone', 'date_of_birth', 'gender', 'address_line1',
+    'address_line2', 'city', 'state', 'pincode', 'country', 'pan_number',
+    'aadhaar_number', 'annual_income', 'employment_status', 'occupation',
+    'employer_name', 'caste_category', 'disability_status',
+    'disability_percentage', 'land_holding_acres', 'is_minority',
+    'is_woman_entrepreneur', 'is_ex_serviceman', 'created_at', 'updated_at'
+].join(', ');
+
+const COMPLETION_FIELDS = [
+    'full_name', 'phone', 'date_of_birth', 'gender', 'address_line1', 'city',
+    'state', 'pincode', 'annual_income', 'occupation', 'caste_category'
+];
 
 const calculateProfileCompletion = (profile) => {
-    const completed = REQUIRED_FIELDS.filter((field) => {
+    const completed = COMPLETION_FIELDS.filter((field) => {
         const value = profile[field];
         return value !== null && value !== undefined && value !== '';
     }).length;
-    return Math.round((completed / REQUIRED_FIELDS.length) * 100);
+    return Math.round((completed / COMPLETION_FIELDS.length) * 100);
 };
 
-const toProfile = (row) => ({
-    id: row.id,
-    email: row.email,
-    full_name: row.full_name,
-    phone: row.phone,
-    role: row.role,
-    age: null,
-    dob: null,
-    gender: null,
-    category: null,
-    state: null,
-    district: null,
-    area_type: null,
-    occupation: null,
-    annual_income: null,
-    income: null,
-    applicant_type: null,
-    land_acres: null,
-    is_disabled: null,
-    profile_completed_percent: calculateProfileCompletion(row),
-    created_at: row.created_at,
-    updated_at: null
-});
+const toProfile = (row) => row ? ({
+    ...row,
+    dob: row.date_of_birth,
+    district: row.city,
+    category: row.caste_category,
+    is_disabled: row.disability_status,
+    land_acres: row.land_holding_acres,
+    income: row.annual_income,
+    profile_completed_percent: calculateProfileCompletion(row)
+}) : null;
 
 const throwDatabaseError = (error) => {
     const serviceError = new Error(error.message);
@@ -44,70 +77,77 @@ const throwDatabaseError = (error) => {
 
 const getProfileById = async (userId) => {
     const { data, error } = await supabaseAdmin
-        .from('users')
-        .select('id, email, full_name, phone, role, created_at')
+        .from('applicant_profiles')
+        .select(PROFILE_SELECT)
         .eq('id', userId)
         .maybeSingle();
 
     if (error) throwDatabaseError(error);
-    return data ? toProfile(data) : null;
-};
-
-const createProfile = async (userId, userMetadata = {}) => {
-    const row = {
-        id: userId,
-        email: userMetadata.email,
-        full_name: userMetadata.full_name || null,
-        phone: userMetadata.phone || null,
-        role: 'user'
-    };
-
-    const { data, error } = await supabaseAdmin
-        .from('users')
-        .upsert(row, { onConflict: 'id' })
-        .select('id, email, full_name, phone, role, created_at')
-        .single();
-
-    if (error) throwDatabaseError(error);
     return toProfile(data);
 };
 
+const mapUpdatesToColumns = (updates) => {
+    const row = {};
+    const aliases = new Set([
+        'date_of_birth', 'city', 'income', 'caste_category',
+        'disability_status', 'land_holding_acres'
+    ]);
+    const entries = Object.entries(updates).sort(([left], [right]) =>
+        Number(aliases.has(right)) - Number(aliases.has(left))
+    );
+    for (const [field, value] of entries) {
+        const column = FIELD_TO_COLUMN[field];
+        // If both a UI alias and a physical/canonical field are supplied, the
+        // canonical value wins.
+        if (column && value !== undefined) row[column] = value;
+    }
+    return row;
+};
+
+// Called only by an explicit applicant profile save, never during signup/login.
 const updateProfile = async (userId, updates) => {
-    const existing = await getProfileById(userId);
-    if (!existing) {
-        const error = new Error('User record was not found');
-        error.status = 404;
+    const changes = mapUpdatesToColumns(updates);
+    if (Object.keys(changes).length === 0) {
+        const existing = await getProfileById(userId);
+        if (existing) return existing;
+        const error = new Error('No applicant profile fields were provided');
+        error.status = 400;
         throw error;
     }
 
-    const changes = {};
-    for (const field of PERSISTED_FIELDS) {
-        if (updates[field] !== undefined) changes[field] = updates[field];
-    }
-    if (Object.keys(changes).length === 0) return existing;
-
-    const { data, error } = await supabaseAdmin
-        .from('users')
-        .update(changes)
+    const { data: existing, error: lookupError } = await supabaseAdmin
+        .from('applicant_profiles')
+        .select('id')
         .eq('id', userId)
-        .select('id, email, full_name, phone, role, created_at')
-        .single();
+        .maybeSingle();
+    if (lookupError) throwDatabaseError(lookupError);
 
+    let query;
+    if (existing) {
+        query = supabaseAdmin
+            .from('applicant_profiles')
+            .update(changes)
+            .eq('id', userId);
+    } else {
+        if (!changes.full_name) {
+            const error = new Error('Full name is required to create an applicant profile');
+            error.status = 400;
+            throw error;
+        }
+        query = supabaseAdmin
+            .from('applicant_profiles')
+            .insert({ id: userId, ...changes });
+    }
+
+    const { data, error } = await query.select(PROFILE_SELECT).single();
     if (error) throwDatabaseError(error);
     return toProfile(data);
-};
-
-const getOrCreateProfile = async (userId, userMetadata = {}) => {
-    const existing = await getProfileById(userId);
-    return existing || createProfile(userId, userMetadata);
 };
 
 module.exports = {
     getProfileById,
-    createProfile,
     updateProfile,
-    getOrCreateProfile,
     calculateProfileCompletion,
-    REQUIRED_FIELDS,
-    PERSISTED_FIELDS
+    PERSISTED_FIELDS,
+    ACCEPTED_FIELDS
 };
