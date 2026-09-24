@@ -15,7 +15,7 @@ import ashokStambhSvg from '../../assets/ashok_stambh_vector.svg';
 import msmeSvg from '../../assets/msme_logo_vector.svg';
 import kisanSvg from '../../assets/kisan_logo_vector.svg';
 
-export default function TopOpportunitiesSection() {
+export default function TopOpportunitiesSection({ opportunities = topOpportunities }) {
   const renderEmblem = (type) => {
     if (type === 'ashoka') {
       return (
@@ -76,7 +76,7 @@ export default function TopOpportunitiesSection() {
 
       <div className="opportunities-main-grid">
         {/* 3 Scheme Cards */}
-        {topOpportunities.map((scheme) => (
+        {opportunities.map((scheme) => (
           <article key={scheme.id} className="scheme-card-box">
             <div>
               <div className="scheme-card-top">

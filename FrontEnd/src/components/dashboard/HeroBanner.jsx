@@ -6,9 +6,12 @@ import indiaGateHero from '../../assets/india_gate_hero.jpg';
 import namaskaraImg from '../../assets/namaskara.png';
 import { resolveDisplayName } from '../../services/authService';
 
-export default function HeroBanner() {
+export default function HeroBanner({ userProfile }) {
   const [userName, setUserName] = useState(() => {
     try {
+      // Use userProfile from API if available
+      if (userProfile?.fullName) return userProfile.fullName;
+      
       const stored = localStorage.getItem('fin_user');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -20,6 +23,11 @@ export default function HeroBanner() {
   });
 
   useEffect(() => {
+    // Update from API data if provided
+    if (userProfile?.fullName) {
+      setUserName(userProfile.fullName);
+    }
+
     const handleUserUpdate = (e) => {
       try {
         const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
@@ -34,7 +42,7 @@ export default function HeroBanner() {
       window.removeEventListener('fin_user_updated', handleUserUpdate);
       window.removeEventListener('storage', handleUserUpdate);
     };
-  }, []);
+  }, [userProfile]);
 
   // Extract only the first name for this specific greeting spot on the dashboard
   const firstName = userName ? userName.trim().split(/\s+/)[0] : 'Hemang';
