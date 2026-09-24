@@ -15,6 +15,7 @@ const uploadDocument = async (req, res, next) => {
         const document = await documentServices.uploadDocument({
             file: req.file,
             documentType: req.body.documentType || req.body.type,
+            applicationId: req.body.applicationId || req.body.application_id,
             userId: req.user.id
         });
 

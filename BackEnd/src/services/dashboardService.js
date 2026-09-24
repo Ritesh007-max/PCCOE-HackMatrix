@@ -21,25 +21,39 @@ const isTableMissingError = (err) => {
     );
 };
 
-const getDocumentStats = async (userId) => {
+const getDocumentStats = async (applicantId) => {
     let docs = [];
-    try {
-        const { data, error } = await supabaseAdmin
-            .from('user_documents')
-            .select('doc_type, status')
-            .eq('user_id', userId);
+    if (applicantId) {
+        try {
+            const { data: applications, error: applicationsError } = await supabaseAdmin
+                .from('applications')
+                .select('id')
+                .eq('applicant_id', applicantId);
+            if (applicationsError) {
+                if (!isTableMissingError(applicationsError)) {
+                    const serviceError = new Error(applicationsError.message);
+                    serviceError.status = 500;
+                    throw serviceError;
+                }
+            } else if (applications?.length) {
+                const { data, error } = await supabaseAdmin
+                    .from('documents')
+                    .select('document_type, verification_status')
+                    .in('application_id', applications.map((application) => application.id));
 
-        if (error) {
-            if (!isTableMissingError(error)) {
-                const serviceError = new Error(error.message);
-                serviceError.status = 500;
-                throw serviceError;
+                if (error) {
+                    if (!isTableMissingError(error)) {
+                        const serviceError = new Error(error.message);
+                        serviceError.status = 500;
+                        throw serviceError;
+                    }
+                } else {
+                    docs = data || [];
+                }
             }
-        } else {
-            docs = data || [];
+        } catch (err) {
+            if (!isTableMissingError(err)) throw err;
         }
-    } catch (err) {
-        if (!isTableMissingError(err)) throw err;
     }
 
     const docMap = new Map();
@@ -48,8 +62,11 @@ const getDocumentStats = async (userId) => {
     }
 
     for (const doc of docs) {
-        const normalizedType = doc.doc_type === 'land_records' ? 'land' : doc.doc_type;
-        docMap.set(normalizedType, { ...doc, doc_type: normalizedType });
+        const normalizedType = doc.document_type === 'land_records' ? 'land' : doc.document_type;
+        const status = String(doc.verification_status || '').toUpperCase() === 'PENDING'
+            ? 'pending'
+            : String(doc.verification_status || '').toLowerCase();
+        docMap.set(normalizedType, { doc_type: normalizedType, status });
     }
 
     const allDocs = Array.from(docMap.values());
@@ -68,33 +85,43 @@ const getDocumentStats = async (userId) => {
     };
 };
 
-const getApplicationStats = async (userId) => {
+const getApplicationStats = async (applicantId) => {
+    if (!applicantId) {
+        return { total: 0, pending: 0, approved: 0, details: [] };
+    }
     let apps = [];
     try {
-        const { data, error } = await supabaseAdmin
-            .from('user_applications')
-            .select('id, scheme_id, scheme_name, status, applied_at')
-            .eq('user_id', userId)
-            .order('applied_at', { ascending: false });
+        const result = await supabaseAdmin
+            .from('applications')
+            .select('*')
+            .eq('applicant_id', applicantId);
 
-        if (error) {
-            if (!isTableMissingError(error)) {
-                const serviceError = new Error(error.message);
+        if (result.error) {
+            if (!isTableMissingError(result.error)) {
+                const serviceError = new Error(result.error.message);
                 serviceError.status = 500;
                 throw serviceError;
             }
         } else {
-            apps = data || [];
+            apps = result.data || [];
         }
     } catch (err) {
         if (!isTableMissingError(err)) throw err;
     }
 
-    const activeApps = (apps || []).filter(a =>
+    const normalizedApps = (apps || []).map((app) => ({
+        id: app.id,
+        scheme_id: app.scheme_id,
+        scheme_name: app.scheme_name,
+        status: app.status || app.application_status,
+        applied_at: app.applied_at || app.submitted_at || app.created_at
+    }));
+    const activeApps = normalizedApps.filter(a =>
         ['submitted', 'under_review', 'approved'].includes(a.status)
     );
     const pendingCount = activeApps.filter(a => a.status === 'under_review' || a.status === 'submitted').length;
     const approvedCount = activeApps.filter(a => a.status === 'approved').length;
+    activeApps.sort((a, b) => new Date(b.applied_at || 0) - new Date(a.applied_at || 0));
 
     return {
         total: activeApps.length,
@@ -180,10 +207,10 @@ const getTopOpportunities = async (userProfile) => {
 };
 
 const getDashboardData = async (userId) => {
-    const [profile, docStats, appStats] = await Promise.all([
-        profileService.getProfileById(userId),
-        getDocumentStats(userId),
-        getApplicationStats(userId)
+    const profile = await profileService.getProfileById(userId);
+    const [docStats, appStats] = await Promise.all([
+        getDocumentStats(profile?.id),
+        getApplicationStats(profile?.id)
     ]);
 
     const topOpportunities = await getTopOpportunities(profile);

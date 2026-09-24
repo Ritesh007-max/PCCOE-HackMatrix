@@ -10,10 +10,15 @@ const notFoundHandler = (req, res, next) => {
 const globalErrorHandler = (error, req, res, next) => {
     console.error(error);
 
-    const status = error.status || 500;
+    const uploadErrorStatus = error.name === 'MulterError'
+        ? (error.code === 'LIMIT_FILE_SIZE' ? 413 : 400)
+        : undefined;
+    const status = error.status || uploadErrorStatus || 500;
     res.status(status).json({
         success: false,
-        message: status >= 500 ? "Internal server error" : (error.message || "Request failed")
+        message: status >= 500
+            ? "Internal server error"
+            : (error.message || (status === 413 ? "Uploaded file is too large" : "Request failed"))
     });
 };
 

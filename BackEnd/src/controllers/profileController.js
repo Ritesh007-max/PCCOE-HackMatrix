@@ -19,9 +19,7 @@ const isValidDateOnly = (value) => {
 const getProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const userMetadata = { email: req.user.email, ...(req.user.user_metadata || {}) };
-
-        const profile = await profileService.getOrCreateProfile(userId, userMetadata);
+        const profile = await profileService.getProfileById(userId);
 
         return res.status(200).json({
             success: true,
@@ -40,12 +38,12 @@ const updateProfile = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Profile updates must be a JSON object' });
         }
 
-        const allowedFields = profileService.PERSISTED_FIELDS;
+        const allowedFields = profileService.ACCEPTED_FIELDS;
         const unsupportedFields = Object.keys(updates).filter((field) => !allowedFields.includes(field));
         if (unsupportedFields.length > 0) {
             return res.status(400).json({
                 success: false,
-                message: `The users table only persists full_name and phone. Unsupported fields: ${unsupportedFields.join(', ')}`
+                message: `Unsupported profile fields: ${unsupportedFields.join(', ')}`
             });
         }
 
@@ -56,6 +54,28 @@ const updateProfile = async (req, res, next) => {
             }
         }
 
+        // Normalize schema names and legacy UI aliases before validating.
+        if (filteredUpdates.date_of_birth !== undefined && filteredUpdates.dob === undefined) {
+            filteredUpdates.dob = filteredUpdates.date_of_birth;
+        }
+        delete filteredUpdates.date_of_birth;
+        if (filteredUpdates.city !== undefined && filteredUpdates.district === undefined) {
+            filteredUpdates.district = filteredUpdates.city;
+        }
+        delete filteredUpdates.city;
+        if (filteredUpdates.caste_category !== undefined && filteredUpdates.category === undefined) {
+            filteredUpdates.category = filteredUpdates.caste_category;
+        }
+        delete filteredUpdates.caste_category;
+        if (filteredUpdates.disability_status !== undefined && filteredUpdates.is_disabled === undefined) {
+            filteredUpdates.is_disabled = filteredUpdates.disability_status;
+        }
+        delete filteredUpdates.disability_status;
+        if (filteredUpdates.land_holding_acres !== undefined && filteredUpdates.land_acres === undefined) {
+            filteredUpdates.land_acres = filteredUpdates.land_holding_acres;
+        }
+        delete filteredUpdates.land_holding_acres;
+
         if (Object.keys(filteredUpdates).length === 0) {
             return res.status(400).json({
                 success: false,
@@ -63,17 +83,26 @@ const updateProfile = async (req, res, next) => {
             });
         }
 
-        const validateText = (field, maxLength) => {
+        const validateText = (field, maxLength, { required = false } = {}) => {
             const value = filteredUpdates[field];
             if (value === undefined) return null;
+            if (!required && (value === null || value === '')) {
+                filteredUpdates[field] = null;
+                return null;
+            }
             if (typeof value !== 'string' || value.trim().length === 0 || value.trim().length > maxLength) {
-                return `${field} must be a non-empty string of at most ${maxLength} characters`;
+                return `${field} must be ${required ? 'a non-empty' : 'a'} string of at most ${maxLength} characters`;
             }
             filteredUpdates[field] = value.trim();
             return null;
         };
-        for (const [field, max] of [['full_name', 120], ['state', 100], ['district', 100]]) {
-            const validationMessage = validateText(field, max);
+        for (const [field, max, required] of [
+            ['full_name', 120, true], ['state', 100], ['district', 100],
+            ['address_line1', 200], ['address_line2', 200], ['pincode', 20],
+            ['country', 100], ['pan_number', 10], ['aadhaar_number', 12],
+            ['employment_status', 60], ['employer_name', 150]
+        ]) {
+            const validationMessage = validateText(field, max, { required });
             if (validationMessage) return res.status(400).json({ success: false, message: validationMessage });
         }
         if (filteredUpdates.phone !== undefined &&
@@ -82,37 +111,8 @@ const updateProfile = async (req, res, next) => {
         }
         if (filteredUpdates.phone !== undefined) filteredUpdates.phone = filteredUpdates.phone.trim();
 
-        // Handle dob and derive age if age is not explicitly passed
-        if (filteredUpdates.dob && !isValidDateOnly(filteredUpdates.dob)) {
-            return res.status(400).json({ success: false, message: 'Date of birth must be a valid date (YYYY-MM-DD)' });
-        }
-        if (filteredUpdates.dob && new Date(`${filteredUpdates.dob}T00:00:00.000Z`) > new Date()) {
-            return res.status(400).json({ success: false, message: 'Date of birth cannot be in the future' });
-        }
-        if (filteredUpdates.dob && filteredUpdates.age === undefined) {
-            const birthDate = new Date(`${filteredUpdates.dob}T00:00:00.000Z`);
-            const today = new Date();
-            let calculatedAge = today.getUTCFullYear() - birthDate.getUTCFullYear();
-            const beforeBirthday = today.getUTCMonth() < birthDate.getUTCMonth() ||
-                (today.getUTCMonth() === birthDate.getUTCMonth() && today.getUTCDate() < birthDate.getUTCDate());
-            if (beforeBirthday) calculatedAge--;
-            if (calculatedAge < 1 || calculatedAge > 120) {
-                return res.status(400).json({ success: false, message: 'Date of birth must result in an age between 1 and 120' });
-            }
-            filteredUpdates.age = calculatedAge;
-        }
-
-        if (filteredUpdates.age !== undefined) {
-            const age = typeof filteredUpdates.age === 'number' ? filteredUpdates.age :
-                (typeof filteredUpdates.age === 'string' && /^\d+$/.test(filteredUpdates.age) ? Number(filteredUpdates.age) : NaN);
-            if (!Number.isInteger(age) || age < 1 || age > 120) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Age must be a valid number between 1 and 120'
-                });
-            }
-            filteredUpdates.age = age;
-        }
+        // Empty date inputs are used to clear the stored date.
+        if (filteredUpdates.dob === '') filteredUpdates.dob = null;
 
         // Normalize income strings like "Below ₹1 Lakh" or numeric
         if (filteredUpdates.income !== undefined && filteredUpdates.annual_income === undefined) {
@@ -131,7 +131,7 @@ const updateProfile = async (req, res, next) => {
             }
         }
 
-        if (filteredUpdates.annual_income !== undefined) {
+        if (filteredUpdates.annual_income !== undefined && filteredUpdates.annual_income !== null) {
             const income = typeof filteredUpdates.annual_income === 'number' ? filteredUpdates.annual_income :
                 (typeof filteredUpdates.annual_income === 'string' && /^\d+(\.\d+)?$/.test(filteredUpdates.annual_income) ? Number(filteredUpdates.annual_income) : NaN);
             if (!Number.isFinite(income) || income < 0) {
@@ -141,6 +141,11 @@ const updateProfile = async (req, res, next) => {
                 });
             }
             filteredUpdates.annual_income = income;
+        }
+
+        if (filteredUpdates.income === '' && filteredUpdates.annual_income === undefined) {
+            filteredUpdates.annual_income = null;
+            delete filteredUpdates.income;
         }
 
         if (filteredUpdates.income !== undefined && filteredUpdates.annual_income === undefined) {
@@ -165,15 +170,26 @@ const updateProfile = async (req, res, next) => {
             filteredUpdates.land_acres = land;
         }
 
-        if (filteredUpdates.is_disabled !== undefined) {
-            const isDisabled = parseBoolean(filteredUpdates.is_disabled);
-            if (isDisabled === null) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Is disabled must be true or false'
-                });
+        for (const field of ['is_disabled', 'is_minority', 'is_woman_entrepreneur', 'is_ex_serviceman']) {
+            if (filteredUpdates[field] !== undefined) {
+                const value = parseBoolean(filteredUpdates[field]);
+                if (value === null) {
+                    return res.status(400).json({ success: false, message: `${field} must be true or false` });
+                }
+                filteredUpdates[field] = value;
             }
-            filteredUpdates.is_disabled = isDisabled;
+        }
+
+        if (filteredUpdates.disability_percentage !== undefined && filteredUpdates.disability_percentage !== null) {
+            const percentage = typeof filteredUpdates.disability_percentage === 'number'
+                ? filteredUpdates.disability_percentage
+                : (typeof filteredUpdates.disability_percentage === 'string' && /^\d+$/.test(filteredUpdates.disability_percentage)
+                    ? Number(filteredUpdates.disability_percentage)
+                    : NaN);
+            if (!Number.isInteger(percentage) || percentage < 0 || percentage > 100) {
+                return res.status(400).json({ success: false, message: 'Disability percentage must be an integer from 0 to 100' });
+            }
+            filteredUpdates.disability_percentage = percentage;
         }
 
         const validCategories = ['General', 'OBC', 'SC', 'ST', 'EWS'];
@@ -181,14 +197,6 @@ const updateProfile = async (req, res, next) => {
             return res.status(400).json({
                 success: false,
                 message: `Category must be one of: ${validCategories.join(', ')}`
-            });
-        }
-
-        const validAreaTypes = ['rural', 'urban'];
-        if (filteredUpdates.area_type && !validAreaTypes.includes(filteredUpdates.area_type)) {
-            return res.status(400).json({
-                success: false,
-                message: `Area type must be one of: ${validAreaTypes.join(', ')}`
             });
         }
 
@@ -255,27 +263,6 @@ const updateProfile = async (req, res, next) => {
                         message: 'Date of birth cannot be in the future'
                     });
                 }
-                if (filteredUpdates.age !== undefined) {
-                    const birthDate = new Date(`${filteredUpdates.dob}T00:00:00.000Z`);
-                    const today = new Date();
-                    let actualAge = today.getUTCFullYear() - birthDate.getUTCFullYear();
-                    if (today.getUTCMonth() < birthDate.getUTCMonth() ||
-                        (today.getUTCMonth() === birthDate.getUTCMonth() && today.getUTCDate() < birthDate.getUTCDate())) actualAge--;
-                    if (actualAge !== filteredUpdates.age) {
-                        return res.status(400).json({ success: false, message: 'Age does not match date of birth' });
-                    }
-                }
-            }
-        }
-
-        // Validate applicant_type
-        const validApplicantTypes = ['Individual', 'Family / Household', 'Small Enterprise (MSME)', 'Self Help Group (SHG)'];
-        if (filteredUpdates.applicant_type !== undefined) {
-            if (filteredUpdates.applicant_type !== null && filteredUpdates.applicant_type !== '' && !validApplicantTypes.includes(filteredUpdates.applicant_type)) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Applicant type must be one of: ${validApplicantTypes.join(', ')}`
-                });
             }
         }
 
