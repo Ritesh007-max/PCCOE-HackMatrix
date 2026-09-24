@@ -651,6 +651,23 @@
   cursor: not-allowed;
 }
 
+.signup-dev-bypass-btn {
+  width: 100%;
+  min-height: 40px;
+  border: 1px dashed #b45309;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.signup-dev-bypass-btn:hover {
+  background: #fef3c7;
+}
+
 /* OR Divider */
 .signup-divider {
   display: flex;

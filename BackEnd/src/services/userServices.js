@@ -7,7 +7,7 @@ const registerUser = async ({ email, password, fullName, phone }) => {
         email_confirm: true,
         user_metadata: {
             full_name: fullName,
-            phone: phone
+            phone
         }
     });
 
@@ -17,7 +17,36 @@ const registerUser = async ({ email, password, fullName, phone }) => {
         throw serviceError;
     }
 
-    return data.user;
+    if (data.user) {
+        const { error: userRowError } = await supabaseAdmin
+            .from('users')
+            .upsert({
+                id: data.user.id,
+                email: data.user.email,
+                full_name: fullName,
+                phone: phone || null,
+                role: 'user'
+            }, { onConflict: 'id' });
+
+        if (userRowError) {
+            const serviceError = new Error(`Account created but user record could not be saved: ${userRowError.message}`);
+            serviceError.status = 500;
+            throw serviceError;
+        }
+    }
+
+    const { data: authData, error: signInError } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (signInError || !authData.session) {
+        const serviceError = new Error(signInError?.message || 'Account created, but automatic sign-in failed');
+        serviceError.status = signInError?.status || 401;
+        throw serviceError;
+    }
+
+    return { user: authData.user || data.user, session: authData.session };
 };
 
 const loginUser = async ({ email, password }) => {

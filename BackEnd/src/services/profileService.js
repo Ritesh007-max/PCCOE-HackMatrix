@@ -1,196 +1,105 @@
 const { supabaseAdmin } = require('../config/supabaseConfig');
 
-const REQUIRED_FIELDS = [
-    'full_name', 'phone', 'age', 'gender', 'category',
-    'state', 'district', 'area_type', 'occupation',
-    'annual_income', 'dob', 'applicant_type'
-];
-
-const OPTIONAL_FIELDS = ['land_acres', 'is_disabled', 'dob', 'income', 'applicant_type'];
+// public.users is the application's only persisted user/profile table.
+const PERSISTED_FIELDS = ['full_name', 'phone'];
+const REQUIRED_FIELDS = ['full_name', 'phone'];
 
 const calculateProfileCompletion = (profile) => {
-    let completed = 0;
-    for (const field of REQUIRED_FIELDS) {
+    const completed = REQUIRED_FIELDS.filter((field) => {
         const value = profile[field];
-        if (value !== null && value !== undefined && value !== '') {
-            completed++;
-        }
-    }
+        return value !== null && value !== undefined && value !== '';
+    }).length;
     return Math.round((completed / REQUIRED_FIELDS.length) * 100);
 };
 
-const sanitizeProfile = (profile) => {
-    if (!profile) return null;
-    return {
-        id: profile.id,
-        full_name: profile.full_name,
-        phone: profile.phone,
-        age: profile.age,
-        dob: profile.dob,
-        gender: profile.gender,
-        category: profile.category,
-        state: profile.state,
-        district: profile.district,
-        area_type: profile.area_type,
-        occupation: profile.occupation,
-        annual_income: profile.annual_income,
-        income: profile.income,
-        applicant_type: profile.applicant_type,
-        land_acres: profile.land_acres,
-        is_disabled: profile.is_disabled,
-        dob: profile.dob,
-        applicant_type: profile.applicant_type,
-        profile_completed_percent: profile.profile_completed_percent,
-        created_at: profile.created_at,
-        updated_at: profile.updated_at
-    };
-};
+const toProfile = (row) => ({
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    phone: row.phone,
+    role: row.role,
+    age: null,
+    dob: null,
+    gender: null,
+    category: null,
+    state: null,
+    district: null,
+    area_type: null,
+    occupation: null,
+    annual_income: null,
+    income: null,
+    applicant_type: null,
+    land_acres: null,
+    is_disabled: null,
+    profile_completed_percent: calculateProfileCompletion(row),
+    created_at: row.created_at,
+    updated_at: null
+});
 
-const inMemoryProfiles = new Map();
-
-const isTableMissingError = (err) => {
-    return err && (
-        err.code === '42P01' ||
-        (err.message && (err.message.includes('schema cache') || err.message.includes('does not exist')))
-    );
+const throwDatabaseError = (error) => {
+    const serviceError = new Error(error.message);
+    serviceError.status = 500;
+    throw serviceError;
 };
 
 const getProfileById = async (userId) => {
-    try {
-        const { data, error } = await supabaseAdmin
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single();
+    const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('id, email, full_name, phone, role, created_at')
+        .eq('id', userId)
+        .maybeSingle();
 
-        if (error) {
-            if (error.code === 'PGRST116') {
-                return null;
-            }
-            if (isTableMissingError(error)) {
-                console.warn('[WARN] public.profiles table missing in Supabase. Using in-memory fallback. Run database_setup.sql to persist in DB.');
-                return inMemoryProfiles.get(userId) || null;
-            }
-            const serviceError = new Error(error.message);
-            serviceError.status = 500;
-            throw serviceError;
-        }
-
-        return data ? sanitizeProfile(data) : null;
-    } catch (err) {
-        if (isTableMissingError(err)) {
-            return inMemoryProfiles.get(userId) || null;
-        }
-        throw err;
-    }
+    if (error) throwDatabaseError(error);
+    return data ? toProfile(data) : null;
 };
 
 const createProfile = async (userId, userMetadata = {}) => {
-    const initialProfile = {
+    const row = {
         id: userId,
+        email: userMetadata.email,
         full_name: userMetadata.full_name || null,
         phone: userMetadata.phone || null,
-        age: null,
-        gender: null,
-        category: null,
-        state: null,
-        district: null,
-        area_type: null,
-        occupation: null,
-        annual_income: null,
-        income: userMetadata.income || null,
-        dob: userMetadata.dob || null,
-        applicant_type: userMetadata.applicant_type || null,
-        land_acres: 0,
-        is_disabled: false,
-        dob: null,
-        applicant_type: null,
-        profile_completed_percent: 0
+        role: 'user'
     };
 
-    try {
-        const { data, error } = await supabaseAdmin
-            .from('profiles')
-            .insert(initialProfile)
-            .select()
-            .single();
+    const { data, error } = await supabaseAdmin
+        .from('users')
+        .upsert(row, { onConflict: 'id' })
+        .select('id, email, full_name, phone, role, created_at')
+        .single();
 
-        if (error) {
-            if (isTableMissingError(error)) {
-                inMemoryProfiles.set(userId, initialProfile);
-                return sanitizeProfile(initialProfile);
-            }
-            const serviceError = new Error(error.message);
-            serviceError.status = 500;
-            throw serviceError;
-        }
-
-        return sanitizeProfile(data);
-    } catch (err) {
-        if (isTableMissingError(err)) {
-            inMemoryProfiles.set(userId, initialProfile);
-            return sanitizeProfile(initialProfile);
-        }
-        throw err;
-    }
+    if (error) throwDatabaseError(error);
+    return toProfile(data);
 };
 
 const updateProfile = async (userId, updates) => {
-    const existingProfile = await getOrCreateProfile(userId);
-    const allowedUpdates = {};
-    const allFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS, 'dob', 'applicant_type'];
-
-    for (const field of allFields) {
-        if (updates[field] !== undefined) {
-            allowedUpdates[field] = updates[field];
-        }
+    const existing = await getProfileById(userId);
+    if (!existing) {
+        const error = new Error('User record was not found');
+        error.status = 404;
+        throw error;
     }
 
-    if (Object.keys(allowedUpdates).length === 0) {
-        return existingProfile;
+    const changes = {};
+    for (const field of PERSISTED_FIELDS) {
+        if (updates[field] !== undefined) changes[field] = updates[field];
     }
+    if (Object.keys(changes).length === 0) return existing;
 
-    allowedUpdates.profile_completed_percent = calculateProfileCompletion({
-        ...existingProfile,
-        ...allowedUpdates
-    });
+    const { data, error } = await supabaseAdmin
+        .from('users')
+        .update(changes)
+        .eq('id', userId)
+        .select('id, email, full_name, phone, role, created_at')
+        .single();
 
-    try {
-        const { data, error } = await supabaseAdmin
-            .from('profiles')
-            .update(allowedUpdates)
-            .eq('id', userId)
-            .select()
-            .single();
-
-        if (error) {
-            if (isTableMissingError(error)) {
-                const updated = { ...existingProfile, ...allowedUpdates };
-                inMemoryProfiles.set(userId, updated);
-                return sanitizeProfile(updated);
-            }
-            const serviceError = new Error(error.message);
-            serviceError.status = 500;
-            throw serviceError;
-        }
-
-        return sanitizeProfile(data);
-    } catch (err) {
-        if (isTableMissingError(err)) {
-            const updated = { ...existingProfile, ...allowedUpdates };
-            inMemoryProfiles.set(userId, updated);
-            return sanitizeProfile(updated);
-        }
-        throw err;
-    }
+    if (error) throwDatabaseError(error);
+    return toProfile(data);
 };
 
 const getOrCreateProfile = async (userId, userMetadata = {}) => {
-    let profile = await getProfileById(userId);
-    if (!profile) {
-        profile = await createProfile(userId, userMetadata);
-    }
-    return profile;
+    const existing = await getProfileById(userId);
+    return existing || createProfile(userId, userMetadata);
 };
 
 module.exports = {
@@ -199,5 +108,6 @@ module.exports = {
     updateProfile,
     getOrCreateProfile,
     calculateProfileCompletion,
-    REQUIRED_FIELDS
+    REQUIRED_FIELDS,
+    PERSISTED_FIELDS
 };

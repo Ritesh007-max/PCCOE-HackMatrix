@@ -5,14 +5,23 @@ const { throwIfError } = require("../utils/supabaseErrors");
 
 const DOCUMENTS_BUCKET = process.env.SUPABASE_DOCUMENTS_BUCKET || "documents";
 
-const ALLOWED_TYPES = new Set(["aadhaar", "pan", "udyam", "itr", "land"]);
+const ALLOWED_TYPES = new Set([
+    "aadhaar", "pan", "udyam", "itr", "land", "income_cert",
+    "caste_cert", "disability_cert", "domicile", "bank_passbook", "photo", "address_proof"
+]);
 
 const TYPE_ALIASES = {
     aadhar: "aadhaar",
     adhaar: "aadhaar",
     "land records": "land",
     land_records: "land",
-    landrecords: "land"
+    landrecords: "land",
+    "income certificate": "income_cert",
+    "caste certificate": "caste_cert",
+    "domicile certificate": "domicile",
+    "bank passbook": "bank_passbook",
+    "passport size photo": "photo",
+    "address proof": "address_proof"
 };
 
 const httpError = (status, message) => {
@@ -25,7 +34,7 @@ const normalizeDocumentType = (value = "") => {
     const key = String(value).trim().toLowerCase();
     const type = TYPE_ALIASES[key] || key;
     if (!ALLOWED_TYPES.has(type)) {
-        throw httpError(400, "documentType must be one of: Aadhaar, PAN, Udyam, ITR, Land records");
+        throw httpError(400, "Unsupported documentType");
     }
     return type;
 };
@@ -124,6 +133,12 @@ const mockExtract = (documentType, originalName) => {
             village: null,
             district: null,
             area: null
+        },
+        disability_cert: {
+            applicantName: "Applicant Name",
+            disabilityType: null,
+            disabilityPercentage: null,
+            issuingAuthority: null
         }
     };
 

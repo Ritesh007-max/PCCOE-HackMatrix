@@ -75,7 +75,7 @@ export function getRegisteredUsers() {
     const raw = localStorage.getItem(STORAGE_KEY_REGISTERED_USERS);
     const parsed = raw ? JSON.parse(raw) : {};
     return { ...PRESEEDED_ACCOUNTS, ...parsed };
-  } catch (e) {
+  } catch {
     return { ...PRESEEDED_ACCOUNTS };
   }
 }
@@ -187,13 +187,6 @@ export function resolveDisplayName(userOrName, email = '') {
  * @param {Object} params - { email, password, fullName, phone }
  */
 export async function registerUser({ email, password, fullName, phone }) {
-  // Always register in persistent frontend registry right away
-  saveRegisteredUser({
-    email,
-    fullName: fullName.trim(),
-    phone,
-  });
-
   try {
     const res = await fetch(`${API_BASE}/api/users/register`, {
       method: 'POST',
@@ -215,11 +208,17 @@ export async function registerUser({ email, password, fullName, phone }) {
       };
     }
 
+    saveRegisteredUser({
+      email,
+      fullName: fullName.trim(),
+      phone,
+    });
+
     return {
       success: true,
       data,
     };
-  } catch (error) {
+  } catch {
     return {
       success: false,
       message: 'Unable to connect to backend server. Please verify backend is running on port 5000.',
@@ -275,7 +274,7 @@ export async function loginUser({ email, password }) {
       success: true,
       data,
     };
-  } catch (error) {
+  } catch {
     return {
       success: false,
       message: 'Unable to connect to backend server. Please verify backend is running on port 5000.',
@@ -348,7 +347,7 @@ export async function logoutUser() {
           Authorization: `Bearer ${token}`,
         },
       });
-    } catch (e) {
+    } catch {
       // Continue client logout even if backend call fails
     }
   }
@@ -368,7 +367,7 @@ export function getStoredUser() {
   try {
     const raw = localStorage.getItem('fin_user');
     return raw ? JSON.parse(raw) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }

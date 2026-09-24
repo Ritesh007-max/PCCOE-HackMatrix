@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SessionTimeoutModal from './SessionTimeoutModal';
 import {
@@ -44,7 +44,7 @@ export default function SessionTimeoutManager() {
   const [secondsRemaining, setSecondsRemaining] = useState(WARNING_DURATION_SEC);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const lastRecordedTimeRef = useRef(Date.now());
+  const lastRecordedTimeRef = useRef(null);
   const throttleTimerRef = useRef(null);
 
   // *** THE FIX: ref mirror of isWarningOpen so event handlers always see the current value ***
@@ -66,7 +66,9 @@ export default function SessionTimeoutManager() {
       throttleTimerRef.current = setTimeout(() => {
         try {
           localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(now));
-        } catch (e) {}
+        } catch {
+          // Storage may be unavailable in privacy-restricted browser contexts.
+        }
         throttleTimerRef.current = null;
       }, 3000);
     }
@@ -79,7 +81,9 @@ export default function SessionTimeoutManager() {
     clearAuthSession();
     try {
       await logoutUser();
-    } catch (e) {}
+    } catch {
+      // Storage may be unavailable in privacy-restricted browser contexts.
+    }
     navigate('/login?reason=timeout', { replace: true });
   }, [navigate]);
 
@@ -90,7 +94,9 @@ export default function SessionTimeoutManager() {
     clearAuthSession();
     try {
       await logoutUser();
-    } catch (e) {}
+    } catch {
+      // Storage may be unavailable in privacy-restricted browser contexts.
+    }
     navigate('/login', { replace: true });
   }, [navigate]);
 
@@ -113,7 +119,9 @@ export default function SessionTimeoutManager() {
       lastRecordedTimeRef.current = now;
       try {
         localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(now));
-      } catch (e) {}
+      } catch {
+        // Storage may be unavailable in privacy-restricted browser contexts.
+      }
     }
   }, []);
 
@@ -129,7 +137,9 @@ export default function SessionTimeoutManager() {
     if (!localStorage.getItem(STORAGE_KEY_LAST_ACTIVITY)) {
       try {
         localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(now));
-      } catch (e) {}
+      } catch {
+        // Storage may be unavailable in privacy-restricted browser contexts.
+      }
     }
 
     const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'];
@@ -175,7 +185,6 @@ export default function SessionTimeoutManager() {
       window.removeEventListener('storage', handleStorageChange);
       if (throttleTimerRef.current) clearTimeout(throttleTimerRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordActivity, navigate]); // intentionally omit isWarningOpen — ref is used instead
 
   // Main Interval Timer — ticks every second to check idle time

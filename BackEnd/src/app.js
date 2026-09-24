@@ -8,7 +8,17 @@ const { notFoundHandler, globalErrorHandler } = require("./middleware/errorHandl
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = (process.env.FRONTEND_ORIGINS || "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(null, false);
+    }
+}));
 app.use(express.json());
 
 app.get("/", (req, res) => {

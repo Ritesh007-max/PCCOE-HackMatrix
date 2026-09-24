@@ -267,18 +267,10 @@ export default function ProfilePage() {
       saveRegisteredUser(fullUserObject);
 
       // Also persist to backend API if active
-      updateBackendProfile({
+      const backendProfileResult = await updateBackendProfile({
         full_name: updated.fullName,
         phone: updated.phone,
-        state: updated.state,
-        district: updated.district,
-        occupation: updated.occupation,
-        annual_income: updated.income,
-        income: updated.income,
-        dob: updated.dob,
-        gender: updated.gender,
-        applicant_type: updated.applicantType,
-      }).catch(() => {});
+      });
 
       // Dispatch reactive events for Header, HeroBanner, etc.
       window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: fullUserObject }));
@@ -288,7 +280,9 @@ export default function ProfilePage() {
     }
 
     setActiveModal(null);
-    showToast('Profile information updated successfully!');
+    showToast(backendProfileResult?.success
+      ? 'Profile name and phone saved successfully.'
+      : 'Profile saved on this device; name and phone could not be saved to the server.');
   };
 
   // Handle password change submit
