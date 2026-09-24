@@ -1,23 +1,1563 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  FileText,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  UploadCloud,
+  Plus,
+  MoreVertical,
+  Bell,
+  Lightbulb,
+  ShieldCheck,
+  ArrowRight,
+  X,
+  Eye,
+  Download,
+  Trash2,
+  RefreshCw,
+  Check,
+  CreditCard,
+  Home,
+  Landmark,
+  Image as ImageIcon,
+  MapPin,
+  Award,
+  ScrollText,
+  UserCheck,
+  FileCheck,
+  Search,
+  CloudLightning,
+  Sparkles,
+  FileDown,
+} from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
+import {
+  INITIAL_DOCUMENTS,
+  SCHEMES_CHECKLIST,
+  loadDocumentsFromStorage,
+  saveDocumentsToStorage,
+} from '../data/documentsData';
+import '../styles/documents.css';
 
 export default function DocumentsPage() {
+  const navigate = useNavigate();
+
+  // Documents state loaded from localStorage or initialized with 8 items
+  const [documents, setDocuments] = useState(loadDocumentsFromStorage);
+
+  // Active filter tab: 'all' | 'verified' | 'pending' | 'action_required'
+  const [activeTab, setActiveTab] = useState('all');
+
+  // Search filter query
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Selected scheme for the right-hand requirements checker
+  const [selectedSchemeId, setSelectedSchemeId] = useState('pmegp');
+
+  // Interactive UI modals & dropdown state
+  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [selectedDocForView, setSelectedDocForView] = useState(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isDigiLockerModalOpen, setIsDigiLockerModalOpen] = useState(false);
+  const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
+  const [isGuidanceModalOpen, setIsGuidanceModalOpen] = useState(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+
+  // Upload Form state
+  const [uploadTargetDocId, setUploadTargetDocId] = useState('address');
+  const [uploadSelectedFile, setUploadSelectedFile] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // DigiLocker pull state
+  const [digiLockerStep, setDigiLockerStep] = useState('aadhaar'); // 'aadhaar' | 'otp' | 'fetching' | 'success'
+  const [digiLockerOtp, setDigiLockerOtp] = useState('482910');
+  const [isFetchingDigiLocker, setIsFetchingDigiLocker] = useState(false);
+
+  // Drag and drop state for right-hand dropzone
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  // Reminder settings state
+  const [reminderFrequency, setReminderFrequency] = useState('monthly');
+  const [reminderEmail, setReminderEmail] = useState('hemang@example.com');
+
+  // Toast notification state
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const fileInputRef = useRef(null);
+  const modalFileInputRef = useRef(null);
+
+  // Sync documents to localStorage on changes
+  useEffect(() => {
+    saveDocumentsToStorage(documents);
+  }, [documents]);
+
+  // Close open dropdown menu when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.doc-actions-cell')) {
+        setActiveMenuId(null);
+      }
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  // Show a temporary toast message
+  const triggerToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  // Counts for tabs & progress
+  const verifiedDocs = documents.filter((d) => d.status === 'verified');
+  const pendingDocs = documents.filter((d) => d.status === 'under_review');
+  const actionDocs = documents.filter((d) => d.status === 'action_required');
+
+  const totalCount = documents.length;
+  const verifiedCount = verifiedDocs.length;
+  const pendingCount = pendingDocs.length;
+  const actionCount = actionDocs.length;
+
+  // Completed or submitted documents (Verified + Under Review = 7/8 = 87.5% -> 88%)
+  const completedCount = verifiedCount + pendingCount;
+  const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // Filter documents based on active tab & live search query
+  const filteredDocuments = documents.filter((doc) => {
+    let matchesTab = true;
+    if (activeTab === 'verified') matchesTab = doc.status === 'verified';
+    if (activeTab === 'pending') matchesTab = doc.status === 'under_review';
+    if (activeTab === 'action_required') matchesTab = doc.status === 'action_required';
+
+    if (!matchesTab) return false;
+
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      doc.name.toLowerCase().includes(query) ||
+      doc.purpose.toLowerCase().includes(query) ||
+      doc.category.toLowerCase().includes(query) ||
+      (doc.docNumber && doc.docNumber.toLowerCase().includes(query)) ||
+      (doc.schemesList && doc.schemesList.some((s) => s.toLowerCase().includes(query)))
+    );
+  });
+
+  // Icon renderer per document type
+  const renderDocIcon = (iconType) => {
+    switch (iconType) {
+      case 'id-card':
+        return <UserCheck size={19} />;
+      case 'credit-card':
+        return <CreditCard size={19} />;
+      case 'certificate':
+        return <Award size={19} />;
+      case 'scroll':
+        return <ScrollText size={19} />;
+      case 'home':
+        return <Home size={19} />;
+      case 'bank':
+        return <Landmark size={19} />;
+      case 'image':
+        return <ImageIcon size={19} />;
+      case 'map-pin':
+        return <MapPin size={19} />;
+      default:
+        return <FileText size={19} />;
+    }
+  };
+
+  // Handle open upload modal (optionally targeting a specific document like 'address')
+  const handleOpenUploadModal = (docId = 'address') => {
+    setUploadTargetDocId(docId);
+    setUploadSelectedFile(null);
+    setUploadProgress(0);
+    setIsUploading(false);
+    setIsUploadModalOpen(true);
+  };
+
+  // Open DigiLocker sync modal
+  const handleOpenDigiLockerModal = () => {
+    setDigiLockerStep('aadhaar');
+    setIsDigiLockerModalOpen(true);
+  };
+
+  // Simulate DigiLocker sync
+  const handleExecuteDigiLockerSync = () => {
+    setIsFetchingDigiLocker(true);
+    setDigiLockerStep('fetching');
+
+    setTimeout(() => {
+      setIsFetchingDigiLocker(false);
+      setDigiLockerStep('success');
+
+      // Update address proof to verified
+      setDocuments((prevDocs) =>
+        prevDocs.map((doc) => {
+          if (doc.id === 'address') {
+            return {
+              ...doc,
+              status: 'verified',
+              statusLabel: 'Verified',
+              source: 'DigiLocker (Discom)',
+              validity: 'Valid (Bill dated 15 Sep 2026)',
+              uploadedOn: 'Today, 10:55 AM',
+              fileType: 'PDF',
+              fileSize: '1.1 MB',
+              docNumber: 'DISCOM/GJ/BILL-99482',
+              issuer: 'Gujarat State Electricity Distribution Co.',
+            };
+          }
+          return doc;
+        })
+      );
+
+      triggerToast('DigiLocker sync complete! Address Proof verified.');
+    }, 1400);
+  };
+
+  // Handle file drop on the right-side dropzone
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      handleProcessDirectUpload(file);
+    }
+  };
+
+  // Process uploaded file
+  const handleProcessDirectUpload = (file, targetId = null) => {
+    const targetDocId = targetId || uploadTargetDocId || (actionDocs.length > 0 ? actionDocs[0].id : 'address');
+
+    setIsUploading(true);
+    setUploadProgress(20);
+
+    const interval = setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsUploading(false);
+          setIsUploadModalOpen(false);
+
+          const todayStr = '18 Sep 2026';
+          setDocuments((prevDocs) =>
+            prevDocs.map((doc) => {
+              if (doc.id === targetDocId) {
+                return {
+                  ...doc,
+                  status: 'verified',
+                  statusLabel: 'Verified',
+                  source: 'Self Uploaded (OCR Verified)',
+                  validity: 'Verified for Schemes',
+                  uploadedOn: todayStr,
+                  fileType: file.name.split('.').pop().toUpperCase() || 'PDF',
+                  fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+                  docNumber: `DOC-VERIFIED-${Math.floor(1000 + Math.random() * 9000)}`,
+                };
+              }
+              return doc;
+            })
+          );
+
+          triggerToast(`Document "${file.name}" uploaded and verified successfully!`);
+          return 100;
+        }
+        return prev + 25;
+      });
+    }, 200);
+  };
+
+  // Handle Modal Upload Submit
+  const handleModalUploadSubmit = (e) => {
+    e.preventDefault();
+    if (!uploadSelectedFile) {
+      triggerToast('Please select a file to upload');
+      return;
+    }
+    handleProcessDirectUpload(uploadSelectedFile, uploadTargetDocId);
+  };
+
+  // Handle Set Reminder Submit
+  const handleSaveReminder = (e) => {
+    e.preventDefault();
+    setIsReminderModalOpen(false);
+    triggerToast(`Reminder configured for ${reminderEmail} (${reminderFrequency})!`);
+  };
+
+  // Handle Delete Document
+  const handleDeleteDoc = (docId) => {
+    setActiveMenuId(null);
+    setDocuments((prev) =>
+      prev.map((doc) => {
+        if (doc.id === docId) {
+          return {
+            ...doc,
+            status: 'action_required',
+            statusLabel: 'Action Required',
+            uploadedOn: '-',
+            fileSize: '-',
+            source: 'Pending Verification',
+            validity: 'Pending Upload',
+          };
+        }
+        return doc;
+      })
+    );
+    triggerToast('Document removed. Status updated to Action Required.');
+  };
+
+  // Radial progress calculations for 88%
+  const radius = 22;
+  const strokeWidth = 4.5;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (completionPercentage / 100) * circumference;
+
+  // Selected scheme checklist for right-hand widget
+  const currentScheme = SCHEMES_CHECKLIST.find((s) => s.id === selectedSchemeId) || SCHEMES_CHECKLIST[0];
+
   return (
     <PageContainer>
-      <div className="page-placeholder">
-        <div className="page-placeholder-header">
-          <h1 className="font-h1">My Documents</h1>
-          <p className="font-body">Upload, manage, and verify documents required for government schemes.</p>
-        </div>
-        <div className="page-placeholder-card">
-          <div className="placeholder-badge-row">
-            <span className="badge badge-success">Foundation Ready</span>
-            <span className="badge badge-saffron">Route: /documents</span>
+      <div className="documents-page-wrapper">
+        {/* Toast Notification Alert */}
+        {toastMessage && (
+          <div className="docs-toast" role="status">
+            <CheckCircle2 size={17} color="#A6F4C5" />
+            <span>{toastMessage}</span>
           </div>
-          <p className="font-body-large">
-            Document management interface with upload dropzone, status badges (Verified, Under Review, Action Required), and completion meter will be integrated in the subsequent implementation step.
-          </p>
+        )}
+
+        {/* ------------------------------------------------------------------
+            1. TOP 4-METRIC HEALTH OVERVIEW STRIP (Instant Health & Status Glance)
+            ------------------------------------------------------------------ */}
+        <section className="docs-metrics-row" aria-label="Document Portfolio Metrics">
+          {/* Card 1: Verified */}
+          <div className="docs-metric-card">
+            <div className="metric-card-icon-box green" aria-hidden="true">
+              <ShieldCheck size={19} />
+            </div>
+            <div className="metric-card-info">
+              <div className="metric-card-top-line">
+                <span className="metric-card-val">{verifiedCount}</span>
+                <span className="metric-card-total">/ {totalCount}</span>
+              </div>
+              <span className="metric-card-title">Verified Documents</span>
+              <span className="metric-card-sub">100% DBT & Subsidy Ready</span>
+            </div>
+          </div>
+
+          {/* Card 2: Under Review */}
+          <div className="docs-metric-card">
+            <div className="metric-card-icon-box amber" aria-hidden="true">
+              <Clock size={19} />
+            </div>
+            <div className="metric-card-info">
+              <div className="metric-card-top-line">
+                <span className="metric-card-val">{pendingCount}</span>
+                <span className="metric-card-total">Pending</span>
+              </div>
+              <span className="metric-card-title">Under Review</span>
+              <span className="metric-card-sub">Review by SDM in progress</span>
+            </div>
+          </div>
+
+          {/* Card 3: Action Required */}
+          <div className="docs-metric-card">
+            <div className="metric-card-icon-box red" aria-hidden="true">
+              <AlertTriangle size={19} />
+            </div>
+            <div className="metric-card-info">
+              <div className="metric-card-top-line">
+                <span className="metric-card-val">{actionCount}</span>
+                <span className="metric-card-total">Required</span>
+              </div>
+              <span className="metric-card-title">Action Required</span>
+              <span className="metric-card-sub">{actionCount > 0 ? 'Address proof missing' : 'All documents submitted'}</span>
+            </div>
+          </div>
+
+          {/* Card 4: DigiLocker Linked */}
+          <div className="docs-metric-card">
+            <div className="metric-card-icon-box blue" aria-hidden="true">
+              <CheckCircle2 size={19} />
+            </div>
+            <div className="metric-card-info">
+              <div className="metric-card-top-line">
+                <span className="metric-card-val">Connected</span>
+              </div>
+              <span className="metric-card-title">DigiLocker Linked</span>
+              <span className="metric-card-sub">Instant scheme auto-verification</span>
+            </div>
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------------------
+            2. TOOLBAR: FILTER TABS, LIVE SEARCH & QUICK ACTIONS
+            ------------------------------------------------------------------ */}
+        <div className="docs-toolbar-row">
+          <nav className="docs-filter-bar" aria-label="Filter documents by status">
+            <button
+              type="button"
+              className={`docs-filter-tab ${activeTab === 'all' ? 'active' : ''}`}
+              onClick={() => setActiveTab('all')}
+            >
+              <span className="docs-tab-icon tab-icon-all">
+                <FileText size={14} />
+                <span className="tab-icon-badge-dot" />
+              </span>
+              <span>All Documents ({totalCount})</span>
+            </button>
+
+            <button
+              type="button"
+              className={`docs-filter-tab ${activeTab === 'verified' ? 'active' : ''}`}
+              onClick={() => setActiveTab('verified')}
+            >
+              <span className="docs-tab-icon tab-icon-verified">
+                <span className="badge-check-circle" style={{ width: '13px', height: '13px' }}>
+                  <Check size={8} strokeWidth={3.5} />
+                </span>
+              </span>
+              <span>Verified ({verifiedCount})</span>
+            </button>
+
+            <button
+              type="button"
+              className={`docs-filter-tab ${activeTab === 'pending' ? 'active' : ''}`}
+              onClick={() => setActiveTab('pending')}
+            >
+              <span className="docs-tab-icon tab-icon-pending">
+                <Clock size={14} color="#E98A00" />
+              </span>
+              <span>Pending ({pendingCount})</span>
+            </button>
+
+            <button
+              type="button"
+              className={`docs-filter-tab ${activeTab === 'action_required' ? 'active' : ''}`}
+              onClick={() => setActiveTab('action_required')}
+            >
+              <span className="docs-tab-icon tab-icon-action">
+                <AlertTriangle size={14} color="#D92D20" />
+              </span>
+              <span>Action Required ({actionCount})</span>
+            </button>
+          </nav>
+
+          {/* Right-aligned Actions & Search */}
+          <div className="docs-toolbar-actions">
+            {/* Live Search Box */}
+            <div className="docs-search-box" role="search">
+              <Search size={14} color="#667085" aria-hidden="true" />
+              <input
+                type="search"
+                className="docs-search-input"
+                placeholder="Search documents..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search documents"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#667085', padding: 0 }}
+                  aria-label="Clear search"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="btn-digilocker-sync"
+              onClick={handleOpenDigiLockerModal}
+              title="Connect and pull documents directly from DigiLocker"
+            >
+              <CloudLightning size={15} />
+              <span>Pull from DigiLocker</span>
+              <span className="digilocker-tag">GOV</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn-export-dossier"
+              onClick={() => setIsDossierModalOpen(true)}
+              title="Export complete verified document package"
+            >
+              <FileDown size={14} />
+              <span>Export Dossier</span>
+            </button>
+          </div>
         </div>
+
+        {/* ------------------------------------------------------------------
+            4. TWO-COLUMN MAIN GRID (Table on Left, Tools on Right)
+            ------------------------------------------------------------------ */}
+        <div className="docs-main-grid">
+          {/* Left Column: Documents Table */}
+          <div className="docs-left-column">
+            <div className="docs-table-card">
+              <div className="docs-table-wrapper">
+                <table className="docs-table" aria-label="Applicant Documents Table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Document</th>
+                      <th scope="col">Purpose & Scheme Impact</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Uploaded & Validity</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDocuments.map((doc) => (
+                      <tr key={doc.id}>
+                        {/* Column 1: Document */}
+                        <td>
+                          <div className="doc-info-cell">
+                            <div className={`doc-type-icon-box icon-${doc.iconColor}`} aria-hidden="true">
+                              {renderDocIcon(doc.iconType)}
+                            </div>
+                            <div className="doc-text-group">
+                              <span className="doc-name">{doc.name}</span>
+                              <div className="doc-category-line">
+                                <span className="doc-category">{doc.category}</span>
+                                {doc.source && (
+                                  <span className={`doc-source-tag ${doc.source.includes('Self') ? 'self' : ''}`}>
+                                    {doc.source}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Column 2: Purpose & Scheme Impact */}
+                        <td className="doc-purpose-cell">
+                          <div className="doc-purpose-title">{doc.purpose}</div>
+                          {doc.requiredForSchemes && (
+                            <span className="doc-scheme-count-tag">
+                              Required for {doc.requiredForSchemes} schemes
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Column 3: Status Badge */}
+                        <td>
+                          {doc.status === 'verified' && (
+                            <span className="doc-status-badge status-verified">
+                              <span className="badge-check-circle" aria-hidden="true">
+                                <Check size={8} strokeWidth={3.5} />
+                              </span>
+                              <span>Verified</span>
+                            </span>
+                          )}
+                          {doc.status === 'under_review' && (
+                            <span className="doc-status-badge status-review">
+                              <Clock size={12} />
+                              <span>Under Review</span>
+                            </span>
+                          )}
+                          {doc.status === 'action_required' && (
+                            <span className="doc-status-badge status-action">
+                              <AlertTriangle size={12} />
+                              <span>Action Required</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Column 4: Uploaded On & Validity */}
+                        <td className="doc-date-cell">
+                          <div>{doc.uploadedOn}</div>
+                          {doc.validity && (
+                            <div className="doc-validity-text">{doc.validity}</div>
+                          )}
+                        </td>
+
+                        {/* Column 5: Actions */}
+                        <td>
+                          <div className="doc-actions-cell">
+                            {doc.status === 'action_required' ? (
+                              <button
+                                type="button"
+                                className="btn-doc-upload"
+                                onClick={() => handleOpenUploadModal(doc.id)}
+                              >
+                                Upload
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn-doc-view"
+                                onClick={() => setSelectedDocForView(doc)}
+                              >
+                                View
+                              </button>
+                            )}
+
+                            {/* Three dots contextual menu */}
+                            <button
+                              type="button"
+                              className="btn-doc-more"
+                              aria-label={`Options for ${doc.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuId(activeMenuId === doc.id ? null : doc.id);
+                              }}
+                            >
+                              <MoreVertical size={15} />
+                            </button>
+
+                            {/* Dropdown Menu */}
+                            {activeMenuId === doc.id && (
+                              <div className="doc-menu-dropdown" role="menu">
+                                <button
+                                  type="button"
+                                  className="doc-menu-item"
+                                  onClick={() => {
+                                    setSelectedDocForView(doc);
+                                    setActiveMenuId(null);
+                                  }}
+                                >
+                                  <Eye size={13} />
+                                  <span>View Details</span>
+                                </button>
+                                {doc.status !== 'action_required' && (
+                                  <button
+                                    type="button"
+                                    className="doc-menu-item"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      triggerToast(`Downloading verified copy of ${doc.name}...`);
+                                    }}
+                                  >
+                                    <Download size={13} />
+                                    <span>Download Copy</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="doc-menu-item"
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    handleOpenUploadModal(doc.id);
+                                  }}
+                                >
+                                  <RefreshCw size={13} />
+                                  <span>Replace Document</span>
+                                </button>
+                                {doc.status !== 'action_required' && (
+                                  <button
+                                    type="button"
+                                    className="doc-menu-item danger"
+                                    onClick={() => handleDeleteDoc(doc.id)}
+                                  >
+                                    <Trash2 size={13} />
+                                    <span>Remove Document</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {filteredDocuments.length === 0 && (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '32px 20px', color: '#667085' }}>
+                          No documents match "{searchQuery}" under this filter.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Upload, Dropzone, Completion, Scheme Checker */}
+          <div className="docs-right-column">
+            {/* Top Primary Upload Button */}
+            <button
+              type="button"
+              className="btn-upload-new-doc"
+              onClick={() => handleOpenUploadModal('address')}
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              <span>Upload New Document</span>
+            </button>
+
+            {/* Drag & Drop Upload Zone */}
+            <div
+              className={`docs-dropzone-card ${isDraggingOver ? 'drag-active' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+              aria-label="Drag and drop files to upload"
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleProcessDirectUpload(e.target.files[0]);
+                  }
+                }}
+              />
+              <div className="dropzone-icon-circle">
+                <UploadCloud size={19} />
+              </div>
+              <span className="dropzone-title">Drag & drop files here</span>
+              <span className="dropzone-sub">or click to browse</span>
+              <span className="dropzone-formats">Supported formats: PDF, JPG, PNG (Max 5 MB)</span>
+            </div>
+
+            {/* Document Completion Card */}
+            <div className="docs-completion-card">
+              <h3 className="completion-card-title">Document Completion</h3>
+              <div className="completion-progress-body">
+                {/* Radial Gauge */}
+                <div className="completion-gauge-container">
+                  <svg className="completion-gauge-svg" viewBox="0 0 54 54" aria-hidden="true">
+                    <circle
+                      className="completion-gauge-bg"
+                      cx="27"
+                      cy="27"
+                      r={radius}
+                      strokeWidth={strokeWidth}
+                      fill="none"
+                    />
+                    <circle
+                      className="completion-gauge-fill"
+                      cx="27"
+                      cy="27"
+                      r={radius}
+                      strokeWidth={strokeWidth}
+                      fill="none"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={strokeDashoffset}
+                    />
+                  </svg>
+                  <span className="completion-gauge-label">{completionPercentage}%</span>
+                </div>
+
+                {/* Linear Meta */}
+                <div className="completion-meta">
+                  <span className="completion-status-text">
+                    {completedCount} of {totalCount} documents verified
+                  </span>
+                  <div className="completion-linear-track" aria-hidden="true">
+                    <div
+                      className="completion-linear-fill"
+                      style={{ width: `${completionPercentage}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Scheme Document Eligibility Quick Checker Widget */}
+            <div className="docs-scheme-checker-card">
+              <div className="checker-header">
+                <h4 className="checker-title">Scheme Readiness Checker</h4>
+                <Sparkles size={13} color="#005B50" />
+              </div>
+
+              <select
+                className="checker-select"
+                value={selectedSchemeId}
+                onChange={(e) => setSelectedSchemeId(e.target.value)}
+                aria-label="Select scheme to check document readiness"
+              >
+                {SCHEMES_CHECKLIST.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+
+              <div className="checker-item-list">
+                {currentScheme.requiredDocIds.map((reqId) => {
+                  const doc = documents.find((d) => d.id === reqId);
+                  const isReady = doc && doc.status === 'verified';
+                  const isReview = doc && doc.status === 'under_review';
+                  return (
+                    <div key={reqId} className="checker-doc-item">
+                      <span className="checker-doc-name">{doc ? doc.name : reqId}</span>
+                      {isReady && (
+                        <span className="checker-status-ok">
+                          <Check size={12} strokeWidth={3} />
+                          <span>Ready</span>
+                        </span>
+                      )}
+                      {isReview && (
+                        <span style={{ color: '#C56A00', fontWeight: 600, fontSize: '11px' }}>
+                          In Review
+                        </span>
+                      )}
+                      {!isReady && !isReview && (
+                        <button
+                          type="button"
+                          className="checker-status-missing"
+                          style={{ background: 'none', border: 'none', padding: 0 }}
+                          onClick={() => handleOpenUploadModal(reqId)}
+                        >
+                          Upload
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------------------
+            5. FULL-WIDTH 3-COLUMN BOTTOM UTILITY DECK (Perfect systematic balance!)
+            ------------------------------------------------------------------ */}
+        <section className="docs-bottom-deck" aria-label="Document Support and Protection Services">
+          {/* Deck Card 1: Reminder */}
+          <div className="deck-card reminder">
+            <div className="deck-card-top">
+              <div className="deck-icon-circle teal" aria-hidden="true">
+                <FileCheck size={18} />
+              </div>
+              <div className="deck-title-group">
+                <h4 className="deck-title">Keep Documents Updated</h4>
+                <p className="deck-desc">
+                  Set automated alerts for document renewals and scheme application deadlines.
+                </p>
+              </div>
+            </div>
+            <div className="deck-card-bottom">
+              <button
+                type="button"
+                className="btn-deck-action"
+                onClick={() => setIsReminderModalOpen(true)}
+              >
+                <Bell size={13} />
+                <span>Set Reminder</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Deck Card 2: Guidance */}
+          <div className="deck-card guidance">
+            <div className="deck-card-top">
+              <div className="deck-icon-circle blue" aria-hidden="true">
+                <Lightbulb size={18} />
+              </div>
+              <div className="deck-title-group">
+                <h4 className="deck-title">Need Scheme Guidance?</h4>
+                <p className="deck-desc">
+                  Not sure which certificates apply to your caste, income, or state? We guide you.
+                </p>
+              </div>
+            </div>
+            <div className="deck-card-bottom">
+              <button
+                type="button"
+                className="deck-link-action"
+                onClick={() => setIsGuidanceModalOpen(true)}
+              >
+                <span>Get Guidance</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          </div>
+
+          {/* Deck Card 3: Security & Trust */}
+          <div className="deck-card security">
+            <div className="deck-card-top">
+              <div className="deck-icon-circle amber" aria-hidden="true">
+                <ShieldCheck size={18} />
+              </div>
+              <div className="deck-title-group">
+                <h4 className="deck-title">Government-Grade Security</h4>
+                <p className="deck-desc">
+                  AES-256 bit encrypted storage adhering to India's DPDP Act and MeitY norms.
+                </p>
+              </div>
+            </div>
+            <div className="deck-card-bottom">
+              <button
+                type="button"
+                className="deck-link-action"
+                onClick={() => setIsSecurityModalOpen(true)}
+              >
+                <span>Learn More</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------------------
+            6. MODAL: DIGILOCKER PULL INTEGRATION
+            ------------------------------------------------------------------ */}
+        {isDigiLockerModalOpen && (
+          <div className="docs-modal-backdrop" onClick={() => setIsDigiLockerModalOpen(false)}>
+            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="docs-modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CloudLightning size={19} color="#0056B3" />
+                  <h3 className="docs-modal-title">Pull Verified Documents from DigiLocker</h3>
+                </div>
+                <button
+                  type="button"
+                  className="docs-modal-close-btn"
+                  onClick={() => setIsDigiLockerModalOpen(false)}
+                  aria-label="Close modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="docs-modal-body">
+                <div className="digilocker-modal-badge">
+                  <ShieldCheck size={19} color="#0056B3" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '12.5px', color: '#003366', lineHeight: 1.4 }}>
+                    Official Government of India DigiLocker API integration. Documents fetched are legally valid under IT Act 2000.
+                  </span>
+                </div>
+
+                <div className="digilocker-step-box">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#475467' }}>
+                      Linked Aadhaar / Mobile ID
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#087443', fontWeight: 600 }}>● Connected</span>
+                  </div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#10243A' }}>
+                    XXXX-XXXX-4921 (Hemang Singh)
+                  </div>
+                </div>
+
+                {digiLockerStep === 'aadhaar' && (
+                  <div>
+                    <p style={{ fontSize: '12.5px', color: '#475467', marginBottom: '10px' }}>
+                      DigiLocker will locate your Electricity Bill / Address Verification from Gujarat State Electricity Distribution Co.:
+                    </p>
+                    <div style={{ padding: '9px 12px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC', fontSize: '12.5px' }}>
+                      <strong>Pending Document to Pull:</strong> Address Proof (Latest Electricity Bill)
+                    </div>
+                  </div>
+                )}
+
+                {digiLockerStep === 'otp' && (
+                  <div className="docs-form-group">
+                    <label className="docs-form-label" htmlFor="digi-otp">
+                      Enter 6-Digit DigiLocker OTP sent to registered mobile
+                    </label>
+                    <input
+                      id="digi-otp"
+                      type="text"
+                      className="docs-form-input"
+                      value={digiLockerOtp}
+                      onChange={(e) => setDigiLockerOtp(e.target.value)}
+                    />
+                    <span style={{ fontSize: '11px', color: '#667085' }}>
+                      Auto-filled demo OTP for Hackathon evaluation.
+                    </span>
+                  </div>
+                )}
+
+                {digiLockerStep === 'fetching' && (
+                  <div style={{ textAlign: 'center', padding: '18px 0' }}>
+                    <div className="completion-linear-track" style={{ marginBottom: '10px' }}>
+                      <div className="completion-linear-fill" style={{ width: '80%' }} />
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#005B50' }}>
+                      Connecting to State Electricity Board via DigiLocker...
+                    </span>
+                  </div>
+                )}
+
+                {digiLockerStep === 'success' && (
+                  <div style={{ textAlign: 'center', padding: '14px', backgroundColor: '#ECFDF3', borderRadius: '7px', border: '1px solid #A6F4C5' }}>
+                    <CheckCircle2 size={28} color="#087443" style={{ margin: '0 auto 6px' }} />
+                    <h4 style={{ color: '#087443', fontSize: '14.5px', fontWeight: 700 }}>
+                      Address Proof Successfully Verified!
+                    </h4>
+                    <p style={{ color: '#166534', fontSize: '12px', marginTop: '3px' }}>
+                      Your document completion has reached 100%. All schemes are now unlocked.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="docs-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setIsDigiLockerModalOpen(false)}
+                >
+                  {digiLockerStep === 'success' ? 'Done' : 'Cancel'}
+                </button>
+
+                {digiLockerStep === 'aadhaar' && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setDigiLockerStep('otp')}
+                  >
+                    Request OTP
+                  </button>
+                )}
+
+                {digiLockerStep === 'otp' && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleExecuteDigiLockerSync}
+                  >
+                    Authorize & Fetch
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------
+            7. MODAL: UPLOAD NEW / REPLACE DOCUMENT
+            ------------------------------------------------------------------ */}
+        {isUploadModalOpen && (
+          <div className="docs-modal-backdrop" onClick={() => setIsUploadModalOpen(false)}>
+            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="docs-modal-header">
+                <h3 className="docs-modal-title">Upload Document</h3>
+                <button
+                  type="button"
+                  className="docs-modal-close-btn"
+                  onClick={() => setIsUploadModalOpen(false)}
+                  aria-label="Close modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <form onSubmit={handleModalUploadSubmit}>
+                <div className="docs-modal-body">
+                  <div className="docs-form-group">
+                    <label className="docs-form-label" htmlFor="doc-select">
+                      Select Document Type
+                    </label>
+                    <select
+                      id="doc-select"
+                      className="docs-form-select"
+                      value={uploadTargetDocId}
+                      onChange={(e) => setUploadTargetDocId(e.target.value)}
+                    >
+                      {documents.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.purpose})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div
+                    className="modal-dropzone"
+                    onClick={() => modalFileInputRef.current?.click()}
+                  >
+                    <input
+                      type="file"
+                      ref={modalFileInputRef}
+                      style={{ display: 'none' }}
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          setUploadSelectedFile(e.target.files[0]);
+                        }
+                      }}
+                    />
+                    <UploadCloud size={24} color="#005B50" style={{ margin: '0 auto 5px' }} />
+                    <p style={{ fontWeight: 600, color: '#10243A', fontSize: '13px' }}>
+                      Click to choose document file
+                    </p>
+                    <p style={{ fontSize: '11.5px', color: '#667085', marginTop: '2px' }}>
+                      PDF, JPG, or PNG up to 5 MB
+                    </p>
+                  </div>
+
+                  {uploadSelectedFile && (
+                    <div className="selected-file-badge">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <FileText size={14} color="#1264D6" />
+                        <span style={{ fontWeight: 600 }}>{uploadSelectedFile.name}</span>
+                        <span style={{ color: '#667085' }}>
+                          ({(uploadSelectedFile.size / 1024).toFixed(0)} KB)
+                        </span>
+                      </div>
+                      <Check size={15} color="#087443" />
+                    </div>
+                  )}
+
+                  {isUploading && (
+                    <div style={{ marginTop: '7px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '3px', fontWeight: 600 }}>
+                        <span>Uploading & Verifying...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="completion-linear-track">
+                        <div className="completion-linear-fill" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="docs-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => setIsUploadModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={isUploading}
+                  >
+                    {isUploading ? 'Uploading...' : 'Confirm Upload'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------
+            8. MODAL: VIEW DOCUMENT DETAILS & PREVIEW
+            ------------------------------------------------------------------ */}
+        {selectedDocForView && (
+          <div className="docs-modal-backdrop" onClick={() => setSelectedDocForView(null)}>
+            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="docs-modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <div className={`doc-type-icon-box icon-${selectedDocForView.iconColor}`} style={{ width: '30px', height: '30px' }}>
+                    {renderDocIcon(selectedDocForView.iconType)}
+                  </div>
+                  <div>
+                    <h3 className="docs-modal-title" style={{ fontSize: '14.5px' }}>{selectedDocForView.name}</h3>
+                    <span style={{ fontSize: '11.5px', color: '#667085' }}>{selectedDocForView.category}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="docs-modal-close-btn"
+                  onClick={() => setSelectedDocForView(null)}
+                  aria-label="Close modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="docs-modal-body">
+                {/* Official Verification Watermark Record */}
+                <div className="doc-watermark-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#667085', fontWeight: 600 }}>
+                        Official Verification Record
+                      </span>
+                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#10243A', marginTop: '2px' }}>
+                        {selectedDocForView.name}
+                      </h4>
+                    </div>
+                    {selectedDocForView.status === 'verified' && (
+                      <span className="doc-status-badge status-verified">
+                        <Check size={10} strokeWidth={3} />
+                        <span>Verified</span>
+                      </span>
+                    )}
+                    {selectedDocForView.status === 'under_review' && (
+                      <span className="doc-status-badge status-review">
+                        <Clock size={11} />
+                        <span>Under Review</span>
+                      </span>
+                    )}
+                    {selectedDocForView.status === 'action_required' && (
+                      <span className="doc-status-badge status-action">
+                        <AlertTriangle size={11} />
+                        <span>Action Required</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="doc-preview-meta-grid">
+                    <div>
+                      <div className="meta-field-label">Document Number</div>
+                      <div className="meta-field-val">{selectedDocForView.docNumber}</div>
+                    </div>
+                    <div>
+                      <div className="meta-field-label">Primary Purpose</div>
+                      <div className="meta-field-val">{selectedDocForView.purpose}</div>
+                    </div>
+                    <div>
+                      <div className="meta-field-label">Issuing Authority</div>
+                      <div className="meta-field-val">{selectedDocForView.issuer}</div>
+                    </div>
+                    <div>
+                      <div className="meta-field-label">Uploaded On</div>
+                      <div className="meta-field-val">{selectedDocForView.uploadedOn}</div>
+                    </div>
+                    <div>
+                      <div className="meta-field-label">File Type & Size</div>
+                      <div className="meta-field-val">{selectedDocForView.fileType} • {selectedDocForView.fileSize}</div>
+                    </div>
+                    <div>
+                      <div className="meta-field-label">Verification Source</div>
+                      <div className="meta-field-val">{selectedDocForView.source || 'Digital India'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '9px 11px', borderRadius: '7px', display: 'flex', gap: '7px', alignItems: 'center' }}>
+                  <ShieldCheck size={17} color="#15803D" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '11.5px', color: '#166534' }}>
+                    Digitally signed & verified for seamless direct subsidy DBT scheme verification.
+                  </span>
+                </div>
+              </div>
+
+              <div className="docs-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setSelectedDocForView(null)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    triggerToast(`Downloading verified copy of ${selectedDocForView.name}...`);
+                    setSelectedDocForView(null);
+                  }}
+                >
+                  <Download size={13} />
+                  <span>Download Document</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------
+            9. MODAL: EXPORT CITIZEN DOSSIER BUNDLE
+            ------------------------------------------------------------------ */}
+        {isDossierModalOpen && (
+          <div className="docs-modal-backdrop" onClick={() => setIsDossierModalOpen(false)}>
+            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="docs-modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <FileDown size={19} color="#005B50" />
+                  <h3 className="docs-modal-title">Export Citizen Document Dossier</h3>
+                </div>
+                <button
+                  type="button"
+                  className="docs-modal-close-btn"
+                  onClick={() => setIsDossierModalOpen(false)}
+                  aria-label="Close modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="docs-modal-body">
+                <p style={{ fontSize: '12.5px', color: '#475467', lineHeight: 1.45 }}>
+                  Generate an official compiled PDF dossier containing all your verified documents with individual QR verification codes for physical submissions at CSC Centers or Bank Branches.
+                </p>
+
+                <div style={{ background: '#F8F9FA', borderRadius: '7px', padding: '11px', border: '1px solid #E4E7EC' }}>
+                  <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#344054', marginBottom: '7px' }}>
+                    Included in this Dossier ({verifiedCount} Verified Documents):
+                  </div>
+                  <ul style={{ fontSize: '11.5px', color: '#475467', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {verifiedDocs.map((d) => (
+                      <li key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Check size={11} color="#087443" />
+                        <span>{d.name} ({d.purpose})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="docs-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setIsDossierModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setIsDossierModalOpen(false);
+                    triggerToast('Generating official Citizen Dossier PDF package...');
+                  }}
+                >
+                  <Download size={13} />
+                  <span>Download Complete Dossier</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------
+            10. MODAL: SET DOCUMENT REMINDERS
+            ------------------------------------------------------------------ */}
+        {isReminderModalOpen && (
+          <div className="docs-modal-backdrop" onClick={() => setIsReminderModalOpen(false)}>
+            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="docs-modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <Bell size={17} color="#005B50" />
+                  <h3 className="docs-modal-title">Document Update Reminders</h3>
+                </div>
+                <button
+                  type="button"
+                  className="docs-modal-close-btn"
+                  onClick={() => setIsReminderModalOpen(false)}
+                  aria-label="Close modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveReminder}>
+                <div className="docs-modal-body">
+                  <p style={{ fontSize: '12.5px', color: '#475467', lineHeight: 1.45 }}>
+                    Never miss a scheme application deadline or document renewal date. Choose how often you'd like to receive notifications:
+                  </p>
+
+                  <div className="docs-form-group">
+                    <label className="docs-form-label" htmlFor="reminder-freq">
+                      Reminder Frequency
+                    </label>
+                    <select
+                      id="reminder-freq"
+                      className="docs-form-select"
+                      value={reminderFrequency}
+                      onChange={(e) => setReminderFrequency(e.target.value)}
+                    >
+                      <option value="monthly">Monthly Checkup (Recommended)</option>
+                      <option value="quarterly">Quarterly Review</option>
+                      <option value="before_expiry">30 Days Before Document Expiry</option>
+                      <option value="scheme_deadline">When New Scheme Requires Renewal</option>
+                    </select>
+                  </div>
+
+                  <div className="docs-form-group">
+                    <label className="docs-form-label" htmlFor="reminder-email">
+                      Notification Email
+                    </label>
+                    <input
+                      id="reminder-email"
+                      type="email"
+                      className="docs-form-input"
+                      value={reminderEmail}
+                      onChange={(e) => setReminderEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="docs-modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => setIsReminderModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Set Reminder
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------
+            11. MODAL: SCHEME GUIDANCE
+            ------------------------------------------------------------------ */}
+        {isGuidanceModalOpen && (
+          <div className="docs-modal-backdrop" onClick={() => setIsGuidanceModalOpen(false)}>
+            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="docs-modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <Lightbulb size={17} color="#1264D6" />
+                  <h3 className="docs-modal-title">Scheme Document Guidance</h3>
+                </div>
+                <button
+                  type="button"
+                  className="docs-modal-close-btn"
+                  onClick={() => setIsGuidanceModalOpen(false)}
+                  aria-label="Close modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="docs-modal-body">
+                <p style={{ fontSize: '12.5px', color: '#475467' }}>
+                  Each scheme has tailored document eligibility requirements. Here is a quick reference guide:
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  <div style={{ padding: '9px 11px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC' }}>
+                    <div style={{ fontWeight: 600, color: '#10243A', fontSize: '13px' }}>PMEGP & MSME Schemes</div>
+                    <div style={{ fontSize: '11.5px', color: '#475467', marginTop: '2px' }}>
+                      Requires Aadhaar, PAN Card, Category/Caste Certificate, and Project Site Address Proof.
+                    </div>
+                  </div>
+                  <div style={{ padding: '9px 11px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC' }}>
+                    <div style={{ fontWeight: 600, color: '#10243A', fontSize: '13px' }}>PM Kisan & Agriculture Support</div>
+                    <div style={{ fontSize: '11.5px', color: '#475467', marginTop: '2px' }}>
+                      Requires Bank Account Details (DBT enabled), Land Record / Domicile, and Aadhaar.
+                    </div>
+                  </div>
+                  <div style={{ padding: '9px 11px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC' }}>
+                    <div style={{ fontWeight: 600, color: '#10243A', fontSize: '13px' }}>Education & Scholarships</div>
+                    <div style={{ fontSize: '11.5px', color: '#475467', marginTop: '2px' }}>
+                      Requires Income Certificate (annual validity), Marksheets, Domicile, and Photo.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="docs-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setIsGuidanceModalOpen(false)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setIsGuidanceModalOpen(false);
+                    navigate('/discover');
+                  }}
+                >
+                  <span>Explore Schemes</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------
+            12. MODAL: DATA SECURITY & PROTECTION
+            ------------------------------------------------------------------ */}
+        {isSecurityModalOpen && (
+          <div className="docs-modal-backdrop" onClick={() => setIsSecurityModalOpen(false)}>
+            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="docs-modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <ShieldCheck size={17} color="#D48B28" />
+                  <h3 className="docs-modal-title">Government-Grade Data Protection</h3>
+                </div>
+                <button
+                  type="button"
+                  className="docs-modal-close-btn"
+                  onClick={() => setIsSecurityModalOpen(false)}
+                  aria-label="Close modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="docs-modal-body">
+                <p style={{ fontSize: '12.5px', color: '#475467', lineHeight: 1.45 }}>
+                  FIN complies with India's Digital Personal Data Protection (DPDP) Act and follows stringent national encryption standards:
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  <div style={{ display: 'flex', gap: '9px', alignItems: 'flex-start' }}>
+                    <CheckCircle2 size={14} color="#087443" style={{ marginTop: '2px', flexShrink: 0 }} />
+                    <div>
+                      <strong style={{ fontSize: '12.5px', color: '#10243A' }}>AES-256 Bit Encryption:</strong>
+                      <p style={{ fontSize: '11.5px', color: '#667085', marginTop: '1px' }}>
+                        All uploaded documents are encrypted both at rest and in transit.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '9px', alignItems: 'flex-start' }}>
+                    <CheckCircle2 size={14} color="#087443" style={{ marginTop: '2px', flexShrink: 0 }} />
+                    <div>
+                      <strong style={{ fontSize: '12.5px', color: '#10243A' }}>Masked Identifiers:</strong>
+                      <p style={{ fontSize: '11.5px', color: '#667085', marginTop: '1px' }}>
+                        Sensitive numbers like Aadhaar and PAN are automatically masked to safeguard privacy.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '9px', alignItems: 'flex-start' }}>
+                    <CheckCircle2 size={14} color="#087443" style={{ marginTop: '2px', flexShrink: 0 }} />
+                    <div>
+                      <strong style={{ fontSize: '12.5px', color: '#10243A' }}>Strict Access Control:</strong>
+                      <p style={{ fontSize: '11.5px', color: '#667085', marginTop: '1px' }}>
+                        Only authorized nodal verification officers can access documents during active scheme applications.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="docs-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setIsSecurityModalOpen(false)}
+                >
+                  Understood
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </PageContainer>
   );

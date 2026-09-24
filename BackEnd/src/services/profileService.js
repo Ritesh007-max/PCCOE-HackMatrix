@@ -6,7 +6,7 @@ const REQUIRED_FIELDS = [
     'annual_income', 'dob', 'applicant_type'
 ];
 
-const OPTIONAL_FIELDS = ['land_acres', 'is_disabled'];
+const OPTIONAL_FIELDS = ['land_acres', 'is_disabled', 'dob', 'income', 'applicant_type'];
 
 const calculateProfileCompletion = (profile) => {
     let completed = 0;
@@ -26,6 +26,7 @@ const sanitizeProfile = (profile) => {
         full_name: profile.full_name,
         phone: profile.phone,
         age: profile.age,
+        dob: profile.dob,
         gender: profile.gender,
         category: profile.category,
         state: profile.state,
@@ -33,6 +34,8 @@ const sanitizeProfile = (profile) => {
         area_type: profile.area_type,
         occupation: profile.occupation,
         annual_income: profile.annual_income,
+        income: profile.income,
+        applicant_type: profile.applicant_type,
         land_acres: profile.land_acres,
         is_disabled: profile.is_disabled,
         dob: profile.dob,
@@ -95,6 +98,9 @@ const createProfile = async (userId, userMetadata = {}) => {
         area_type: null,
         occupation: null,
         annual_income: null,
+        income: userMetadata.income || null,
+        dob: userMetadata.dob || null,
+        applicant_type: userMetadata.applicant_type || null,
         land_acres: 0,
         is_disabled: false,
         dob: null,

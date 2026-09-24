@@ -839,19 +839,6 @@ export default function SignupPage({ initialMode = 'signup' }) {
         </section>
       </main>
 
-      {/* Bottom Left Floating Glass Badge */}
-      <div className="signup-glass-badge">
-        <div className="signup-glass-icon-wrap">
-          <Users size={18} />
-        </div>
-        <div className="signup-glass-text">
-          Empowered citizens
-          <br />
-          build a stronger India.
-        </div>
-        <ArrowRight size={16} className="signup-glass-arrow" />
-      </div>
-
       {/* Modals Dialog (Terms of Service, Privacy Policy, Forgot Password) */}
       {activeModal && (
         <div
