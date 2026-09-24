@@ -34,8 +34,8 @@ const updateProfile = async (req, res, next) => {
         const allowedFields = [
             'full_name', 'phone', 'age', 'gender', 'category',
             'state', 'district', 'area_type', 'occupation',
-            'annual_income', 'land_acres', 'is_disabled',
-            'dob', 'applicant_type', 'income'
+            'annual_income', 'income', 'land_acres', 'is_disabled',
+            'dob', 'applicant_type'
         ];
 
         const filteredUpdates = {};
@@ -52,6 +52,19 @@ const updateProfile = async (req, res, next) => {
             });
         }
 
+        // Handle dob and derive age if age is not explicitly passed
+        if (filteredUpdates.dob && filteredUpdates.age === undefined) {
+            const birthDate = new Date(filteredUpdates.dob);
+            if (!isNaN(birthDate.getTime())) {
+                const diffMs = Date.now() - birthDate.getTime();
+                const ageDt = new Date(diffMs);
+                const calcAge = Math.abs(ageDt.getUTCFullYear() - 1970);
+                if (calcAge >= 1 && calcAge <= 120) {
+                    filteredUpdates.age = calcAge;
+                }
+            }
+        }
+
         if (filteredUpdates.age !== undefined) {
             const age = parseInt(filteredUpdates.age, 10);
             if (isNaN(age) || age < 1 || age > 120) {
@@ -61,6 +74,23 @@ const updateProfile = async (req, res, next) => {
                 });
             }
             filteredUpdates.age = age;
+        }
+
+        // Normalize income strings like "Below ₹1 Lakh" or numeric
+        if (filteredUpdates.income !== undefined && filteredUpdates.annual_income === undefined) {
+            const incomeMap = {
+                'Below ₹1 Lakh': 80000,
+                '₹1 Lakh - ₹2.5 Lakhs': 180000,
+                '₹2.5 Lakhs - ₹5 Lakhs': 350000,
+                '₹5 Lakhs - ₹10 Lakhs': 750000,
+                'Above ₹10 Lakhs': 1200000,
+            };
+            if (incomeMap[filteredUpdates.income]) {
+                filteredUpdates.annual_income = incomeMap[filteredUpdates.income];
+            } else {
+                const numericOnly = parseFloat(String(filteredUpdates.income).replace(/[^0-9.]/g, ''));
+                if (!isNaN(numericOnly)) filteredUpdates.annual_income = numericOnly;
+            }
         }
 
         if (filteredUpdates.annual_income !== undefined) {
@@ -120,51 +150,44 @@ const updateProfile = async (req, res, next) => {
             });
         }
 
-        const validOccupations = ['farmer', 'msme', 'student', 'salaried', 'self-employed', 'unemployed', 'Farmer / Agriculture', 'Self Employed / MSME', 'Salaried Employee', 'Unemployed / Job Seeker', 'Other', 'Student'];
-        if (filteredUpdates.occupation && !validOccupations.includes(filteredUpdates.occupation)) {
-            return res.status(400).json({
-                success: false,
-                message: `Occupation must be one of: ${validOccupations.join(', ')}`
-            });
-        }
-        // Normalize occupation to lowercase backend format
+        // Normalize and validate occupation
         if (filteredUpdates.occupation) {
-            const occupationMap = {
-                'Farmer / Agriculture': 'farmer',
-                'Self Employed / MSME': 'self-employed',
-                'Salaried Employee': 'salaried',
-                'Unemployed / Job Seeker': 'unemployed',
-                'Other': 'unemployed',
-                'Student': 'student',
-                'farmer': 'farmer',
-                'msme': 'msme',
+            const occMap = {
                 'student': 'student',
+                'farmer': 'farmer',
+                'farmer / agriculture': 'farmer',
+                'agriculture': 'farmer',
+                'self employed / msme': 'msme',
+                'small enterprise (msme)': 'msme',
+                'msme': 'msme',
+                'salaried employee': 'salaried',
                 'salaried': 'salaried',
                 'self-employed': 'self-employed',
-                'unemployed': 'unemployed'
+                'unemployed / job seeker': 'unemployed',
+                'unemployed': 'unemployed',
+                'other': 'other'
             };
-            filteredUpdates.occupation = occupationMap[filteredUpdates.occupation] || filteredUpdates.occupation.toLowerCase();
+            const lowerOcc = String(filteredUpdates.occupation).trim().toLowerCase();
+            filteredUpdates.occupation = occMap[lowerOcc] || occMap[filteredUpdates.occupation] || 'other';
         }
 
-        const validGenders = ['male', 'female', 'other', 'prefer_not_to_say', 'Male', 'Female', 'Transgender', 'Prefer not to say'];
-        if (filteredUpdates.gender && !validGenders.includes(filteredUpdates.gender)) {
-            return res.status(400).json({
-                success: false,
-                message: `Gender must be one of: ${validGenders.join(', ')}`
-            });
+        const validOccupations = ['farmer', 'msme', 'student', 'salaried', 'self-employed', 'unemployed', 'other'];
+        if (filteredUpdates.occupation && !validOccupations.includes(filteredUpdates.occupation)) {
+            filteredUpdates.occupation = 'other';
         }
+
+        // Normalize and validate gender
         if (filteredUpdates.gender) {
             const genderMap = {
-                'Male': 'male',
-                'Female': 'female',
-                'Transgender': 'other',
-                'Prefer not to say': 'prefer_not_to_say',
                 'male': 'male',
                 'female': 'female',
+                'transgender': 'other',
                 'other': 'other',
+                'prefer not to say': 'prefer_not_to_say',
                 'prefer_not_to_say': 'prefer_not_to_say'
             };
-            filteredUpdates.gender = genderMap[filteredUpdates.gender] || filteredUpdates.gender.toLowerCase();
+            const lowerGen = String(filteredUpdates.gender).trim().toLowerCase();
+            filteredUpdates.gender = genderMap[lowerGen] || 'prefer_not_to_say';
         }
 
         // Validate dob (date of birth)
@@ -177,7 +200,6 @@ const updateProfile = async (req, res, next) => {
                         message: 'Date of birth must be a valid date (YYYY-MM-DD)'
                     });
                 }
-                // Optional: ensure not future date
                 if (dobDate > new Date()) {
                     return res.status(400).json({
                         success: false,
