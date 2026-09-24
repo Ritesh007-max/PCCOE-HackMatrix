@@ -52,6 +52,10 @@ export default function SignupPage({ initialMode = 'signup' }) {
   const inactivityReason = new URLSearchParams(location.search).get('reason');
   const isInactivityRedirect = inactivityReason === 'timeout' || inactivityReason === 'inactivity';
   const [isSignIn, setIsSignIn] = useState(initialMode === 'signin' || isInactivityRedirect);
+  const requestedPath = location.state?.from;
+  const postAuthPath = isSignIn && requestedPath
+    ? `${requestedPath.pathname || '/dashboard'}${requestedPath.search || ''}${requestedPath.hash || ''}`
+    : '/dashboard';
   const [inactivityNotice] = useState(
     isInactivityRedirect
       ? 'For your security, your session was automatically ended due to inactivity. Please sign in again to continue.'
@@ -222,7 +226,7 @@ export default function SignupPage({ initialMode = 'signup' }) {
 
       setSuccessMsg(isSignIn ? 'Welcome back! Redirecting...' : 'Account created successfully! Redirecting...');
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate(postAuthPath, { replace: true });
       }, 700);
     } catch (err) {
       setErrorMsg(err.message || 'An unexpected error occurred. Please try again.');
@@ -237,8 +241,9 @@ export default function SignupPage({ initialMode = 'signup' }) {
         user: { id: 'google-oauth-demo', email: 'citizen@gov.in' },
         accessToken: 'google-oauth-demo-token',
         fallbackName: 'Google User',
+        developmentBypass: DEV_AUTH_BYPASS_ENABLED,
       });
-      navigate('/dashboard');
+      navigate(postAuthPath, { replace: true });
     }, 700);
   };
 
@@ -252,8 +257,9 @@ export default function SignupPage({ initialMode = 'signup' }) {
       accessToken: 'development-only-bypass-token',
       refreshToken: 'development-only-bypass-refresh-token',
       fallbackName: name,
+      developmentBypass: true,
     });
-    navigate('/dashboard');
+    navigate(postAuthPath, { replace: true });
   };
 
   const handleForgotSubmit = (e) => {

@@ -1,6 +1,5 @@
-import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { getStoredToken } from '../../services/authService';
+import { getStoredToken, isDevelopmentAuthBypassSession } from '../../services/authService';
 
 /**
  * ProtectedRoute
@@ -11,7 +10,7 @@ export default function ProtectedRoute({ children }) {
   const location = useLocation();
   const token = getStoredToken();
 
-  if (!token) {
+  if (!token && !isDevelopmentAuthBypassSession()) {
     // Preserve requested path for redirect after login if needed
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
