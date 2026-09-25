@@ -58,7 +58,7 @@ const getApplicantId = async (userId) => {
 };
 
 const getOwnedApplication = async (applicationId, userId) => {
-    if (!applicationId) throw httpError(400, 'applicationId is required');
+    if (!applicationId) return null;
     const applicantId = await getApplicantId(userId);
     const { data, error } = await supabaseAdmin
         .from('applications')
@@ -112,11 +112,20 @@ const fetchDocumentRow = async (id, userId) => {
 const uploadDocument = async ({ file, documentType, applicationId, userId }) => {
     if (!file) throw httpError(400, 'Document file is required');
     if (!userId) throw httpError(400, 'User ID is required');
-    const application = await getOwnedApplication(applicationId, userId);
+    
+    // Ensure applicant profile exists
+    await getApplicantId(userId);
+
+    let application = null;
+    if (applicationId) {
+        application = await getOwnedApplication(applicationId, userId);
+    }
+
     const type = normalizeDocumentType(documentType);
     const id = crypto.randomUUID();
     const extension = path.extname(path.basename(file.originalname || '')).slice(0, 16);
-    const storagePath = `${application.id}/${id}${extension}`;
+    const folder = application ? application.id : `vault_${userId}`;
+    const storagePath = `${folder}/${id}${extension}`;
 
     const { error: storageError } = await supabaseAdmin.storage
         .from(DOCUMENTS_BUCKET)
@@ -130,7 +139,7 @@ const uploadDocument = async ({ file, documentType, applicationId, userId }) => 
         .from('documents')
         .insert({
             id,
-            application_id: application.id,
+            application_id: application ? application.id : null,
             document_type: type,
             file_name: path.basename(file.originalname),
             file_url: storagePath,
@@ -156,13 +165,16 @@ const extractDocument = async () => {
 const listDocuments = async (userId) => {
     if (!userId) throw httpError(400, 'User ID is required');
     const applicationIds = await getOwnedApplicationIds(userId);
-    if (applicationIds.length === 0) return [];
+    
+    // Fetch docs attached to applications or general vault docs
+    let query = supabaseAdmin.from('documents').select('*');
+    if (applicationIds.length > 0) {
+        query = query.or(`application_id.in.(${applicationIds.join(',')}),application_id.is.null`);
+    } else {
+        query = query.is('application_id', null);
+    }
 
-    const { data, error } = await supabaseAdmin
-        .from('documents')
-        .select('*')
-        .in('application_id', applicationIds)
-        .order('uploaded_at', { ascending: false });
+    const { data, error } = await query.order('uploaded_at', { ascending: false });
     throwIfError(error);
     return (data || []).map((row) => mapDocument(row));
 };
