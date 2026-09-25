@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
 import { StandUpIndiaLogo, MudraLogo } from '../components/common/BrandAssets';
+import { fetchUserApplications, submitApplication } from '../services/applicationService';
 
 // Assets
 import ashokStambhOriginal from '../assets/ashok_stambh_original.png';
@@ -177,6 +178,7 @@ export default function ApplicationsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('latest');
+  const [applicationsList, setApplicationsList] = useState(INITIAL_APPLICATIONS);
 
   // Modal and menu states
   const [selectedApp, setSelectedApp] = useState(null);
@@ -186,6 +188,72 @@ export default function ApplicationsPage() {
   const [toastMessage, setToastMessage] = useState(null);
 
   const menuRef = useRef(null);
+
+  // Sync applications from backend API on mount
+  useEffect(() => {
+    const syncBackendApps = async () => {
+      try {
+        const backendApps = await fetchUserApplications();
+        if (backendApps && backendApps.length > 0) {
+          setApplicationsList((prevApps) => {
+            const merged = [...prevApps];
+            backendApps.forEach((bApp) => {
+              const existingIdx = merged.findIndex(
+                (a) => a.id === bApp.scheme_id || a.applicationId === bApp.id
+              );
+              const status = bApp.status || 'under_review';
+              const statusBadge = status === 'under_review' ? 'Under Review' :
+                status === 'approved' ? 'Approved' :
+                status === 'action_required' ? 'Action Required' :
+                status === 'draft' ? 'Draft' : 'Not Started';
+
+              if (existingIdx >= 0) {
+                merged[existingIdx] = {
+                  ...merged[existingIdx],
+                  status,
+                  statusBadge,
+                  appliedDate: bApp.submitted_at
+                    ? new Date(bApp.submitted_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : merged[existingIdx].appliedDate
+                };
+              } else {
+                merged.unshift({
+                  id: bApp.scheme_id || bApp.id,
+                  schemeTitle: bApp.scheme_name || 'Government Scheme',
+                  schemeSubtitle: 'Government of India Programme',
+                  applicationId: `FIN${String(bApp.id).slice(0, 8).toUpperCase()}`,
+                  appliedDate: bApp.submitted_at
+                    ? new Date(bApp.submitted_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : 'Today',
+                  rawDate: bApp.submitted_at ? bApp.submitted_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+                  benefitAmount: bApp.estimated_benefit ? `₹${Number(bApp.estimated_benefit).toLocaleString('en-IN')}` : '₹1,25,000',
+                  benefitSubtitle: 'Estimated Benefit',
+                  benefitNumeric: bApp.estimated_benefit || 125000,
+                  status,
+                  statusBadge,
+                  statusMessage: `Your application is ${statusBadge.toLowerCase()}.`,
+                  actionLabel: 'View Application',
+                  actionType: 'view',
+                  logoType: 'ashoka',
+                  submittedDocs: [],
+                  steps: [
+                    { label: 'Submitted', date: 'Today', status: 'completed' },
+                    { label: 'Verification', date: 'In Progress', status: 'current-green' },
+                    { label: 'Approval', date: '', status: 'upcoming' },
+                    { label: 'Disbursement', date: '', status: 'upcoming' }
+                  ]
+                });
+              }
+            });
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn('Backend applications sync notice:', err);
+      }
+    };
+    syncBackendApps();
+  }, []);
 
   // Close kebab dropdown when clicking outside
   useEffect(() => {
@@ -209,7 +277,7 @@ export default function ApplicationsPage() {
 
   // Filtered and sorted applications
   const filteredApplications = useMemo(() => {
-    return INITIAL_APPLICATIONS.filter((app) => {
+    return applicationsList.filter((app) => {
       // 1. Status Filter
       if (statusFilter !== 'all') {
         if (statusFilter === 'under_review' && app.status !== 'under_review') return false;

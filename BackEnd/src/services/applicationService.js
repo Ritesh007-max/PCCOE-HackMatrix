@@ -163,4 +163,88 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null) => {
     };
 };
 
-module.exports = { analyzeApplication };
+/**
+ * List applications for a user
+ */
+const listApplications = async (userId) => {
+    let profile = null;
+    try {
+        profile = await profileService.getProfileById(userId);
+    } catch (_) {}
+
+    if (!profile) return [];
+
+    const { data, error } = await supabaseAdmin
+        .from('applications')
+        .select('*')
+        .eq('applicant_id', profile.id)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.warn('Error fetching applications from DB:', error.message);
+        return [];
+    }
+    return data || [];
+};
+
+/**
+ * Create a new application
+ */
+const createApplication = async (userId, applicationData) => {
+    let profile = null;
+    try {
+        profile = await profileService.getProfileById(userId);
+    } catch (_) {}
+
+    if (!profile) throw httpError(400, 'Applicant profile required');
+
+    const newApp = {
+        applicant_id: profile.id,
+        scheme_id: applicationData.schemeId || applicationData.scheme_id,
+        status: 'under_review',
+        estimated_benefit: applicationData.benefitAmount ? Number(String(applicationData.benefitAmount).replace(/[^0-9]/g, '')) : null,
+        submitted_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabaseAdmin
+        .from('applications')
+        .insert(newApp)
+        .select()
+        .single();
+
+    if (error) throw httpError(500, error.message);
+    return data;
+};
+
+/**
+ * Get application by ID
+ */
+const getApplicationById = async (userId, applicationId) => {
+    let profile = null;
+    try {
+        profile = await profileService.getProfileById(userId);
+    } catch (_) {}
+
+    if (!profile) throw httpError(404, 'Profile not found');
+
+    const { data, error } = await supabaseAdmin
+        .from('applications')
+        .select('*')
+        .eq('id', applicationId)
+        .eq('applicant_id', profile.id)
+        .maybeSingle();
+
+    if (error) throw httpError(500, error.message);
+    if (!data) throw httpError(404, 'Application not found');
+    return data;
+};
+
+module.exports = {
+    analyzeApplication,
+    listApplications,
+    createApplication,
+    getApplicationById
+};
+

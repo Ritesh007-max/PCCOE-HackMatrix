@@ -14,7 +14,8 @@
   color: #FFFFFF;
   border: 1px solid rgba(0, 91, 80, 0.4);
   border-radius: 9999px;
-  padding: 6px 14px;
+  height: 38px;
+  padding: 0 14px;
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
@@ -22,6 +23,7 @@
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 2px 6px rgba(0, 91, 80, 0.2);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .navbar-ai-assistant-btn:hover {

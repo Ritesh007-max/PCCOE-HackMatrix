@@ -17,6 +17,8 @@ import {
   Sprout,
   X,
   Check,
+  Camera,
+  Trash2,
 } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
 import tricolorRibbon from '../assets/tricolor_ribbon_original.png';
@@ -53,6 +55,7 @@ export default function ProfilePage() {
         applicantType: stored?.applicantType || reg?.applicantType || 'Individual',
         dob: stored?.dob || reg?.dob || '',
         gender: stored?.gender || reg?.gender || '',
+        avatarUrl: stored?.avatarUrl || stored?.avatar_url || reg?.avatarUrl || '',
       };
     } catch (e) {
       return {
@@ -66,6 +69,7 @@ export default function ProfilePage() {
         applicantType: 'Individual',
         dob: '',
         gender: '',
+        avatarUrl: '',
       };
     }
   });
@@ -124,6 +128,7 @@ export default function ProfilePage() {
             applicantType: stored?.applicantType || reg.applicantType || prev.applicantType,
             dob: stored?.dob || reg.dob || prev.dob,
             gender: stored?.gender || reg.gender || prev.gender,
+            avatarUrl: stored?.avatarUrl || stored?.avatar_url || reg?.avatarUrl || prev.avatarUrl,
           };
           // Ensure stored user in localStorage is also populated with all registry fields
           if (stored) {
@@ -148,6 +153,7 @@ export default function ProfilePage() {
               income: b.income || b.annual_income ? String(b.income || b.annual_income) : prev.income,
               dob: b.dob || prev.dob,
               gender: b.gender || prev.gender,
+              avatarUrl: b.avatar_url || b.avatarUrl || prev.avatarUrl,
             };
             const currentStored = getStoredUser() || {};
             const fullObj = { ...currentStored, ...updatedFromBackend };
@@ -181,6 +187,7 @@ export default function ProfilePage() {
             applicantType: user.applicantType || reg?.applicantType || prev.applicantType,
             dob: user.dob || reg?.dob || prev.dob,
             gender: user.gender || reg?.gender || prev.gender,
+            avatarUrl: user.avatarUrl || user.avatar_url || prev.avatarUrl,
           }));
         }
       } catch (err) {}
@@ -198,6 +205,77 @@ export default function ProfilePage() {
   useEffect(() => {
     setCompletionPercentage(calculateCompletion(profileData));
   }, [profileData]);
+
+  // Avatar upload and remove handlers
+  const avatarInputRef = React.useRef(null);
+
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setToastMessage('Image size must be less than 5MB');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Url = event.target.result;
+      const updated = {
+        ...profileData,
+        avatarUrl: base64Url,
+      };
+      setProfileData(updated);
+
+      try {
+        const stored = getStoredUser() || {};
+        const fullUser = {
+          ...stored,
+          ...updated,
+          avatarUrl: base64Url,
+          avatar_url: base64Url,
+        };
+        localStorage.setItem('fin_user', JSON.stringify(fullUser));
+        saveRegisteredUser(fullUser);
+        window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: fullUser }));
+        updateBackendProfile({ avatar_url: base64Url }).catch(() => {});
+      } catch (err) {}
+
+      setToastMessage('Profile picture updated successfully!');
+      setTimeout(() => setToastMessage(''), 3000);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveAvatar = (e) => {
+    e.stopPropagation();
+    const updated = {
+      ...profileData,
+      avatarUrl: '',
+    };
+    setProfileData(updated);
+
+    try {
+      const stored = getStoredUser() || {};
+      const fullUser = {
+        ...stored,
+        ...updated,
+        avatarUrl: '',
+        avatar_url: '',
+      };
+      localStorage.setItem('fin_user', JSON.stringify(fullUser));
+      saveRegisteredUser(fullUser);
+      window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: fullUser }));
+      updateBackendProfile({ avatar_url: '' }).catch(() => {});
+    } catch (err) {}
+
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = '';
+    }
+    setToastMessage('Profile picture removed.');
+    setTimeout(() => setToastMessage(''), 3000);
+  };
 
   // Derive initials matching screenshot (HE for Hemang / Hemang Singh)
   const getInitials = (name) => {
@@ -344,8 +422,43 @@ export default function ProfilePage() {
           {/* Main Profile Info Card */}
           <div className="profile-hero-card">
             <div className="profile-identity-section">
-              <div className="profile-avatar-circle" aria-hidden="true">
-                {getInitials(profileData.fullName)}
+              <div className="profile-avatar-wrapper">
+                <div className="profile-avatar-circle" aria-hidden="true">
+                  {profileData.avatarUrl ? (
+                    <img
+                      src={profileData.avatarUrl}
+                      alt={profileData.fullName}
+                      className="profile-avatar-img"
+                    />
+                  ) : (
+                    getInitials(profileData.fullName)
+                  )}
+                </div>
+                <label
+                  className="profile-avatar-camera-btn"
+                  title="Upload profile picture"
+                  aria-label="Upload profile picture"
+                >
+                  <Camera size={15} />
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+                {profileData.avatarUrl && (
+                  <button
+                    type="button"
+                    className="profile-avatar-remove-btn"
+                    title="Remove profile picture"
+                    aria-label="Remove profile picture"
+                    onClick={handleRemoveAvatar}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
               <div className="profile-identity-details">
                 <h2 className="profile-applicant-name">{profileData.fullName}</h2>

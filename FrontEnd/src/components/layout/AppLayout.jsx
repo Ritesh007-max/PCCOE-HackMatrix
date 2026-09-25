@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import SessionTimeoutManager from '../common/SessionTimeoutManager';
@@ -58,23 +57,8 @@ export default function AppLayout() {
         isMinimized={isChatMinimized}
         onToggleMinimize={toggleMinimizeChat}
       />
-
-      {/* Floating Launcher Button (Image 2 Bottom-Left Reference) */}
-      {(!isChatOpen || isChatMinimized) && (
-        <div className="fin-floating-launcher">
-          <div className="fin-launcher-tooltip">Ask FIN</div>
-          <button
-            type="button"
-            className="fin-launcher-circle"
-            onClick={toggleChat}
-            aria-label="Ask FIN AI"
-            title="Ask FIN AI Assistant"
-          >
-            <Sparkles size={24} />
-          </button>
-        </div>
-      )}
     </div>
   );
 }
+
 

@@ -38,6 +38,7 @@ import {
 import PageContainer from '../components/layout/PageContainer';
 import { SCHEMES } from '../data/schemesData';
 import SchemeLogo from '../components/schemes/SchemeLogo';
+import { submitApplication } from '../services/applicationService';
 
 // Assets
 import ashokStambhVector from '../assets/ashok_stambh_vector.svg';
@@ -416,6 +417,16 @@ export default function SchemeDetailsPage() {
 
   const handleApplyClick = () => {
     setShowApplyModal(true);
+  };
+
+  const handleInitiateSubmit = async () => {
+    try {
+      await submitApplication({
+        schemeId: scheme.id,
+        scheme_name: scheme.title,
+        benefitAmount: subsidyAmount
+      }).catch((e) => console.warn('Application submit notice:', e));
+    } catch (_) {}
   };
 
   const handleSaveToggle = () => {
@@ -1703,6 +1714,7 @@ export default function SchemeDetailsPage() {
                   href={portalDetails.officialWebsite}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={handleInitiateSubmit}
                   style={{
                     flex: 1.4,
                     padding: '9px',
