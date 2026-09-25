@@ -52,9 +52,24 @@ const mapDocument = (row, signedUrl = null, { includeFileUrl = false } = {}) => 
 };
 
 const getApplicantId = async (userId) => {
-    const profile = await profileService.getProfileById(userId);
-    if (!profile) throw httpError(403, 'Create an applicant profile before attaching documents');
-    return profile.id;
+    let profile = null;
+    try {
+        profile = await profileService.getProfileById(userId);
+    } catch (_) { }
+
+    if (profile) return profile.id;
+
+    // Auto-ensure applicant profile row exists so user can upload documents immediately
+    try {
+        const { data, error } = await supabaseAdmin
+            .from('applicant_profiles')
+            .upsert({ id: userId }, { onConflict: 'id' })
+            .select('id')
+            .single();
+        if (!error && data) return data.id;
+    } catch (_) { }
+
+    return userId;
 };
 
 const getOwnedApplication = async (applicationId, userId) => {
