@@ -44,7 +44,13 @@ import {
   loadTicketsFromStorage,
   saveTicketsToStorage,
 } from '../data/documentsData';
+import {
+  fetchUserDocuments,
+  uploadDocumentFile,
+  deleteDocument
+} from '../services/documentService';
 import '../styles/documents.css';
+
 
 export default function DocumentsPage() {
   const navigate = useNavigate();
@@ -112,6 +118,43 @@ export default function DocumentsPage() {
   useEffect(() => {
     saveTicketsToStorage(tickets);
   }, [tickets]);
+
+  // Sync documents from backend API on mount
+  useEffect(() => {
+    const syncBackendDocs = async () => {
+      try {
+        const backendDocs = await fetchUserDocuments();
+        if (backendDocs && backendDocs.length > 0) {
+          setDocuments((prevDocs) => {
+            const merged = [...prevDocs];
+            backendDocs.forEach((bDoc) => {
+              const bType = String(bDoc.documentType || '').toLowerCase();
+              const idx = merged.findIndex(
+                (d) => d.id === bType || d.category?.toLowerCase() === bType
+              );
+              const status = bDoc.verificationStatus === 'VERIFIED' ? 'verified' :
+                bDoc.verificationStatus === 'REJECTED' ? 'action_required' : 'under_review';
+              if (idx >= 0) {
+                merged[idx] = {
+                  ...merged[idx],
+                  backendId: bDoc.id,
+                  status,
+                  statusLabel: status === 'verified' ? 'Verified' : status === 'action_required' ? 'Action Required' : 'Under Review',
+                  uploadedOn: bDoc.uploadedAt ? new Date(bDoc.uploadedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : merged[idx].uploadedOn,
+                  fileName: bDoc.fileName || merged[idx].fileName
+                };
+              }
+            });
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn('Backend document synchronization skipped:', err);
+      }
+    };
+    syncBackendDocs();
+  }, []);
+
 
   // Close open dropdown menu when clicking outside
   useEffect(() => {
@@ -277,11 +320,20 @@ export default function DocumentsPage() {
   };
 
   // Process uploaded file
-  const handleProcessDirectUpload = (file, targetId = null) => {
+  const handleProcessDirectUpload = async (file, targetId = null) => {
     const targetDocId = targetId || uploadTargetDocId || (actionDocs.length > 0 ? actionDocs[0].id : 'address');
 
     setIsUploading(true);
     setUploadProgress(20);
+
+    // Call real backend upload asynchronously
+    let uploadedBackendDoc = null;
+    try {
+      uploadedBackendDoc = await uploadDocumentFile(file, targetDocId).catch((err) => {
+        console.warn('Backend document upload notice:', err.message);
+        return null;
+      });
+    } catch (_) {}
 
     const interval = setInterval(() => {
       setUploadProgress((prev) => {
@@ -296,6 +348,7 @@ export default function DocumentsPage() {
               if (doc.id === targetDocId) {
                 return {
                   ...doc,
+                  backendId: uploadedBackendDoc?.id || doc.backendId,
                   status: 'verified',
                   statusLabel: 'Verified',
                   source: 'Self Uploaded (OCR Verified)',
@@ -336,13 +389,21 @@ export default function DocumentsPage() {
   };
 
   // Handle Delete Document
-  const handleDeleteDoc = (docId) => {
+  const handleDeleteDoc = async (docId) => {
     setActiveMenuId(null);
+    const targetDoc = documents.find((d) => d.id === docId);
+    if (targetDoc?.backendId) {
+      deleteDocument(targetDoc.backendId).catch((err) => {
+        console.warn('Backend document delete notice:', err.message);
+      });
+    }
+
     setDocuments((prev) =>
       prev.map((doc) => {
         if (doc.id === docId) {
           return {
             ...doc,
+            backendId: null,
             status: 'action_required',
             statusLabel: 'Action Required',
             uploadedOn: '-',
@@ -356,6 +417,7 @@ export default function DocumentsPage() {
     );
     triggerToast('Document removed. Status updated to Action Required.');
   };
+
 
   // Radial progress calculations for 88%
   const radius = 22;

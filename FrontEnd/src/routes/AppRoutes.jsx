@@ -35,7 +35,9 @@ export default function AppRoutes() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/discover" element={<DiscoverPage />} />
         <Route path="/schemes/:schemeId" element={<SchemeDetailsPage />} />
+        <Route path="/scheme/:schemeId" element={<SchemeDetailsPage />} />
         <Route path="/schemes/:schemeId/benefits" element={<SchemeBenefitsPage />} />
+        <Route path="/scheme/:schemeId/benefits" element={<SchemeBenefitsPage />} />
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />

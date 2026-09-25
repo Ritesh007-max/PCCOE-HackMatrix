@@ -24,4 +24,51 @@ const analyzeApplication = async (req, res, next) => {
     }
 };
 
-module.exports = { analyzeApplication };
+const listApplications = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const applications = await applicationService.listApplications(userId);
+        return res.status(200).json({
+            success: true,
+            count: applications.length,
+            data: applications
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const createApplication = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const application = await applicationService.createApplication(userId, req.body);
+        return res.status(201).json({
+            success: true,
+            message: 'Application submitted successfully',
+            data: application
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getApplicationById = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const application = await applicationService.getApplicationById(userId, req.params.id);
+        return res.status(200).json({
+            success: true,
+            data: application
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = {
+    analyzeApplication,
+    listApplications,
+    createApplication,
+    getApplicationById
+};
+
