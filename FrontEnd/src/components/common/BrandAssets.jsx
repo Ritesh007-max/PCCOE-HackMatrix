@@ -206,3 +206,106 @@ export function KisanSprout({ size = 28 }) {
     </svg>
   );
 }
+
+// Stand Up India Logo
+export function StandUpIndiaLogo({ width = 110, height = 36, className = '' }) {
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox="0 0 120 40"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-label="Stand Up India - Endeavour and Prosper"
+    >
+      {/* "standup" in deep blue bold */}
+      <text
+        x="2"
+        y="21"
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fontSize="17"
+        fontWeight="800"
+        fill="#0D3B82"
+        letterSpacing="-0.03em"
+      >
+        stand<tspan fill="#E11D48">up</tspan>
+      </text>
+
+      {/* "india" in deep blue with orange dot on i */}
+      <text
+        x="68"
+        y="21"
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fontSize="17"
+        fontWeight="800"
+        fill="#0D3B82"
+        letterSpacing="-0.03em"
+      >
+        india
+      </text>
+      {/* Saffron accent dot on second i */}
+      <circle cx="103.5" cy="10" r="1.6" fill="#F97316" />
+
+      {/* Endeavour and Prosper script subtitle */}
+      <text
+        x="3"
+        y="33"
+        fontFamily="Georgia, 'Times New Roman', serif"
+        fontSize="7.5"
+        fontStyle="italic"
+        fontWeight="600"
+        fill="#475467"
+        letterSpacing="0.01em"
+      >
+        Endeavour and Prosper
+      </text>
+    </svg>
+  );
+}
+
+// Mudra Yojana Circular Swirl Logo
+export function MudraLogo({ size = 38, className = '' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-label="MUDRA - Micro Units Development and Refinance Agency"
+    >
+      <defs>
+        <linearGradient id="mudraTealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#00695C" />
+          <stop offset="100%" stopColor="#0097A7" />
+        </linearGradient>
+        <linearGradient id="mudraOrangeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#F97316" />
+          <stop offset="100%" stopColor="#EA580C" />
+        </linearGradient>
+      </defs>
+
+      {/* Outer subtle circular glow */}
+      <circle cx="24" cy="24" r="22" fill="#F8FAFC" />
+
+      {/* Left Teal curved swirl petal */}
+      <path
+        d="M24 6 C14 6 7 14 7 24 C7 31 11 37 17 40 C14 36 13 31 15 26 C17 21 21 17 26 15 C28 14 26 10 24 6 Z"
+        fill="url(#mudraTealGrad)"
+      />
+
+      {/* Right Orange curved swirl petal */}
+      <path
+        d="M24 42 C34 42 41 34 41 24 C41 17 37 11 31 8 C34 12 35 17 33 22 C31 27 27 31 22 33 C20 34 22 38 24 42 Z"
+        fill="url(#mudraOrangeGrad)"
+      />
+
+      {/* Central dynamic core */}
+      <circle cx="24" cy="24" r="3.5" fill="#FFFFFF" />
+      <circle cx="24" cy="24" r="1.8" fill="#005B50" />
+    </svg>
+  );
+}
+
