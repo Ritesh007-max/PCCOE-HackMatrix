@@ -110,12 +110,13 @@ const getOrCreateDefaultApplication = async (userId) => {
     if (existingApp) return existingApp;
 
     // Auto-create a default application row for the user's document vault
+    const defaultSchemeUuid = crypto.randomUUID();
     const { data: newApp, error } = await supabaseAdmin
         .from('applications')
         .insert({
             applicant_id: applicantId,
-            scheme_id: 'pmegp', // default scheme context for vault documents
-            status: 'DRAFT'
+            scheme_id: defaultSchemeUuid,
+            status: 'draft'
         })
         .select('id')
         .single();
