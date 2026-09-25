@@ -75,7 +75,7 @@ export default function Sidebar({ isOpen, onClose }) {
           })}
         </nav>
 
-        {/* Lower Editorial Quote + Bharat Visual with 40-55px gap from navigation */}
+        {/* Lower Editorial Quote + Bharat Visual - IDENTICAL ON EVERY PAGE */}
         <div className="sidebar-bottom-section">
           {/* Middle Editorial Quote with clean line-by-line alignment */}
           <div className="sidebar-quote-container">

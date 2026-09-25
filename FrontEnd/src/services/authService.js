@@ -9,6 +9,31 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+/**
+ * Resilient API fetcher with automatic fallback to 127.0.0.1 and Vite dev proxy (/api/...)
+ */
+export async function safeApiFetch(endpointOrUrl, options = {}) {
+  const url = endpointOrUrl.startsWith('http') ? endpointOrUrl : `${API_BASE}${endpointOrUrl}`;
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    // If localhost failed (e.g. IPv6 binding, port mismatch or CORS policy), try 127.0.0.1
+    if (url.includes('localhost:5000')) {
+      try {
+        const fallbackUrl = url.replace('localhost:5000', '127.0.0.1:5000');
+        return await fetch(fallbackUrl, options);
+      } catch (err2) {
+        // Fallback to relative endpoint via Vite proxy (/api/...)
+        const relativeUrl = url.replace(/^http:\/\/(localhost|127\.0\.0\.1):5000/, '');
+        if (relativeUrl.startsWith('/api')) {
+          return await fetch(relativeUrl, options);
+        }
+      }
+    }
+    throw err;
+  }
+}
+
 const STORAGE_KEY_REGISTERED_USERS = 'fin_registered_users';
 const STORAGE_KEY_DEV_AUTH_BYPASS = 'fin_dev_auth_bypass';
 const DEV_AUTH_BYPASS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH_BYPASS === 'true';
@@ -199,7 +224,7 @@ export function resolveDisplayName(userOrName, email = '') {
  */
 export async function registerUser({ email, password, fullName, phone }) {
   try {
-    const res = await fetch(`${API_BASE}/api/users/register`, {
+    const res = await safeApiFetch('/api/users/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -244,7 +269,7 @@ export async function registerUser({ email, password, fullName, phone }) {
  */
 export async function loginUser({ email, password }) {
   try {
-    const res = await fetch(`${API_BASE}/api/users/login`, {
+    const res = await safeApiFetch('/api/users/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -416,7 +441,7 @@ export async function refreshAuthToken() {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/api/users/refresh`, {
+    const res = await safeApiFetch('/api/users/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
@@ -491,7 +516,7 @@ export async function authenticatedFetch(url, options = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  let response = await fetch(url, { ...options, headers });
+  let response = await safeApiFetch(url, { ...options, headers });
 
   // If unauthorized and we have a refresh token, try refreshing and retry
   if (response.status === 401 && !isDevelopmentAuthBypassSession() && getStoredRefreshToken()) {

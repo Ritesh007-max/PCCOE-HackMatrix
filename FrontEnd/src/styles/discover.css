@@ -1,0 +1,1010 @@
+/* ==========================================================================
+   DISCOVER GOVERNMENT SCHEMES - PIXEL-PERFECT STYLING
+   Matching Reference Design: Discover-2 (2).png
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Discover Page Container & Layout
+   -------------------------------------------------------------------------- */
+.discover-page-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   2. Top Hero Banner (India Gate Fade + Government Editorial Slogan)
+   -------------------------------------------------------------------------- */
+.discover-hero-banner {
+  background-color: #FFFFFF;
+  border: 1px solid #EAECF0;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 140px;
+  padding: 24px 32px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+
+.discover-banner-left {
+  position: relative;
+  z-index: 2;
+  max-width: 540px;
+}
+
+.discover-banner-title {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-weight: 700;
+  color: #10243A;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.discover-banner-subtitle {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  color: #475467;
+  line-height: 1.45;
+}
+
+/* Right side India Gate visual integration */
+.discover-banner-right {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 60%;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.discover-banner-visual-wrapper {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.discover-india-gate-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 36%;
+  opacity: 0.88;
+}
+
+/* Seamless soft gradient fade to the left */
+.discover-banner-fade-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #FFFFFF 0%, rgba(255, 255, 255, 0.94) 22%, rgba(255, 255, 255, 0.45) 58%, rgba(255, 255, 255, 0.05) 100%);
+}
+
+.discover-banner-editorial {
+  position: relative;
+  z-index: 3;
+  padding: 22px 32px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.discover-banner-quote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 15px;
+  font-weight: 500;
+  color: #344054;
+  max-width: 175px;
+  text-align: right;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.discover-banner-tricolor {
+  width: 52px;
+  height: 14px;
+  margin-top: 6px;
+  object-fit: contain;
+}
+
+/* --------------------------------------------------------------------------
+   3. Horizontal Category Pills Row
+   -------------------------------------------------------------------------- */
+.discover-categories-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px 2px;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE */
+}
+
+.discover-categories-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.category-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 15px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  background-color: #F0F4F8;
+  color: #10243A;
+  border: 1px solid #E2E8F0;
+  user-select: none;
+}
+
+.category-pill-btn:hover {
+  background-color: #E2E8F0;
+  border-color: #CBD5E1;
+}
+
+/* Active Category Pill: Solid Deep Government Green */
+.category-pill-btn.active {
+  background-color: #073B30;
+  color: #FFFFFF;
+  border-color: #073B30;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(7, 59, 48, 0.2);
+}
+
+.category-pill-btn.active:hover {
+  background-color: #052F26;
+  border-color: #052F26;
+}
+
+.category-pill-count {
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+/* --------------------------------------------------------------------------
+   4. Main Content Two-Column Grid (Schemes List & Sticky Filters Panel)
+   -------------------------------------------------------------------------- */
+.discover-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 24px;
+  align-items: start;
+}
+
+/* --------------------------------------------------------------------------
+   5. Schemes Results Header (Count & Sort By)
+   -------------------------------------------------------------------------- */
+.discover-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+
+.discover-count-text {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 500;
+  color: #344054;
+}
+
+.discover-sort-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.discover-sort-label {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: #667085;
+}
+
+.discover-sort-btn-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.discover-sort-select {
+  appearance: none;
+  background-color: #FFFFFF;
+  border: 1px solid #D0D5DD;
+  border-radius: 8px;
+  padding: 7px 32px 7px 32px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #10243A;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.discover-sort-select:hover {
+  border-color: #98A2B3;
+}
+
+.discover-sort-select:focus {
+  border-color: #005B50;
+  box-shadow: 0 0 0 3px rgba(0, 91, 80, 0.08);
+}
+
+.discover-sort-icon-left {
+  position: absolute;
+  left: 10px;
+  pointer-events: none;
+  color: #344054;
+}
+
+.discover-sort-chevron-right {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+  color: #667085;
+}
+
+/* --------------------------------------------------------------------------
+   6. Scheme Cards List
+   -------------------------------------------------------------------------- */
+.schemes-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scheme-card-item {
+  background-color: #FFFFFF;
+  border: 1px solid #EAECF0;
+  border-radius: 12px;
+  padding: 20px 22px;
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1.4fr) minmax(170px, 0.95fr) minmax(130px, auto);
+  gap: 18px;
+  align-items: stretch;
+  min-height: 140px;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+}
+
+.scheme-card-item:hover {
+  transform: translateY(-1px);
+  border-color: #D0D5DD;
+  box-shadow: 0 4px 14px rgba(16, 36, 58, 0.06);
+}
+
+/* Column 1: Logo Container */
+.scheme-card-logo-box {
+  width: 68px;
+  height: 68px;
+  border-radius: 10px;
+  background-color: #FAF8F5;
+  border: 1px solid #EFECE6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.scheme-card-logo-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Column 2: Information Block */
+.scheme-card-info-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.scheme-card-title {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 700;
+  color: #10243A;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin-bottom: 2px;
+}
+
+.scheme-card-subtitle {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #475467;
+  line-height: 1.35;
+  margin-bottom: 5px;
+}
+
+.scheme-card-description {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  color: #667085;
+  line-height: 1.45;
+  margin-bottom: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.scheme-card-tags-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scheme-card-tag-pill {
+  background-color: #EFF8FF;
+  color: #175CD3;
+  border: 1px solid #D1E9FF;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Column 3: Metrics (Match, Benefit, Condition) */
+.scheme-card-metrics-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding-left: 6px;
+}
+
+/* Match Badge */
+.scheme-match-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.scheme-match-badge.match-green {
+  background-color: #DCFCE7;
+  color: #15803D;
+}
+
+.scheme-match-badge.match-blue {
+  background-color: #E0F2FE;
+  color: #0284C7;
+}
+
+.scheme-match-badge.match-amber {
+  background-color: #FEF3C7;
+  color: #B45309;
+}
+
+.scheme-match-badge.match-orange {
+  background-color: #FFEDD5;
+  color: #C2410C;
+}
+
+/* Benefit Amount Box */
+.scheme-benefit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.scheme-benefit-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #10243A;
+}
+
+.scheme-benefit-icon {
+  color: #344054;
+  flex-shrink: 0;
+}
+
+.scheme-benefit-val {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 700;
+  color: #10243A;
+  letter-spacing: -0.015em;
+}
+
+.scheme-benefit-lbl {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  color: #667085;
+}
+
+/* Condition Match Status */
+.scheme-condition-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.condition-icon.success {
+  color: #16A34A;
+}
+
+.condition-text.success {
+  color: #10243A;
+  font-weight: 600;
+}
+
+.condition-icon.warning {
+  color: #EF4444;
+}
+
+.condition-text.warning {
+  color: #10243A;
+  font-weight: 600;
+}
+
+.condition-icon.amber {
+  color: #D97706;
+}
+
+.condition-text.amber {
+  color: #344054;
+}
+
+.condition-interactive-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #344054;
+  transition: color var(--transition-fast);
+}
+
+.condition-interactive-btn:hover {
+  color: #005B50;
+  text-decoration: underline;
+}
+
+/* Column 4: Actions (View Details & Bookmark) */
+.scheme-card-actions-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  height: 100%;
+}
+
+.btn-scheme-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+/* Primary Filled Action Button (Card 1 PMEGP) */
+.btn-scheme-view.primary {
+  background-color: #073B30;
+  color: #FFFFFF;
+  border: 1px solid #073B30;
+  box-shadow: 0 1px 2px rgba(7, 59, 48, 0.15);
+}
+
+.btn-scheme-view.primary:hover {
+  background-color: #052F26;
+  border-color: #052F26;
+}
+
+/* Secondary Outline Action Button (Other Cards) */
+.btn-scheme-view.outline {
+  background-color: #FFFFFF;
+  color: #073B30;
+  border: 1.5px solid #073B30;
+}
+
+.btn-scheme-view.outline:hover {
+  background-color: #F0FDF4;
+}
+
+.btn-scheme-bookmark {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background-color: #FFFFFF;
+  border: 1px solid #D0D5DD;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #667085;
+  transition: all var(--transition-fast);
+}
+
+.btn-scheme-bookmark:hover {
+  border-color: #98A2B3;
+  background-color: #F8F9FA;
+  color: #10243A;
+}
+
+.btn-scheme-bookmark.bookmarked {
+  border-color: #073B30;
+  background-color: #F0FDF4;
+  color: #073B30;
+}
+
+/* --------------------------------------------------------------------------
+   7. Right Sidebar Filters Box (Sticky, Faithful Design)
+   -------------------------------------------------------------------------- */
+.discover-filters-sidebar {
+  background-color: #FFFFFF;
+  border: 1px solid #EAECF0;
+  border-radius: 12px;
+  padding: 20px 20px 24px 20px;
+  position: sticky;
+  top: 86px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Filters Top Bar */
+.filters-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F2F4F7;
+}
+
+.filters-header-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filters-header-icon {
+  color: #10243A;
+}
+
+.filters-header-title {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 700;
+  color: #10243A;
+  margin: 0;
+}
+
+.filters-clear-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: #175CD3;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.filters-clear-btn:hover {
+  color: #1849A9;
+  text-decoration: underline;
+}
+
+/* Filter Section Groups */
+.filter-group-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-group-title {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+
+/* Filter Search Input */
+.filter-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.filter-search-icon {
+  position: absolute;
+  left: 10px;
+  color: #667085;
+  pointer-events: none;
+}
+
+.filter-search-input {
+  width: 100%;
+  background-color: #FFFFFF;
+  border: 1px solid #D0D5DD;
+  border-radius: 8px;
+  padding: 8px 12px 8px 34px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: #10243A;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.filter-search-input:focus {
+  border-color: #005B50;
+  box-shadow: 0 0 0 3px rgba(0, 91, 80, 0.08);
+}
+
+.filter-search-input::placeholder {
+  color: #98A2B3;
+}
+
+/* Checkbox Lists */
+.filter-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-checkbox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter-checkbox-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-checkbox-input {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #D0D5DD;
+  border-radius: 4px;
+  accent-color: #073B30;
+  cursor: pointer;
+}
+
+.filter-checkbox-name {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: #344054;
+  line-height: 1.2;
+}
+
+.filter-checkbox-count {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: #667085;
+}
+
+.filter-show-more-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #10243A;
+  cursor: pointer;
+  text-align: left;
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filter-show-more-btn:hover {
+  color: #005B50;
+}
+
+/* Eligibility Stack of Selects */
+.filter-select-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.filter-select {
+  width: 100%;
+  appearance: none;
+  background-color: #FFFFFF;
+  border: 1px solid #D0D5DD;
+  border-radius: 8px;
+  padding: 8px 30px 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: #475467;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.filter-select:hover {
+  border-color: #98A2B3;
+}
+
+.filter-select:focus {
+  border-color: #005B50;
+  box-shadow: 0 0 0 3px rgba(0, 91, 80, 0.08);
+}
+
+.filter-select.has-value {
+  color: #10243A;
+  font-weight: 500;
+}
+
+.filter-select-chevron {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+  color: #667085;
+}
+
+/* Apply Filters Button */
+.btn-apply-filters {
+  width: 100%;
+  background-color: #073B30;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
+  margin-top: 6px;
+  box-shadow: 0 1px 2px rgba(7, 59, 48, 0.2);
+}
+
+.btn-apply-filters:hover {
+  background-color: #052F26;
+  transform: translateY(-1px);
+}
+
+.btn-apply-filters:active {
+  transform: translateY(0);
+}
+
+/* --------------------------------------------------------------------------
+   8. Empty / No Results State
+   -------------------------------------------------------------------------- */
+.discover-empty-state {
+  background-color: #FFFFFF;
+  border: 1px solid #EAECF0;
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.discover-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #F2F4F7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #667085;
+}
+
+.discover-empty-title {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  color: #10243A;
+}
+
+.discover-empty-desc {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: #667085;
+  max-width: 360px;
+}
+
+/* --------------------------------------------------------------------------
+   9. Eligibility Modal Popup
+   -------------------------------------------------------------------------- */
+.eligibility-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(16, 36, 58, 0.55);
+  backdrop-filter: blur(3px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.eligibility-modal-card {
+  background-color: #FFFFFF;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(16, 36, 58, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.eligibility-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #EAECF0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.eligibility-modal-title {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 700;
+  color: #10243A;
+}
+
+.eligibility-modal-sub {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: #667085;
+  margin-top: 2px;
+}
+
+.eligibility-modal-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #667085;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.eligibility-modal-close-btn:hover {
+  background-color: #F2F4F7;
+  color: #10243A;
+}
+
+.eligibility-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.eligibility-checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.eligibility-checklist-text {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: #344054;
+  line-height: 1.45;
+}
+
+.eligibility-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #EAECF0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   10. Responsive Design Breakpoints
+   -------------------------------------------------------------------------- */
+@media (max-width: 1200px) {
+  .scheme-card-item {
+    grid-template-columns: 60px minmax(0, 1fr) minmax(150px, auto);
+    grid-template-rows: auto auto;
+  }
+  .scheme-card-actions-col {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 12px;
+    border-top: 1px dashed #EAECF0;
+  }
+}
+
+@media (max-width: 992px) {
+  .discover-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .discover-filters-sidebar {
+    position: static;
+    order: -1;
+  }
+  .discover-banner-right {
+    opacity: 0.35;
+  }
+}
+
+@media (max-width: 640px) {
+  .discover-banner-title {
+    font-size: 24px;
+  }
+  .scheme-card-item {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .scheme-card-logo-box {
+    width: 52px;
+    height: 52px;
+  }
+  .discover-banner-editorial {
+    display: none;
+  }
+}
