@@ -208,9 +208,10 @@ const getTopOpportunities = async (userProfile) => {
 
 const getDashboardData = async (userId) => {
     const profile = await profileService.getProfileById(userId);
-    const [docStats, appStats] = await Promise.all([
+    const [docStats, appStats, topOpportunities] = await Promise.all([
         getDocumentStats(profile?.id),
-        getApplicationStats(profile?.id)
+        getApplicationStats(profile?.id),
+        getTopOpportunities(profile)
     ]);
 
     let finalOpportunities = topOpportunities;

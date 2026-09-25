@@ -60,7 +60,7 @@ const validateLoginInput = ({ email, password }) => {
 
 const registerUser = async (req, res, next) => {
     try {
-        const email = req.body.email;
+        const email = req.body.email ? String(req.body.email).trim().toLowerCase() : '';
         const password = req.body.password !== undefined && req.body.password !== null ? String(req.body.password) : '';
         const fullName = req.body.fullName || req.body.name || req.body.full_name;
         const phone = req.body.phone || req.body.mobile;
@@ -102,7 +102,7 @@ const registerUser = async (req, res, next) => {
 
 const loginUser = async (req, res, next) => {
     try {
-        const email = req.body.email;
+        const email = req.body.email ? String(req.body.email).trim().toLowerCase() : '';
         const password = req.body.password !== undefined && req.body.password !== null ? String(req.body.password) : '';
 
         const validationErrors = validateLoginInput({ email, password });

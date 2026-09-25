@@ -8,12 +8,17 @@ const notFoundHandler = (req, res, next) => {
 
 // Global Error Handler
 const globalErrorHandler = (error, req, res, next) => {
-    console.error(error);
-
     const uploadErrorStatus = error.name === 'MulterError'
         ? (error.code === 'LIMIT_FILE_SIZE' ? 413 : 400)
         : undefined;
     const status = error.status || uploadErrorStatus || 500;
+
+    if (status >= 500) {
+        console.error(error);
+    } else {
+        console.warn(`[Client Error ${status}]: ${error.message}`);
+    }
+
     res.status(status).json({
         success: false,
         message: status >= 500
