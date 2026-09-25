@@ -52,9 +52,33 @@ const mapDocument = (row, signedUrl = null, { includeFileUrl = false } = {}) => 
 };
 
 const getApplicantId = async (userId) => {
-    const profile = await profileService.getProfileById(userId);
-    if (!profile) throw httpError(403, 'Create an applicant profile before attaching documents');
-    return profile.id;
+    let profile = null;
+    try {
+        profile = await profileService.getProfileById(userId);
+    } catch (_) { }
+
+    if (profile && profile.id) return profile.id;
+
+    // Auto-ensure applicant profile row exists so user can upload documents immediately
+    try {
+        const { data: userRow } = await supabaseAdmin
+            .from('users')
+            .select('full_name, email')
+            .eq('id', userId)
+            .maybeSingle();
+
+        const fallbackName = userRow?.full_name || (userRow?.email ? userRow.email.split('@')[0] : 'Applicant');
+
+        const { data, error } = await supabaseAdmin
+            .from('applicant_profiles')
+            .upsert({ id: userId, full_name: fallbackName }, { onConflict: 'id' })
+            .select('id')
+            .maybeSingle();
+
+        if (!error && data) return data.id;
+    } catch (_) { }
+
+    return userId;
 };
 
 const getOwnedApplication = async (applicationId, userId) => {
@@ -69,6 +93,39 @@ const getOwnedApplication = async (applicationId, userId) => {
     throwIfError(error);
     if (!data) throw httpError(404, 'Application not found');
     return data;
+};
+
+const getOrCreateDefaultApplication = async (userId) => {
+    const applicantId = await getApplicantId(userId);
+    
+    // Check if user already has an application
+    const { data: existingApp } = await supabaseAdmin
+        .from('applications')
+        .select('id')
+        .eq('applicant_id', applicantId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (existingApp) return existingApp;
+
+    // Auto-create a default application row for the user's document vault
+    const defaultSchemeUuid = crypto.randomUUID();
+    const { data: newApp, error } = await supabaseAdmin
+        .from('applications')
+        .insert({
+            applicant_id: applicantId,
+            scheme_id: defaultSchemeUuid,
+            status: 'draft'
+        })
+        .select('id')
+        .single();
+
+    if (error && !newApp) {
+        throwIfError(error);
+    }
+
+    return newApp;
 };
 
 const getOwnedApplicationIds = async (userId) => {
@@ -112,20 +169,18 @@ const fetchDocumentRow = async (id, userId) => {
 const uploadDocument = async ({ file, documentType, applicationId, userId }) => {
     if (!file) throw httpError(400, 'Document file is required');
     if (!userId) throw httpError(400, 'User ID is required');
-    
-    // Ensure applicant profile exists
-    await getApplicantId(userId);
 
     let application = null;
     if (applicationId) {
         application = await getOwnedApplication(applicationId, userId);
+    } else {
+        application = await getOrCreateDefaultApplication(userId);
     }
 
     const type = normalizeDocumentType(documentType);
     const id = crypto.randomUUID();
     const extension = path.extname(path.basename(file.originalname || '')).slice(0, 16);
-    const folder = application ? application.id : `vault_${userId}`;
-    const storagePath = `${folder}/${id}${extension}`;
+    const storagePath = `${application.id}/${id}${extension}`;
 
     const { error: storageError } = await supabaseAdmin.storage
         .from(DOCUMENTS_BUCKET)
@@ -139,7 +194,7 @@ const uploadDocument = async ({ file, documentType, applicationId, userId }) => 
         .from('documents')
         .insert({
             id,
-            application_id: application ? application.id : null,
+            application_id: application.id,
             document_type: type,
             file_name: path.basename(file.originalname),
             file_url: storagePath,
