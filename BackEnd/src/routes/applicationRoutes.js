@@ -1,9 +1,10 @@
 const express = require('express');
+const { analyzeApplication } = require('../controllers/applicationController');
+const authMiddleware = require('../middleware/authMiddleware');
+
 const router = express.Router();
 
-router.post('/analyze', (req, res) => {
-    // Placeholder for application analysis
-    res.json({ success: true, message: 'Application analyzed successfully', data: { analysis: 'Looks good' } });
-});
+// POST /api/applications/analyze — Requires authentication
+router.post('/analyze', authMiddleware, analyzeApplication);
 
 module.exports = router;
