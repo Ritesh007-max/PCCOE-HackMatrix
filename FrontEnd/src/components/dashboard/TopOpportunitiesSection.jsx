@@ -1,5 +1,4 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   Clock,
@@ -16,6 +15,8 @@ import msmeSvg from '../../assets/msme_logo_vector.svg';
 import kisanSvg from '../../assets/kisan_logo_vector.svg';
 
 export default function TopOpportunitiesSection({ opportunities = topOpportunities }) {
+  const navigate = useNavigate();
+
   const renderEmblem = (type) => {
     if (type === 'ashoka') {
       return (
@@ -54,9 +55,8 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
   };
 
   const renderStatusIcon = (type) => {
-    if (type === 'success') return <CheckCircle2 size={16} color="#087443" />;
     if (type === 'warning') return <AlertTriangle size={16} color="#C56A00" />;
-    return <ShieldCheck size={16} color="#087443" />;
+    return <CheckCircle2 size={16} color="#087443" />;
   };
 
   return (
@@ -77,7 +77,20 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
       <div className="opportunities-main-grid">
         {/* 3 Scheme Cards */}
         {opportunities.map((scheme) => (
-          <article key={scheme.id} className="scheme-card-box">
+          <article
+            key={scheme.id}
+            className="scheme-card-box clickable-scheme-card"
+            onClick={() => navigate(`/schemes/${scheme.id}`)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                navigate(`/schemes/${scheme.id}`);
+              }
+            }}
+            title={`View ${scheme.name} Details`}
+            style={{ cursor: 'pointer' }}
+          >
             <div>
               <div className="scheme-card-top">
                 <div className="scheme-logo-container">
@@ -88,7 +101,15 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
                 </span>
               </div>
 
-              <h3 className="scheme-card-name">{scheme.name}</h3>
+              <h3 className="scheme-card-name">
+                <Link
+                  to={`/schemes/${scheme.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ color: 'inherit', textDecoration: 'none' }}
+                >
+                  {scheme.name}
+                </Link>
+              </h3>
               <p className="scheme-card-full-name">{scheme.fullName}</p>
 
               <div className="scheme-tags-row">
@@ -119,6 +140,7 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
                 className="btn-circular-arrow"
                 aria-label={`View details for ${scheme.name}`}
                 title="View Scheme Details"
+                onClick={(e) => e.stopPropagation()}
               >
                 <ArrowRight size={16} />
               </Link>

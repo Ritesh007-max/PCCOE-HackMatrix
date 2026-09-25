@@ -132,41 +132,42 @@ const getApplicationStats = async (applicantId) => {
 };
 
 const getTopOpportunities = async (userProfile) => {
-    if (!userProfile) return [];
-
     const opportunities = [
         {
-            scheme_id: 'PM-KISAN-2024',
-            scheme_name: 'PM Kisan Samman Nidhi',
-            ministry: 'Ministry of Agriculture',
-            description: 'Income support of Rs. 6,000/year to small and marginal farmers',
-            match_score: 95,
-            benefit_amount: 6000,
-            eligibility: ['Farmer', 'Land holding < 2 hectares'],
-            deadline: '2025-03-31',
-            application_link: 'https://pmkisan.gov.in'
+            scheme_id: 'pmegp',
+            scheme_name: 'PMEGP',
+            full_name: "Prime Minister's Employment Generation Programme",
+            ministry: 'Ministry of MSME',
+            description: 'Credit-linked subsidy programme for generating self-employment',
+            match_score: 96,
+            benefit_amount: 125000,
+            eligibility: ['Business Support', 'Self Employment'],
+            deadline: 'Ongoing',
+            application_link: 'https://kviconline.gov.in'
         },
         {
-            scheme_id: 'MSME-REG-2024',
-            scheme_name: 'Udyam Registration for MSMEs',
+            scheme_id: 'msme-financial-support',
+            scheme_name: 'MSME Financial Support',
+            full_name: 'Credit and Subsidy Support for Small Businesses',
             ministry: 'Ministry of MSME',
-            description: 'Official registration for Micro, Small & Medium Enterprises with credit benefits',
-            match_score: 88,
-            benefit_amount: 0,
-            eligibility: ['MSME', 'Business registration'],
+            description: 'Credit and financial subsidy support for small and micro enterprises',
+            match_score: 82,
+            benefit_amount: 80000,
+            eligibility: ['MSME', 'Credit Support'],
             deadline: 'Ongoing',
             application_link: 'https://udyamregistration.gov.in'
         },
         {
-            scheme_id: 'STUDENT-SCHOLAR-2024',
-            scheme_name: 'National Scholarship Portal',
-            ministry: 'Ministry of Education',
-            description: 'Scholarships for students from minority/SC/ST/OBC communities',
-            match_score: 82,
-            benefit_amount: 50000,
-            eligibility: ['Student', 'Family income < Rs. 2.5L', 'Category: SC/ST/OBC/Minority'],
-            deadline: '2025-10-31',
-            application_link: 'https://scholarships.gov.in'
+            scheme_id: 'pm-kisan',
+            scheme_name: 'PM Kisan Samman Nidhi',
+            full_name: 'Income Support for Farmers',
+            ministry: 'Ministry of Agriculture',
+            description: 'Direct income support of Rs. 6,000/year to farmer families',
+            match_score: 72,
+            benefit_amount: 6000,
+            eligibility: ['Agriculture', 'Income Support'],
+            deadline: '2026-12-31',
+            application_link: 'https://pmkisan.gov.in'
         }
     ];
 
@@ -229,8 +230,9 @@ const getDashboardData = async (userId) => {
                 application_link: 'https://kviconline.gov.in'
             },
             {
-                scheme_id: 'msme',
-                scheme_name: 'Credit and Subsidy Support for Small Businesses',
+                scheme_id: 'msme-financial-support',
+                scheme_name: 'MSME Financial Support',
+                full_name: 'Credit and Subsidy Support for Small Businesses',
                 ministry: 'Ministry of MSME',
                 description: 'Credit and financial subsidy support for small and micro enterprises',
                 match_score: 82,
