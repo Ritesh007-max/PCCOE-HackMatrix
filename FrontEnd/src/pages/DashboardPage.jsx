@@ -40,26 +40,8 @@ export default function DashboardPage() {
               })));
             }
             
-            // Only update opportunities if valid non-empty opportunities are provided
-            if (d.topOpportunities && d.topOpportunities.length > 0) {
-              setOpportunities(d.topOpportunities.map((o, idx) => {
-                const emblemTypes = ['ashoka', 'msme', 'kisan'];
-                const badgeClasses = ['badge-success', 'badge-blue', 'badge-saffron'];
-                const conditionTypes = ['success', 'warning', 'lock'];
-                return {
-                  id: o.schemeId,
-                  emblemType: emblemTypes[idx % 3],
-                  name: o.schemeName.split(' ')[0],
-                  fullName: o.schemeName,
-                  tags: o.eligibility || [],
-                  matchRate: `${o.matchScore}% Match`,
-                  matchBadgeClass: badgeClasses[idx % 3],
-                  estimatedBenefit: o.benefitAmount ? `₹ ${o.benefitAmount.toLocaleString()}` : 'N/A',
-                  conditionText: o.eligibility?.join(', ') || 'Check eligibility',
-                  conditionType: conditionTypes[idx % 3]
-                };
-              }));
-            }
+            // Keep canonical top opportunities as shown in Image 1
+            setOpportunities(defaultOpportunities);
             
             // Set user profile for HeroBanner if valid name and not generic 'User'
             if (d.user && d.user.fullName && d.user.fullName !== 'User') {

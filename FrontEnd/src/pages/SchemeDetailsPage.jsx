@@ -62,8 +62,15 @@ export default function SchemeDetailsPage() {
   const [copyToast, setCopyToast] = useState(false);
   const [expandedStep, setExpandedStep] = useState(null);
 
-  // Retrieve scheme details or fallback
-  const scheme = SCHEMES.find((s) => s.id === schemeId) || SCHEMES[0];
+  // Retrieve scheme details with alias tolerance or fallback
+  const scheme =
+    SCHEMES.find(
+      (s) =>
+        s.id === schemeId ||
+        (schemeId === 'msme' && s.id === 'msme-financial-support') ||
+        ((schemeId === 'pmkisan' || schemeId === 'PM-KISAN-2024') && s.id === 'pm-kisan') ||
+        s.id.toLowerCase() === schemeId?.toLowerCase()
+    ) || SCHEMES[0];
   const isPmegp = scheme.id === 'pmegp';
   const matchScore = scheme.matchScore || 96;
 

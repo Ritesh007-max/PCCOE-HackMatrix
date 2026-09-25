@@ -48,7 +48,7 @@ export const topOpportunities = [
     conditionType: 'success',
   },
   {
-    id: 'msme',
+    id: 'msme-financial-support',
     emblemType: 'msme',
     name: 'MSME Financial Support',
     fullName: 'Credit and Subsidy Support for Small Businesses',
