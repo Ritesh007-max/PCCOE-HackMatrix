@@ -309,3 +309,37 @@ export function MudraLogo({ size = 38, className = '' }) {
   );
 }
 
+// Digital India Tricolor Monogram Logo
+export function DigitalIndiaLogo({ size = 36, className = '' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-label="Digital India"
+    >
+      <circle cx="24" cy="24" r="22" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="1" />
+      {/* Saffron loop forming 'd' */}
+      <path
+        d="M20 12C15 12 11 16 11 23C11 30 15 35 21 35C26 35 30 31 31 26"
+        stroke="#E98A00"
+        strokeWidth="3.6"
+        strokeLinecap="round"
+      />
+      {/* Green loop forming 'i' */}
+      <path
+        d="M24 35C29 35 34 31 34 24C34 17 29 13 24 13"
+        stroke="#087443"
+        strokeWidth="3.6"
+        strokeLinecap="round"
+      />
+      {/* Blue dot/globe */}
+      <circle cx="26" cy="19" r="3.2" fill="#005B50" />
+      <circle cx="26" cy="19" r="1.2" fill="#FFFFFF" />
+    </svg>
+  );
+}
+

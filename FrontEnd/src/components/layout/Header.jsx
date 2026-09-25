@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Search, Bell, Menu, ChevronDown } from 'lucide-react';
+import { Search, Bell, Menu, ChevronDown, Sparkles } from 'lucide-react';
 import { resolveDisplayName } from '../../services/authService';
 
-export default function Header({ onToggleSidebar }) {
+export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
   const [userInfo, setUserInfo] = useState(() => {
     try {
       const stored = localStorage.getItem('fin_user');
@@ -72,6 +72,20 @@ export default function Header({ onToggleSidebar }) {
       </div>
 
       <div className="header-right">
+        <button
+          type="button"
+          className={`navbar-ai-assistant-btn ${isChatOpen ? 'active' : ''}`}
+          onClick={onToggleChat}
+          aria-label="Open FIN AI Assistant"
+          title="Open FIN Assistant (AI)"
+        >
+          <span className="navbar-ai-sparkle-icon" aria-hidden="true">
+            <Sparkles size={15} />
+          </span>
+          <span className="navbar-ai-btn-text">Ask FIN AI</span>
+          <span className="navbar-ai-badge" aria-hidden="true">AI</span>
+        </button>
+
         <button
           type="button"
           className="notification-btn"

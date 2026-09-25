@@ -9,6 +9,90 @@ const httpError = (status, message) => {
 
 // ─── Grounded keyword → scheme + rule context map ────────────────────────────
 // Simulates RAG retrieval: maps keywords to relevant policy passages.
+const SCHEME_CATALOGUE = [
+    {
+        id: 'pm-vidyalaxmi',
+        name: 'PM Vidyalaxmi',
+        title: 'PM Vidyalaxmi',
+        subtitle: 'Education loan support for higher studies.',
+        tags: ['Education', 'Loan'],
+        matchScore: 92,
+        iconType: 'education'
+    },
+    {
+        id: 'digital-india-internship',
+        name: 'Digital India Internship Scheme',
+        title: 'Digital India Internship Scheme',
+        subtitle: 'Internship opportunities for students.',
+        tags: ['Skill Development', 'Internship'],
+        matchScore: 85,
+        iconType: 'digital-india'
+    },
+    {
+        id: 'skill-india',
+        name: 'Skill India - Training & Certification',
+        title: 'Skill India - Training & Certification',
+        subtitle: 'Free skill training programs for students.',
+        tags: ['Skill Development', 'Training'],
+        matchScore: 78,
+        iconType: 'skill-india'
+    },
+    {
+        id: 'startup-india',
+        name: 'Startup India',
+        title: 'Startup India',
+        subtitle: 'Support for student entrepreneurs.',
+        tags: ['Entrepreneurship', 'Funding'],
+        matchScore: 72,
+        iconType: 'startup-india'
+    },
+    {
+        id: 'pmegp',
+        name: "Prime Minister's Employment Generation Programme (PMEGP)",
+        title: 'PMEGP',
+        subtitle: "Prime Minister's Employment Generation Programme",
+        tags: ['Business Support', 'Self Employment', 'Central Government'],
+        matchScore: 96,
+        iconType: 'ashoka'
+    },
+    {
+        id: 'pm-kisan',
+        name: 'PM Kisan Samman Nidhi',
+        title: 'PM Kisan',
+        subtitle: 'Direct income support for farmers.',
+        tags: ['Agriculture', 'Farmer Support', 'DBT'],
+        matchScore: 94,
+        iconType: 'kisan'
+    },
+    {
+        id: 'mudra',
+        name: 'Pradhan Mantri MUDRA Yojana',
+        title: 'MUDRA Yojana',
+        subtitle: 'Micro loans up to ₹10 Lakh for small enterprises.',
+        tags: ['Credit / Loan', 'MSME', 'Collateral-free'],
+        matchScore: 90,
+        iconType: 'mudra'
+    },
+    {
+        id: 'kcc',
+        name: 'Kisan Credit Card (KCC)',
+        title: 'Kisan Credit Card',
+        subtitle: 'Credit limit for crops and agricultural activities.',
+        tags: ['Credit / Loan', 'Agriculture'],
+        matchScore: 88,
+        iconType: 'kcc'
+    },
+    {
+        id: 'standup-india',
+        name: 'Stand-Up India',
+        title: 'Stand-Up India',
+        subtitle: 'Bank loans for SC/ST and Women entrepreneurs.',
+        tags: ['Women', 'SC/ST', 'Credit / Loan'],
+        matchScore: 89,
+        iconType: 'standup'
+    }
+];
+
 const POLICY_CONTEXT = {
     pmegp: {
         subsidy: 'PMEGP provides margin money subsidy: Urban General 15%, Rural General 25%, Urban Special 25%, Rural Special 35% of project cost.',
@@ -143,6 +227,119 @@ const chat = async (userId, message, history = []) => {
     // -----------------------------------------
 
     // --- 2. FALLBACK MOCK LOGIC ---
+    // Check student / Gujarat / education schemes query
+    const msgLower = message.toLowerCase();
+    if (
+        (msgLower.includes('student') || msgLower.includes('gujarat') || msgLower.includes('internship') || msgLower.includes('college') || msgLower.includes('study'))
+    ) {
+        return {
+            reply: 'Based on your profile (Student, Gujarat), here are some government schemes you may be eligible for:',
+            isGrounded: true,
+            schemeId: null,
+            schemes: [
+                {
+                    id: 'pm-vidyalaxmi',
+                    title: 'PM Vidyalaxmi',
+                    subtitle: 'Education loan support for higher studies.',
+                    tags: ['Education', 'Loan'],
+                    matchScore: 92,
+                    matchType: 'green',
+                    iconType: 'education'
+                },
+                {
+                    id: 'digital-india-internship',
+                    title: 'Digital India Internship Scheme',
+                    subtitle: 'Internship opportunities for students.',
+                    tags: ['Skill Development', 'Internship'],
+                    matchScore: 85,
+                    matchType: 'green',
+                    iconType: 'digital-india'
+                },
+                {
+                    id: 'skill-india',
+                    title: 'Skill India - Training & Certification',
+                    subtitle: 'Free skill training programs for students.',
+                    tags: ['Skill Development', 'Training'],
+                    matchScore: 78,
+                    matchType: 'green',
+                    iconType: 'skill-india'
+                },
+                {
+                    id: 'startup-india',
+                    title: 'Startup India',
+                    subtitle: 'Support for student entrepreneurs.',
+                    tags: ['Entrepreneurship', 'Funding'],
+                    matchScore: 72,
+                    matchType: 'orange',
+                    iconType: 'startup-india'
+                }
+            ],
+            showViewAll: true,
+            citations: [
+                {
+                    schemeName: 'Ministry of Education & MeitY Guidelines',
+                    source: 'Official Central & Gujarat Student Portals'
+                }
+            ]
+        };
+    }
+
+    if (msgLower.includes('document') || msgLower.includes('what documents')) {
+        return {
+            reply: 'Here are the primary documents required for most central and state government schemes:\n\n1. **Identity & Address Proof:** Aadhaar Card (linked with mobile number)\n2. **Financial Proof:** PAN Card, Bank Account Passbook / Cancelled Cheque\n3. **Income & Category:** Income Certificate, Caste Certificate (SC/ST/OBC if applicable)\n4. **Business / Educational:** Detailed Project Report (DPR), Educational Marksheets / Degree\n5. **Registration:** Udyam Registration (for MSME/PMEGP)',
+            isGrounded: true,
+            schemeId: null,
+            suggestions: ['Check my eligibility for PMEGP', 'Schemes for students in Gujarat', 'How to apply for a scheme?']
+        };
+    }
+
+    if (msgLower.includes('how to apply') || msgLower.includes('application process')) {
+        return {
+            reply: 'To apply for any government scheme through the FIN portal:\n\n1. **Step 1:** Complete your profile with your occupation, state, and category.\n2. **Step 2:** Upload and verify required documents in the My Documents vault.\n3. **Step 3:** Use Discover Schemes to check your exact match score and criteria.\n4. **Step 4:** Click "Apply Now" to submit directly or access the nodal ministry portal with pre-filled details.',
+            isGrounded: true,
+            schemeId: null,
+            suggestions: ['Find schemes for my profile', 'What documents are required?']
+        };
+    }
+
+    if (msgLower.includes('find scheme') || msgLower.includes('my profile') || msgLower.includes('for my profile')) {
+        return {
+            reply: 'Based on your applicant profile, here are the top recommended schemes matched for you:',
+            isGrounded: true,
+            schemeId: null,
+            schemes: [
+                {
+                    id: 'pmegp',
+                    title: 'PMEGP',
+                    subtitle: "Prime Minister's Employment Generation Programme",
+                    tags: ['Business Support', 'Self Employment', 'Central Government'],
+                    matchScore: 96,
+                    matchType: 'green',
+                    iconType: 'ashoka'
+                },
+                {
+                    id: 'pm-vidyalaxmi',
+                    title: 'PM Vidyalaxmi',
+                    subtitle: 'Education loan support for higher studies.',
+                    tags: ['Education', 'Loan'],
+                    matchScore: 92,
+                    matchType: 'green',
+                    iconType: 'education'
+                },
+                {
+                    id: 'skill-india',
+                    title: 'Skill India - Training & Certification',
+                    subtitle: 'Free skill training programs for students.',
+                    tags: ['Skill Development', 'Training'],
+                    matchScore: 78,
+                    matchType: 'green',
+                    iconType: 'skill-india'
+                }
+            ],
+            showViewAll: true
+        };
+    }
+
     // Try to ground on a specific scheme
     const { schemeId, context } = resolveContext(message);
 
@@ -155,18 +352,20 @@ const chat = async (userId, message, history = []) => {
                 personalNote = '\n\n⚠️ Note: Based on your profile, your occupation is not registered as "farmer". You may not qualify for PM-Kisan unless you update your profile with the correct occupation.';
             }
 
+            const schemeObj = SCHEME_CATALOGUE.find(s => s.id === schemeId);
+
             return {
                 reply: grounded.answer + personalNote,
                 citations: [grounded.citation],
                 isGrounded: true,
                 schemeId,
+                schemes: schemeObj ? [schemeObj] : [],
                 profile: profile ? { name: profile.full_name, occupation: profile.occupation } : null
             };
         }
     }
 
     // Check general patterns
-    const msgLower = message.toLowerCase();
     for (const item of GENERAL_ANSWERS) {
         if (item.patterns.some(p => msgLower.includes(p))) {
             return {
