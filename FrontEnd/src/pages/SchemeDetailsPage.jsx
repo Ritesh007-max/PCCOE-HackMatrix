@@ -44,6 +44,282 @@ import ashokStambhVector from '../assets/ashok_stambh_vector.svg';
 import ashokStambhGold from '../assets/ashok_stambh_gold.png';
 import govtOfIndiaImg from '../assets/govt_of_india_hero.png';
 
+// Helper function to resolve dynamic official government portal, ministry, and helpline according to scheme
+export function getSchemePortalDetails(scheme) {
+  if (!scheme) {
+    return {
+      ministry: 'Government of India',
+      schemeType: 'Central Welfare Programme',
+      targetBeneficiaries: 'Eligible Indian Citizens',
+      coverage: 'All India (Rural & Urban)',
+      officialWebsite: 'https://india.gov.in',
+      helplineName: 'National Citizen Service Helpdesk',
+      helplineNumber: '1800 11 0001',
+      helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+      guidelinesTitle: 'Official Guidelines 2026 (PDF)'
+    };
+  }
+
+  const id = scheme.id?.toLowerCase() || '';
+  const title = scheme.title?.toLowerCase() || '';
+  const cats = scheme.categories || [];
+
+  // 1. Farmer / Agriculture Schemes (e.g. PM Kisan, PM Fasal Bima, KCC, etc.)
+  if (
+    id.includes('kisan') ||
+    id.includes('farmer') ||
+    id.includes('fasal') ||
+    id.includes('krishi') ||
+    title.includes('kisan') ||
+    title.includes('farmer') ||
+    cats.includes('agriculture')
+  ) {
+    if (id.includes('pm-kisan') || id === 'pmkisan' || title.includes('samman nidhi')) {
+      return {
+        ministry: scheme.ministry || 'Ministry of Agriculture & Farmers Welfare',
+        schemeType: 'Direct Benefit Transfer (DBT) Income Support',
+        targetBeneficiaries: 'Landholding Small & Marginal Farmer Families',
+        coverage: 'All States & Union Territories (Pan-India)',
+        officialWebsite: 'https://pmkisan.gov.in',
+        helplineName: 'PM-Kisan National Farmer Helpline',
+        helplineNumber: '155261 / 1800 11 5526',
+        helplineHours: 'Toll-Free • 24×7 Kisan Suvidha Support',
+        guidelinesTitle: 'PM-Kisan Operational Guidelines 2026 (PDF)'
+      };
+    }
+    if (id.includes('fasal') || title.includes('fasal') || title.includes('crop')) {
+      return {
+        ministry: scheme.ministry || 'Ministry of Agriculture & Farmers Welfare',
+        schemeType: 'Comprehensive Crop Insurance & Weather Shield',
+        targetBeneficiaries: 'All Farmers including Sharecroppers & Tenant Farmers',
+        coverage: 'All Agricultural Districts Across India',
+        officialWebsite: 'https://pmfby.gov.in',
+        helplineName: 'PMFBY Farmer Grievance Cell',
+        helplineNumber: '14447 / 1800 200 5142',
+        helplineHours: 'Toll-Free • 24×7 Farmer Support',
+        guidelinesTitle: 'PM Fasal Bima Yojana Guidelines (PDF)'
+      };
+    }
+    if (id.includes('kcc') || id.includes('credit-card') || title.includes('credit card')) {
+      return {
+        ministry: scheme.ministry || 'Ministry of Agriculture & Farmers Welfare',
+        schemeType: 'Subsidized Revolving Agricultural Credit',
+        targetBeneficiaries: 'Farmers, Dairy & Animal Husbandry Cultivators',
+        coverage: 'All Commercial & Rural Banks Nationwide',
+        officialWebsite: 'https://pmkisan.gov.in',
+        helplineName: 'KCC Farmer Support Desk',
+        helplineNumber: '155261 / 1800 180 1551',
+        helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+        guidelinesTitle: 'Kisan Credit Card Scheme Guidelines (PDF)'
+      };
+    }
+    return {
+      ministry: scheme.ministry || 'Ministry of Agriculture & Farmers Welfare',
+      schemeType: 'Agricultural Modernization & Farmer Grant',
+      targetBeneficiaries: 'Smallholder Farmers & Producer Organizations',
+      coverage: 'Rural & Agricultural Belts Across India',
+      officialWebsite: 'https://agricoop.nic.in',
+      helplineName: 'Kisan Call Centre (KCC)',
+      helplineNumber: '1800 180 1551',
+      helplineHours: 'Toll-Free • 24×7 (All Indian Languages)',
+      guidelinesTitle: `${scheme.title} Operational Guidelines (PDF)`
+    };
+  }
+
+  // 2. PMEGP (Prime Minister's Employment Generation Programme)
+  if (id === 'pmegp') {
+    return {
+      ministry: scheme.ministry || 'Ministry of Micro, Small and Medium Enterprises',
+      schemeType: 'Credit Linked Subsidy Programme',
+      targetBeneficiaries: 'New Entrepreneurs / Unemployed Youth / SHGs',
+      coverage: 'Rural & Urban Areas (All India)',
+      officialWebsite: 'https://kviconline.gov.in/pmegpeportal/',
+      helplineName: 'National MSME & KVIC Helpdesk',
+      helplineNumber: '1800 180 6763',
+      helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+      guidelinesTitle: 'PMEGP Guidelines 2026 (PDF)'
+    };
+  }
+
+  // 3. MSME & Small Business Schemes
+  if (id.includes('msme') || id.includes('udyam') || title.includes('msme')) {
+    return {
+      ministry: scheme.ministry || 'Ministry of Micro, Small and Medium Enterprises',
+      schemeType: 'Credit & Financial Assistance Package',
+      targetBeneficiaries: 'Micro, Small & Medium Enterprises (Udyam Registered)',
+      coverage: 'Manufacturing & Service Units Pan-India',
+      officialWebsite: 'https://msme.gov.in',
+      helplineName: 'National MSME Champions Helpdesk',
+      helplineNumber: '1800 180 6763 / 011-23063288',
+      helplineHours: 'Toll-Free • Mon–Fri (9:00 AM – 5:30 PM)',
+      guidelinesTitle: `${scheme.title} Policy & Support Manual (PDF)`
+    };
+  }
+
+  // 4. Mudra Yojana
+  if (id.includes('mudra') || title.includes('mudra')) {
+    return {
+      ministry: scheme.ministry || 'Department of Financial Services, Ministry of Finance',
+      schemeType: 'Institutional Refinance & Collateral-Free Micro Loan',
+      targetBeneficiaries: 'Small Business Owners, Artisans & Shopkeepers',
+      coverage: 'All Scheduled Commercial Banks & NBFCs Nationwide',
+      officialWebsite: 'https://www.mudra.org.in',
+      helplineName: 'National MUDRA Toll-Free Helpline',
+      helplineNumber: '1800 180 1111 / 1800 11 0001',
+      helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+      guidelinesTitle: 'Pradhan Mantri MUDRA Yojana Guidelines (PDF)'
+    };
+  }
+
+  // 5. Stand Up India
+  if (id.includes('standup') || id.includes('stand-up') || title.includes('stand up')) {
+    return {
+      ministry: scheme.ministry || 'Department of Financial Services, Ministry of Finance',
+      schemeType: 'Composite Bank Loan (Term Loan + Working Capital)',
+      targetBeneficiaries: 'SC, ST and Women Entrepreneurs (First-time founders)',
+      coverage: 'All Public Sector & Commercial Bank Branches Pan-India',
+      officialWebsite: 'https://www.standupmitra.in',
+      helplineName: 'Stand-Up Mitra National Support Desk',
+      helplineNumber: '1800 180 1111',
+      helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+      guidelinesTitle: 'Stand-Up India Scheme Guidelines (PDF)'
+    };
+  }
+
+  // 6. PM SVANidhi
+  if (id.includes('svanidhi') || title.includes('svanidhi') || title.includes('street vendor')) {
+    return {
+      ministry: scheme.ministry || 'Ministry of Housing and Urban Affairs (MoHUA)',
+      schemeType: 'Micro-Credit Working Capital Loan & Cash-back Incentives',
+      targetBeneficiaries: 'Urban & Peri-Urban Street Vendors and Hawkers',
+      coverage: 'All Statutory Urban Local Bodies (ULBs)',
+      officialWebsite: 'https://pmsvanidhi.mohua.gov.in',
+      helplineName: 'PM SVANidhi National Helpdesk',
+      helplineNumber: '1800 11 1979',
+      helplineHours: 'Toll-Free • 9:30 AM – 6:00 PM',
+      guidelinesTitle: 'PM SVANidhi Operational Guidelines (PDF)'
+    };
+  }
+
+  // 7. PM Vishwakarma
+  if (id.includes('vishwakarma') || title.includes('vishwakarma')) {
+    return {
+      ministry: scheme.ministry || 'Ministry of MSME & Ministry of Skill Development',
+      schemeType: 'End-to-End Artisan Skilling & Toolkit Financial Grant',
+      targetBeneficiaries: 'Traditional Artisans & Craftspeople (18 Identified Trades)',
+      coverage: 'All States and Union Territories Pan-India',
+      officialWebsite: 'https://pmvishwakarma.gov.in',
+      helplineName: 'PM Vishwakarma Champions Desk',
+      helplineNumber: '1800 267 7777',
+      helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+      guidelinesTitle: 'PM Vishwakarma Guidelines 2026 (PDF)'
+    };
+  }
+
+  // 8. Ayushman Bharat (PM-JAY)
+  if (id.includes('ayushman') || id.includes('pmjay') || title.includes('ayushman') || cats.includes('health')) {
+    return {
+      ministry: scheme.ministry || 'National Health Authority, MoHFW',
+      schemeType: 'Cashless Secondary & Tertiary Health Assurance Cover',
+      targetBeneficiaries: 'Eligible Deprived Rural & Urban Occupational Families',
+      coverage: 'Empanelled Public & Private Hospitals Nationwide',
+      officialWebsite: 'https://pmjay.gov.in',
+      helplineName: 'Ayushman Bharat National Call Centre',
+      helplineNumber: '14555 / 1800 11 1565',
+      helplineHours: '24×7 Toll-Free Multi-lingual Support',
+      guidelinesTitle: 'AB PM-JAY Operational Guidelines 2026 (PDF)'
+    };
+  }
+
+  // 9. PM Awas Yojana
+  if (id.includes('awas') || id.includes('pmay') || title.includes('awas') || title.includes('housing')) {
+    return {
+      ministry: scheme.ministry || 'Ministry of Housing and Urban Affairs (MoHUA)',
+      schemeType: 'Credit-Linked Subsidy & Affordable Pucca Housing',
+      targetBeneficiaries: 'Economically Weaker Section (EWS) & Low Income Groups (LIG)',
+      coverage: 'Urban & Rural India (PMAY Pan-India)',
+      officialWebsite: 'https://pmaymis.gov.in',
+      helplineName: 'PMAY Citizen Grievance Cell',
+      helplineNumber: '1800 11 6163 / 1800 11 3377',
+      helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+      guidelinesTitle: 'PMAY Operational Guidelines & Subsidy Norms (PDF)'
+    };
+  }
+
+  // 10. Sukanya Samriddhi / Women Welfare
+  if (id.includes('sukanya') || title.includes('sukanya') || cats.includes('women')) {
+    return {
+      ministry: scheme.ministry || 'Ministry of Finance & Department of Posts',
+      schemeType: 'Government Sovereign Small Savings Scheme (Beti Bachao Beti Padhao)',
+      targetBeneficiaries: 'Parents / Guardians of Girl Children (under 10 years)',
+      coverage: 'All Post Offices & Authorized Bank Branches Across India',
+      officialWebsite: 'https://www.indiapost.gov.in',
+      helplineName: 'National Savings & Postal Helpline',
+      helplineNumber: '1800 266 6868',
+      helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+      guidelinesTitle: 'Sukanya Samriddhi Account Rules (PDF)'
+    };
+  }
+
+  // 11. Education & National Scholarships
+  if (id.includes('scholarship') || id.includes('nsp') || title.includes('scholarship') || cats.includes('education')) {
+    return {
+      ministry: scheme.ministry || 'Ministry of Education & MeitY',
+      schemeType: 'Direct Benefit Transfer (DBT) Scholarship Grant',
+      targetBeneficiaries: 'Pre-Matric, Post-Matric & Higher Education Students',
+      coverage: 'All Recognized Schools, Colleges & Universities Pan-India',
+      officialWebsite: 'https://scholarships.gov.in',
+      helplineName: 'National Scholarship Portal (NSP) Helpdesk',
+      helplineNumber: '0120-6619540',
+      helplineHours: '24×7 Technical Assistance Support',
+      guidelinesTitle: 'NSP Central Guidelines & Document Verifier Manual (PDF)'
+    };
+  }
+
+  // 12. Startup India Seed Fund
+  if (id.includes('startup') || id.includes('seed-fund') || title.includes('startup')) {
+    return {
+      ministry: scheme.ministry || 'DPIIT, Ministry of Commerce and Industry',
+      schemeType: 'Proof of Concept & Prototype Seed Grant',
+      targetBeneficiaries: 'DPIIT Recognized Startups & Early-stage Founders',
+      coverage: 'Incubators & Tech Hubs Pan-India',
+      officialWebsite: 'https://seedfund.startupindia.gov.in',
+      helplineName: 'Startup India Toll-Free Hub',
+      helplineNumber: '1800 115 565',
+      helplineHours: 'Toll-Free • Mon–Fri (10:00 AM – 5:30 PM)',
+      guidelinesTitle: 'Startup India Seed Fund Guidelines (PDF)'
+    };
+  }
+
+  // 13. Skill India / PMKVY
+  if (id.includes('skill') || id.includes('pmkvy') || id.includes('naps') || cats.includes('youth')) {
+    return {
+      ministry: scheme.ministry || 'Ministry of Skill Development and Entrepreneurship',
+      schemeType: 'Industry 4.0 Skill Certification & Assessment Award',
+      targetBeneficiaries: 'School / College Dropouts & Unemployed Youth',
+      coverage: 'Pradhan Mantri Kaushal Kendras (PMKK) Pan-India',
+      officialWebsite: 'https://www.pmkvyofficial.org',
+      helplineName: 'National Skill Development Helpdesk',
+      helplineNumber: '1800 123 9626',
+      helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+      guidelinesTitle: 'PMKVY Guidelines & Trade List (PDF)'
+    };
+  }
+
+  // Default Central Government Fallback
+  return {
+    ministry: scheme.ministry || 'Government of India',
+    schemeType: scheme.schemeTypes?.join(', ') || 'Central Government Welfare Scheme',
+    targetBeneficiaries: 'Eligible Beneficiaries & Citizens',
+    coverage: scheme.state || 'All India (Rural & Urban)',
+    officialWebsite: 'https://india.gov.in',
+    helplineName: 'National Citizen Service Helpdesk',
+    helplineNumber: '1800 11 0001',
+    helplineHours: 'Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)',
+    guidelinesTitle: `${scheme.title} Scheme Guidelines 2026 (PDF)`
+  };
+}
+
 export default function SchemeDetailsPage() {
   const { schemeId = 'pmegp' } = useParams();
   const [activeTab, setActiveTab] = useState('overview');
@@ -73,6 +349,9 @@ export default function SchemeDetailsPage() {
     ) || SCHEMES[0];
   const isPmegp = scheme.id === 'pmegp';
   const matchScore = scheme.matchScore || 96;
+
+  // Dynamic official government portal, ministry, scheme type, and helpline details
+  const portalDetails = useMemo(() => getSchemePortalDetails(scheme), [scheme]);
 
   // =========================================================================
   // INTERACTIVE SUBSIDY CALCULATOR STATE
@@ -360,7 +639,7 @@ export default function SchemeDetailsPage() {
                   <div className="scheme-hero-content">
                     <div>
                       <div className="scheme-hero-eyebrow">
-                        {scheme.ministry || 'Government of India'}
+                        {portalDetails.ministry}
                       </div>
                       <h3 className="scheme-hero-headline">
                         Turn Your
@@ -381,7 +660,7 @@ export default function SchemeDetailsPage() {
                           "Empowering citizens, Strengthening Bharat."
                         </span>
                         <span className="scheme-hero-quote-author">
-                          — {scheme.ministry || 'Government of India'}
+                          — {portalDetails.ministry}
                         </span>
                       </div>
                     </div>
@@ -951,44 +1230,84 @@ export default function SchemeDetailsPage() {
                 </div>
 
                 <div className="application-roadmap">
-                  {[
-                    {
-                      step: '1',
-                      title: 'Online Application on Official KVIC Portal',
-                      time: '~1 Working Day',
-                      desc: 'Register as an Individual or Non-Individual on kviconline.gov.in. Fill the e-form, enter proposed project costs, and select your preferred financing bank branch.'
-                    },
-                    {
-                      step: '2',
-                      title: 'District Task Force Committee (DTFC) Review',
-                      time: '~7–10 Working Days',
-                      desc: 'Your application is forwarded to the DTFC headed by the District Magistrate/Collector for preliminary technical scrutiny and suitability verification.'
-                    },
-                    {
-                      step: '3',
-                      title: 'Forwarding to Financing Bank Branch',
-                      time: '~5 Working Days',
-                      desc: 'Upon DTFC clearance, the application is transmitted electronically to your designated bank branch for credit and techno-economic appraisal.'
-                    },
-                    {
-                      step: '4',
-                      title: 'Sanction & First Loan Disbursement',
-                      time: '~10 Working Days',
-                      desc: 'Bank issues an in-principle sanction letter. You deposit the 5%–10% borrower contribution, and the bank releases the initial capital installment.'
-                    },
-                    {
-                      step: '5',
-                      title: 'Mandatory EDP Entrepreneurship Training',
-                      time: '~5–10 Days Training',
-                      desc: 'Complete the mandatory 5–10 day Entrepreneurship Development Programme (EDP) training conducted by certified MSME / KVIC institutes (available online).'
-                    },
-                    {
-                      step: '6',
-                      title: 'Margin Money Subsidy Credited',
-                      time: 'Direct DBT',
-                      desc: 'Financing bank uploads the subsidy claim on the online portal. KVIC transfers the Margin Money into a 3-year term deposit in your bank account, adjusted against loan principal on completion.'
-                    }
-                  ].map((s) => (
+                  {(isPmegp
+                    ? [
+                        {
+                          step: '1',
+                          title: 'Online Application on Official KVIC Portal',
+                          time: '~1 Working Day',
+                          desc: 'Register as an Individual or Non-Individual on kviconline.gov.in. Fill the e-form, enter proposed project costs, and select your preferred financing bank branch.'
+                        },
+                        {
+                          step: '2',
+                          title: 'District Task Force Committee (DTFC) Review',
+                          time: '~7–10 Working Days',
+                          desc: 'Your application is forwarded to the DTFC headed by the District Magistrate/Collector for preliminary technical scrutiny and suitability verification.'
+                        },
+                        {
+                          step: '3',
+                          title: 'Forwarding to Financing Bank Branch',
+                          time: '~5 Working Days',
+                          desc: 'Upon DTFC clearance, the application is transmitted electronically to your designated bank branch for credit and techno-economic appraisal.'
+                        },
+                        {
+                          step: '4',
+                          title: 'Sanction & First Loan Disbursement',
+                          time: '~10 Working Days',
+                          desc: 'Bank issues an in-principle sanction letter. You deposit the 5%–10% borrower contribution, and the bank releases the initial capital installment.'
+                        },
+                        {
+                          step: '5',
+                          title: 'Mandatory EDP Entrepreneurship Training',
+                          time: '~5–10 Days Training',
+                          desc: 'Complete the mandatory 5–10 day Entrepreneurship Development Programme (EDP) training conducted by certified MSME / KVIC institutes (available online).'
+                        },
+                        {
+                          step: '6',
+                          title: 'Margin Money Subsidy Credited',
+                          time: 'Direct DBT',
+                          desc: 'Financing bank uploads the subsidy claim on the online portal. KVIC transfers the Margin Money into a 3-year term deposit in your bank account, adjusted against loan principal on completion.'
+                        }
+                      ]
+                    : [
+                        {
+                          step: '1',
+                          title: `Online Registration on Official Portal`,
+                          time: '~1 Working Day',
+                          desc: `Visit the official national portal (${portalDetails.officialWebsite}). Complete your Aadhaar-based e-KYC and initiate the fresh scheme application form.`
+                        },
+                        {
+                          step: '2',
+                          title: 'Document Upload & Land / Identity Verification',
+                          time: '~3–5 Working Days',
+                          desc: 'Upload requisite proof of identification, income / caste certificate, and land records or enterprise registration for institutional scrutiny.'
+                        },
+                        {
+                          step: '3',
+                          title: 'District / State Level Administrative Review',
+                          time: '~7–10 Working Days',
+                          desc: `Designated nodal officers under ${portalDetails.ministry} conduct automated cross-verification of data through PFMS and departmental records.`
+                        },
+                        {
+                          step: '4',
+                          title: 'Field Level Inspection & Bank Validation',
+                          time: '~5 Working Days',
+                          desc: 'Verification of active beneficiary bank account seeded with Aadhaar and confirmation of compliance against eligibility norms.'
+                        },
+                        {
+                          step: '5',
+                          title: 'Final Approval & Beneficiary List Enrolment',
+                          time: '~3 Working Days',
+                          desc: 'Formal sanction order issued with a unique Government Beneficiary Tracking ID for tracking future disbursement cycles.'
+                        },
+                        {
+                          step: '6',
+                          title: 'Direct Benefit Transfer (DBT) Release',
+                          time: 'Direct DBT',
+                          desc: 'Financial support / subsidy is disbursed directly to your Aadhaar-linked bank account under DBT protocols with zero middleman deductions.'
+                        }
+                      ]
+                  ).map((s) => (
                     <div
                       key={s.step}
                       onClick={() => setExpandedStep(expandedStep === s.step ? null : s.step)}
@@ -1027,10 +1346,21 @@ export default function SchemeDetailsPage() {
                       <h4 style={{ margin: 0, fontSize: '13.5px', color: '#10243A' }}>Implementing Agencies</h4>
                     </div>
                     <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12.5px', color: '#475467', lineHeight: 1.6 }}>
-                      <li>Khadi and Village Industries Commission (KVIC)</li>
-                      <li>State Khadi & Village Industries Boards (KVIB)</li>
-                      <li>District Industries Centres (DICs) in respective states</li>
-                      <li>Coir Board for coir-related units</li>
+                      {isPmegp ? (
+                        <>
+                          <li>Khadi and Village Industries Commission (KVIC)</li>
+                          <li>State Khadi & Village Industries Boards (KVIB)</li>
+                          <li>District Industries Centres (DICs) in respective states</li>
+                          <li>Coir Board for coir-related units</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>{portalDetails.ministry}</li>
+                          <li>State & District Level Department Nodal Cells</li>
+                          <li>National Informatics Centre (NIC) Portal Wing</li>
+                          <li>Common Service Centres (CSCs) & Seva Kendras</li>
+                        </>
+                      )}
                     </ul>
                   </div>
 
@@ -1055,11 +1385,11 @@ export default function SchemeDetailsPage() {
                         Official Ministry Portal & Guidelines Repository
                       </h5>
                       <span style={{ fontSize: '12px', color: '#15803D' }}>
-                        Ministry of Micro, Small and Medium Enterprises: https://msme.gov.in
+                        {portalDetails.ministry}: {portalDetails.officialWebsite}
                       </span>
                     </div>
                     <a
-                      href="https://www.msme.gov.in"
+                      href={portalDetails.officialWebsite}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1138,7 +1468,7 @@ export default function SchemeDetailsPage() {
                 <div className="meta-item-body">
                   <span className="meta-item-title">Implementing Ministry</span>
                   <span className="meta-item-value">
-                    {scheme.ministry || 'Ministry of Micro, Small and Medium Enterprises'}
+                    {portalDetails.ministry}
                   </span>
                 </div>
               </div>
@@ -1148,7 +1478,7 @@ export default function SchemeDetailsPage() {
                 <Sliders size={16} className="meta-item-icon" />
                 <div className="meta-item-body">
                   <span className="meta-item-title">Scheme Type</span>
-                  <span className="meta-item-value">Credit Linked Subsidy</span>
+                  <span className="meta-item-value">{portalDetails.schemeType}</span>
                 </div>
               </div>
 
@@ -1158,7 +1488,7 @@ export default function SchemeDetailsPage() {
                 <div className="meta-item-body">
                   <span className="meta-item-title">Target Beneficiaries</span>
                   <span className="meta-item-value">
-                    Individuals / Groups / New Entrepreneurs
+                    {portalDetails.targetBeneficiaries}
                   </span>
                 </div>
               </div>
@@ -1168,7 +1498,7 @@ export default function SchemeDetailsPage() {
                 <ShieldCheck size={16} className="meta-item-icon" />
                 <div className="meta-item-body">
                   <span className="meta-item-title">Coverage</span>
-                  <span className="meta-item-value">Rural & Urban Areas (All India)</span>
+                  <span className="meta-item-value">{portalDetails.coverage}</span>
                 </div>
               </div>
 
@@ -1178,12 +1508,12 @@ export default function SchemeDetailsPage() {
                 <div className="meta-item-body">
                   <span className="meta-item-title">Official Website</span>
                   <a
-                    href="https://www.msme.gov.in"
+                    href={portalDetails.officialWebsite}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="meta-item-value meta-website-link"
                   >
-                    https://www.msme.gov.in
+                    {portalDetails.officialWebsite}
                   </a>
                 </div>
               </div>
@@ -1224,7 +1554,7 @@ export default function SchemeDetailsPage() {
                 </div>
                 <div className="guidelines-text">
                   <h4 className="guidelines-title">Download Official Guidelines</h4>
-                  <p className="guidelines-sub">PMEGP Guidelines 2026 (PDF)</p>
+                  <p className="guidelines-sub">{portalDetails.guidelinesTitle}</p>
                 </div>
               </div>
 
@@ -1232,7 +1562,7 @@ export default function SchemeDetailsPage() {
                 type="button"
                 onClick={handleDownloadGuidelines}
                 className="guidelines-download-btn"
-                title="Download PMEGP Guidelines 2026 (PDF)"
+                title={`Download ${portalDetails.guidelinesTitle}`}
                 aria-label="Download Guidelines"
               >
                 <Download size={15} />
@@ -1256,7 +1586,7 @@ export default function SchemeDetailsPage() {
                 }}
               >
                 <CheckCircle2 size={14} />
-                <span>Downloading PMEGP Guidelines 2026 (PDF)...</span>
+                <span>Downloading {portalDetails.guidelinesTitle}...</span>
               </div>
             )}
 
@@ -1264,13 +1594,13 @@ export default function SchemeDetailsPage() {
             <div className="scheme-helpdesk-card">
               <div className="helpdesk-header">
                 <PhoneCall size={14} color="#005B50" />
-                <span>National MSME Helpdesk</span>
+                <span>{portalDetails.helplineName}</span>
               </div>
               <div className="helpdesk-number">
-                1800 180 6763
+                {portalDetails.helplineNumber}
               </div>
               <div className="helpdesk-hours">
-                Toll-Free • Mon–Sat (9:00 AM – 6:00 PM)
+                {portalDetails.helplineHours}
               </div>
             </div>
 
@@ -1370,7 +1700,7 @@ export default function SchemeDetailsPage() {
                   Close
                 </button>
                 <a
-                  href="https://www.kviconline.gov.in/pmegpeportal/pmegphome/index.jsp"
+                  href={portalDetails.officialWebsite}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
@@ -1390,7 +1720,7 @@ export default function SchemeDetailsPage() {
                     gap: '6px'
                   }}
                 >
-                  <span>Go to KVIC Portal</span>
+                  <span>Go to Official Portal</span>
                   <ExternalLink size={14} />
                 </a>
               </div>
@@ -1423,7 +1753,7 @@ export default function SchemeDetailsPage() {
               </h3>
 
               <p style={{ fontSize: '13px', color: '#475467', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-                Need assistance with your Project DPR, Bank Appraisal, or Margin Money claim? Our policy specialists and automated AI doc reviewers are available.
+                Need assistance with your eligibility, documentation appraisal, or subsidy claim? Official government support channels and automated guidance are available.
               </p>
 
               <div
@@ -1438,12 +1768,19 @@ export default function SchemeDetailsPage() {
                 }}
               >
                 <div style={{ padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #EAECF0' }}>
-                  <strong style={{ color: '#10243A', display: 'block' }}>National MSME Helpline:</strong>
-                  <span style={{ color: '#005B50', fontWeight: 600 }}>1800 180 6763 (Toll Free, 9 AM - 6 PM)</span>
+                  <strong style={{ color: '#10243A', display: 'block' }}>{portalDetails.helplineName}:</strong>
+                  <span style={{ color: '#005B50', fontWeight: 600 }}>{portalDetails.helplineNumber} ({portalDetails.helplineHours})</span>
                 </div>
                 <div style={{ padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #EAECF0' }}>
-                  <strong style={{ color: '#10243A', display: 'block' }}>KVIC Support Email:</strong>
-                  <span style={{ color: '#175CD3' }}>pmegp.kvic@gov.in</span>
+                  <strong style={{ color: '#10243A', display: 'block' }}>Official Government Portal:</strong>
+                  <a
+                    href={portalDetails.officialWebsite}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#175CD3', textDecoration: 'none', wordBreak: 'break-all' }}
+                  >
+                    {portalDetails.officialWebsite}
+                  </a>
                 </div>
               </div>
 
