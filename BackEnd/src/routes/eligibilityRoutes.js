@@ -1,9 +1,10 @@
 const express = require('express');
+const { checkEligibility } = require('../controllers/eligibilityController');
+const authMiddleware = require('../middleware/authMiddleware');
+
 const router = express.Router();
 
-router.post('/check', (req, res) => {
-    // Placeholder for eligibility check
-    res.json({ success: true, message: 'Eligibility checked successfully', data: { eligible: true } });
-});
+// POST /api/eligibility/check — Requires authentication (profile is loaded from req.user.id)
+router.post('/check', authMiddleware, checkEligibility);
 
 module.exports = router;
