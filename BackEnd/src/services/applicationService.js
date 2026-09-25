@@ -1,5 +1,5 @@
 const profileService = require('./profileService');
-const { SCHEME_CATALOGUE } = require('./schemeService');
+const schemeService = require('./schemeService');
 const { checkEligibility } = require('./eligibilityService');
 const { supabaseAdmin } = require('../config/supabaseConfig');
 
@@ -82,8 +82,7 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null) => {
     }
 
     // Find scheme
-    const scheme = SCHEME_CATALOGUE.find(s => s.id === schemeId);
-    if (!scheme) throw httpError(404, `Scheme '${schemeId}' not found`);
+    const { scheme } = await schemeService.getSchemeById(schemeId);
 
     // Run eligibility check
     let eligibilityResult = null;

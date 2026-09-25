@@ -1,5 +1,4 @@
 const profileService = require('./profileService');
-const { SCHEME_CATALOGUE } = require('./schemeService');
 const { supabaseAdmin } = require('../config/supabaseConfig');
 
 const httpError = (status, message) => {
