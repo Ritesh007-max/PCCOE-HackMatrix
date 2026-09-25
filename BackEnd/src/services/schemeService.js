@@ -120,6 +120,10 @@ const searchSchemes = async ({ query, filters = {}, limit = 20 } = {}) => {
         let dbQuery = supabaseAdmin.from('schemes').select('*').eq('active', true);
         if (filters.type) dbQuery = dbQuery.eq('type', filters.type);
         if (filters.ministry) dbQuery = dbQuery.ilike('ministry', `%${filters.ministry}%`);
+        if (filters.maxBenefit) dbQuery = dbQuery.lte('max_benefit', Number(filters.maxBenefit));
+        if (filters.tags && Array.isArray(filters.tags) && filters.tags.length > 0) {
+            dbQuery = dbQuery.contains('tags', filters.tags);
+        }
         const { data, error } = await dbQuery.limit(limit);
 
         if (!error && data && data.length > 0) {
