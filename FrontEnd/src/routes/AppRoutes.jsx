@@ -11,10 +11,23 @@ import NotFoundPage from '../pages/NotFoundPage';
 
 import SignupPage from '../pages/SignupPage';
 import ProtectedRoute from '../components/common/ProtectedRoute';
+import { AuthenticateWithRedirectCallback } from '@clerk/react';
 
 export default function AppRoutes() {
   return (
     <Routes>
+      {/* Clerk SSO Redirect Callback Route */}
+      <Route
+        path="/sso-callback"
+        element={
+          <AuthenticateWithRedirectCallback
+            signInForceRedirectUrl="/dashboard"
+            signUpForceRedirectUrl="/dashboard"
+            continueSignUpUrl="/dashboard"
+          />
+        }
+      />
+
       {/* Default route redirects to /signup when starting npm run dev */}
       <Route path="/" element={<Navigate to="/signup" replace />} />
 

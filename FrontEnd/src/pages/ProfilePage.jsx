@@ -31,10 +31,32 @@ import {
   updateBackendProfile,
   fetchBackendProfile,
 } from '../services/authService';
+import { useUser } from '@clerk/react';
 import '../styles/profile.css';
+
+/**
+ * Normalizes Indian phone numbers and completely prevents duplicate '+91 91' prefixes
+ */
+export function sanitizeIndianPhone(raw) {
+  if (!raw || typeof raw !== 'string') return '+91 98765 43210';
+  let cleaned = raw.trim().replace(/^\+?91[\s\-_]*\+?91[\s\-_]*/, '+91 ').replace(/^\+?91[\s\-_]*/, '+91 ');
+  const digits = cleaned.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) {
+    const m = digits.slice(2);
+    return `+91 ${m.slice(0, 5)} ${m.slice(5)}`;
+  } else if (digits.length === 10) {
+    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+  }
+  if (cleaned.startsWith('+91')) {
+    const rest = cleaned.slice(3).replace(/^\s*91\s*/, '').trim();
+    return `+91 ${rest}`;
+  }
+  return cleaned;
+}
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const { user: clerkUser, isLoaded: isClerkLoaded, isSignedIn: isClerkSignedIn } = useUser();
 
   // Load and initialize profile data with fallback matching reference screenshot
   const [profileData, setProfileData] = useState(() => {
@@ -47,7 +69,7 @@ export default function ProfilePage() {
       return {
         fullName: name,
         email: email,
-        phone: stored?.phone || reg?.phone || '+91 98765 43210',
+        phone: sanitizeIndianPhone(stored?.phone || reg?.phone || '+91 98765 43210'),
         state: stored?.state || reg?.state || 'Gujarat',
         district: stored?.district || reg?.district || '',
         occupation: stored?.occupation || reg?.occupation || 'Student',
@@ -146,7 +168,7 @@ export default function ProfilePage() {
             const updatedFromBackend = {
               ...prev,
               fullName: b.full_name || prev.fullName,
-              phone: b.phone || prev.phone,
+              phone: sanitizeIndianPhone(b.phone || prev.phone),
               state: b.state || prev.state,
               district: b.district || prev.district,
               occupation: b.occupation || prev.occupation,
@@ -179,7 +201,7 @@ export default function ProfilePage() {
             ...prev,
             fullName: name || reg?.fullName || prev.fullName,
             email: email || prev.email,
-            phone: user.phone || reg?.phone || prev.phone,
+            phone: sanitizeIndianPhone(user.phone || reg?.phone || prev.phone),
             state: user.state || reg?.state || prev.state,
             district: user.district || reg?.district || prev.district,
             occupation: user.occupation || reg?.occupation || prev.occupation,
@@ -287,7 +309,10 @@ export default function ProfilePage() {
 
   // Open modal with current state
   const handleOpenEditModal = () => {
-    setEditFormData({ ...profileData });
+    setEditFormData({
+      ...profileData,
+      phone: sanitizeIndianPhone(profileData.phone),
+    });
     setActiveModal('edit');
   };
 
@@ -314,9 +339,11 @@ export default function ProfilePage() {
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     let backendProfileResult = { success: false };
+    const cleanedPhone = sanitizeIndianPhone(editFormData.phone);
     const updated = {
       ...profileData,
       ...editFormData,
+      phone: cleanedPhone,
     };
 
     setProfileData(updated);
@@ -330,7 +357,7 @@ export default function ProfilePage() {
         fullName: updated.fullName,
         name: updated.fullName,
         email: updated.email,
-        phone: updated.phone,
+        phone: cleanedPhone,
         state: updated.state,
         district: updated.district,
         occupation: updated.occupation,
@@ -424,9 +451,9 @@ export default function ProfilePage() {
             <div className="profile-identity-section">
               <div className="profile-avatar-wrapper">
                 <div className="profile-avatar-circle" aria-hidden="true">
-                  {profileData.avatarUrl ? (
+                  {profileData.avatarUrl || (isClerkSignedIn ? clerkUser?.imageUrl : '') ? (
                     <img
-                      src={profileData.avatarUrl}
+                      src={profileData.avatarUrl || clerkUser?.imageUrl}
                       alt={profileData.fullName}
                       className="profile-avatar-img"
                     />
@@ -471,7 +498,7 @@ export default function ProfilePage() {
                   </span>
                   <span className="profile-meta-item">
                     <Phone size={14} aria-hidden="true" />
-                    <span>{profileData.phone}</span>
+                    <span>{sanitizeIndianPhone(profileData.phone)}</span>
                   </span>
                   <span className="profile-meta-item">
                     <MapPin size={14} aria-hidden="true" />
@@ -571,7 +598,7 @@ export default function ProfilePage() {
               </div>
               <div className="profile-detail-row">
                 <span className="profile-detail-label">Mobile Number</span>
-                <span className="profile-detail-value">{profileData.phone}</span>
+                <span className="profile-detail-value">{sanitizeIndianPhone(profileData.phone)}</span>
               </div>
               <div className="profile-detail-row">
                 <span className="profile-detail-label">Date of Birth</span>

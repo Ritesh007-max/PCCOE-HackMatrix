@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { resolveDisplayName, logoutUser } from '../../services/authService';
 import { SCHEMES } from '../../data/schemesData';
+import { useUser, useClerk } from '@clerk/react';
 
 const DEFAULT_NOTIFICATIONS = [
   {
@@ -60,6 +61,9 @@ const DEFAULT_NOTIFICATIONS = [
 
 export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
   const navigate = useNavigate();
+  const { user: clerkUser, isLoaded: isClerkLoaded, isSignedIn: isClerkSignedIn } = useUser();
+  const clerk = useClerk();
+  const clerkSignOut = clerk?.signOut;
 
   // User State
   const [userInfo, setUserInfo] = useState(() => {
@@ -89,6 +93,32 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
       state: 'Gujarat',
     };
   });
+
+  // Sync user info if Clerk session exists
+  useEffect(() => {
+    if (isClerkLoaded && isClerkSignedIn && clerkUser) {
+      const fullName = clerkUser.fullName || clerkUser.firstName || 'Clerk User';
+      const parts = fullName.split(' ').filter(Boolean);
+      const name = parts[0] || fullName;
+      const initials = fullName.length >= 2 ? fullName.substring(0, 2).toUpperCase() : fullName.toUpperCase();
+      const email = clerkUser.primaryEmailAddress?.emailAddress || '';
+      const avatarUrl = clerkUser.imageUrl || '';
+      setUserInfo((prev) => ({
+        ...prev,
+        name,
+        fullName,
+        initials,
+        avatarUrl,
+        email: email || prev.email,
+      }));
+    }
+  }, [isClerkLoaded, isClerkSignedIn, clerkUser]);
+
+  // Derived effective values prioritizing live Google/Clerk details
+  const displayAvatar = (isClerkSignedIn && clerkUser?.imageUrl) || userInfo.avatarUrl;
+  const displayEmail = (isClerkSignedIn && clerkUser?.primaryEmailAddress?.emailAddress) || userInfo.email;
+  const displayFullName = (isClerkSignedIn && (clerkUser?.fullName || clerkUser?.firstName)) || userInfo.fullName;
+  const displayName = (isClerkSignedIn && (clerkUser?.firstName || clerkUser?.fullName?.split(' ')[0])) || userInfo.name;
 
   // Dropdown States
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -236,6 +266,13 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
 
   const handleLogout = async () => {
     setIsProfileOpen(false);
+    try {
+      if (isClerkSignedIn) {
+        await clerkSignOut();
+      }
+    } catch (e) {
+      console.error('Clerk signOut error:', e);
+    }
     try {
       await logoutUser();
       navigate('/login');
@@ -496,14 +533,14 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
             title="Open Profile Menu"
           >
             <div className="user-avatar-hs" aria-hidden="true">
-              {userInfo.avatarUrl ? (
-                <img src={userInfo.avatarUrl} alt={userInfo.name} className="navbar-avatar-img" />
+              {displayAvatar ? (
+                <img src={displayAvatar} alt={displayName} className="navbar-avatar-img" />
               ) : (
                 userInfo.initials
               )}
             </div>
             <div className="user-info">
-              <span className="user-name">{userInfo.name}</span>
+              <span className="user-name">{displayName}</span>
               <span className="user-role">{userInfo.role}</span>
             </div>
             <ChevronDown
@@ -519,10 +556,10 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
               {/* Profile Card Header */}
               <div className="profile-popover-card">
                 <div className="profile-popover-avatar-box">
-                  {userInfo.avatarUrl ? (
+                  {displayAvatar ? (
                     <img
-                      src={userInfo.avatarUrl}
-                      alt={userInfo.fullName}
+                      src={displayAvatar}
+                      alt={displayFullName}
                       className="profile-popover-avatar-img"
                     />
                   ) : (
@@ -530,9 +567,9 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
                   )}
                 </div>
                 <div className="profile-popover-user-meta">
-                  <h3 className="profile-popover-user-name">{userInfo.fullName}</h3>
+                  <h3 className="profile-popover-user-name">{displayFullName}</h3>
                   <span className="profile-popover-user-role">{userInfo.role}</span>
-                  <span className="profile-popover-user-email">{userInfo.email}</span>
+                  <span className="profile-popover-user-email">{displayEmail}</span>
                   <span className="profile-popover-user-loc">{userInfo.state}, India</span>
                 </div>
               </div>
@@ -594,6 +631,23 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
                   <Shield size={16} />
                   <span>Security & Password</span>
                 </button>
+                {isClerkSignedIn && (
+                  <button
+                    type="button"
+                    className="profile-popover-nav-btn"
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      if (clerk?.openUserProfile) {
+                        clerk.openUserProfile();
+                      } else {
+                        navigate('/profile');
+                      }
+                    }}
+                  >
+                    <User size={16} />
+                    <span>Manage Google Account</span>
+                  </button>
+                )}
               </div>
 
               {/* Divider & Sign Out */}
