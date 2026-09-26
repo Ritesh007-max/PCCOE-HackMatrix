@@ -23,6 +23,7 @@ import {
   getRegisteredUserByEmail,
   saveRegisteredUser,
 } from '../services/authService';
+import { useUser, useClerk } from '@clerk/react';
 
 const DEV_AUTH_BYPASS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH_BYPASS === 'true';
 
@@ -61,6 +62,28 @@ export default function SignupPage({ initialMode = 'signup' }) {
       ? 'For your security, your session was automatically ended due to inactivity. Please sign in again to continue.'
       : null
   );
+
+  const { user: clerkUser, isLoaded: isClerkLoaded, isSignedIn: isClerkSignedIn } = useUser();
+  const clerk = useClerk();
+
+  // If already signed in via Clerk, automatically synchronize session and redirect
+  useEffect(() => {
+    if (isClerkLoaded && isClerkSignedIn && clerkUser) {
+      const email = clerkUser.primaryEmailAddress?.emailAddress || '';
+      const fullName = clerkUser.fullName || clerkUser.firstName || 'Clerk User';
+      storeAuthSession({
+        user: {
+          id: clerkUser.id,
+          email,
+          fullName,
+          avatarUrl: clerkUser.imageUrl,
+        },
+        accessToken: 'clerk-authenticated-token',
+        fallbackName: fullName,
+      });
+      navigate(postAuthPath, { replace: true });
+    }
+  }, [isClerkLoaded, isClerkSignedIn, clerkUser, navigate, postAuthPath]);
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_OPTIONS[0]);
@@ -156,13 +179,19 @@ export default function SignupPage({ initialMode = 'signup' }) {
           email: formData.email,
           password: formData.password,
         });
-      } else {
+        // Sanitize mobile digits to prevent duplicate country codes (e.g. +91 91...)
+        let rawMobileDigits = formData.mobile.replace(/\D/g, '');
+        if (selectedCountry.code === '+91' && rawMobileDigits.length === 12 && rawMobileDigits.startsWith('91')) {
+          rawMobileDigits = rawMobileDigits.slice(2);
+        }
+        const finalPhone = `${selectedCountry.code} ${rawMobileDigits}`.trim();
+
         // Call BackEnd /api/users/register
         authResult = await registerUser({
           email: formData.email,
           password: formData.password,
           fullName: formData.fullName,
-          phone: `${selectedCountry.code}${formData.mobile}`,
+          phone: finalPhone,
         });
 
       }
@@ -191,10 +220,14 @@ export default function SignupPage({ initialMode = 'signup' }) {
       let citizenFullName = '';
       if (!isSignIn) {
         citizenFullName = formData.fullName.trim();
+        let rawDigits = formData.mobile.replace(/\D/g, '');
+        if (selectedCountry.code === '+91' && rawDigits.length === 12 && rawDigits.startsWith('91')) {
+          rawDigits = rawDigits.slice(2);
+        }
         saveRegisteredUser({
           email: targetEmail,
           fullName: citizenFullName,
-          phone: `${selectedCountry.code}${formData.mobile}`.trim(),
+          phone: `${selectedCountry.code} ${rawDigits}`.trim(),
         });
       } else {
         citizenFullName =
@@ -234,17 +267,66 @@ export default function SignupPage({ initialMode = 'signup' }) {
     }
   };
 
-  const handleGoogleAuth = () => {
-    setSuccessMsg('Connecting with Google Account...');
-    setTimeout(() => {
-      storeAuthSession({
-        user: { id: 'google-oauth-demo', email: 'citizen@gov.in' },
-        accessToken: 'google-oauth-demo-token',
-        fallbackName: 'Google User',
-        developmentBypass: DEV_AUTH_BYPASS_ENABLED,
-      });
-      navigate(postAuthPath, { replace: true });
-    }, 700);
+  const handleGoogleAuth = async () => {
+    setErrorMsg('');
+    setSuccessMsg('Connecting with Google...');
+    try {
+      const client = clerk?.client || window.Clerk?.client;
+      if (!client) {
+        setErrorMsg('Authentication service is still initializing. Please wait a moment.');
+        setSuccessMsg('');
+        return;
+      }
+
+      const redirectUrl = '/sso-callback';
+      const redirectUrlComplete = postAuthPath || '/dashboard';
+
+      if (isSignIn && client.signIn?.authenticateWithRedirect) {
+        await client.signIn.authenticateWithRedirect({
+          strategy: 'oauth_google',
+          redirectUrl,
+          redirectUrlComplete,
+        });
+      } else if (!isSignIn && client.signUp?.authenticateWithRedirect) {
+        await client.signUp.authenticateWithRedirect({
+          strategy: 'oauth_google',
+          redirectUrl,
+          redirectUrlComplete,
+        });
+      } else if (client.signIn?.authenticateWithRedirect) {
+        await client.signIn.authenticateWithRedirect({
+          strategy: 'oauth_google',
+          redirectUrl,
+          redirectUrlComplete,
+        });
+      } else {
+        throw new Error('Google OAuth method unavailable');
+      }
+    } catch (err) {
+      console.error('Clerk Google OAuth error:', err);
+      try {
+        const client = clerk?.client || window.Clerk?.client;
+        if (isSignIn && client?.signUp?.authenticateWithRedirect) {
+          await client.signUp.authenticateWithRedirect({
+            strategy: 'oauth_google',
+            redirectUrl: '/sso-callback',
+            redirectUrlComplete: postAuthPath || '/dashboard',
+          });
+          return;
+        } else if (!isSignIn && client?.signIn?.authenticateWithRedirect) {
+          await client.signIn.authenticateWithRedirect({
+            strategy: 'oauth_google',
+            redirectUrl: '/sso-callback',
+            redirectUrlComplete: postAuthPath || '/dashboard',
+          });
+          return;
+        }
+      } catch (innerErr) {
+        // Fall through
+      }
+      setSuccessMsg('');
+      setErrorMsg(err.errors?.[0]?.message || err.message || 'Unable to connect to Google authentication.');
+    }
   };
 
   const handleDevAuthBypass = () => {
@@ -792,14 +874,15 @@ export default function SignupPage({ initialMode = 'signup' }) {
                 <span className="signup-divider-line" />
               </div>
 
-              {/* Continue with Google */}
+              {/* Continue / Sign in with Google (Powered by Clerk) */}
               <button
                 type="button"
                 id="googleAuthBtn"
                 className="signup-google-btn"
                 onClick={handleGoogleAuth}
+                disabled={isSubmitting}
               >
-                <svg width="17" height="17" viewBox="0 0 24 24">
+                <svg width="18" height="18" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
                     d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
@@ -817,7 +900,7 @@ export default function SignupPage({ initialMode = 'signup' }) {
                     d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                   />
                 </svg>
-                <span>Continue with Google</span>
+                <span>{isSignIn ? 'Sign in with Google' : 'Sign up with Google'}</span>
               </button>
 
               {DEV_AUTH_BYPASS_ENABLED && (
