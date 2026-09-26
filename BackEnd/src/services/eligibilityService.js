@@ -1,6 +1,7 @@
 const profileService = require('./profileService');
 const schemeService = require('./schemeService');
 const { supabaseAdmin } = require('../config/supabaseConfig');
+const intelligenceClient = require('./intelligenceClient');
 
 const httpError = (status, message) => {
     const error = new Error(message);
@@ -155,9 +156,10 @@ const AI_SERVER_URL = process.env.AI_SERVER_URL || 'http://127.0.0.1:8000';
  * @param {string} schemeId        - Scheme to evaluate against
  * @param {object} [profileOverride] - Optional profile fields passed directly in request body
  *                                    (used when applicant_profiles row does not exist yet)
+ * @param {object} [options]         - Optional execution options (e.g. { allowFallback: false })
  * @returns Eligibility report object
  */
-const checkEligibility = async (userId, schemeId, profileOverride = null) => {
+const checkEligibility = async (userId, schemeId, profileOverride = null, options = {}) => {
     if (!userId) throw httpError(400, 'User ID is required');
     if (!schemeId) throw httpError(400, 'schemeId is required');
 
@@ -178,41 +180,100 @@ const checkEligibility = async (userId, schemeId, profileOverride = null) => {
         profile = { ...profile, ...profileOverride };
     }
 
-    // --- 3. DYNAMIC AI INTEGRATION ATTEMPT ---
+    // --- 3. DYNAMIC AI INTEGRATION ATTEMPT (PHASE 15) ---
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); 
+        const applicantFacts = { ...profile };
+        if (profile.occupation) applicantFacts.occupation = profile.occupation;
+        if (profile.annual_income != null) applicantFacts.annual_income = Number(profile.annual_income);
+        if (profile.income != null && applicantFacts.annual_income == null) applicantFacts.annual_income = Number(profile.income);
+        if (profile.caste_category || profile.category) applicantFacts.caste_category = profile.caste_category || profile.category;
+        if (profile.gender) applicantFacts.gender = profile.gender;
+        if (profile.state) applicantFacts.state = profile.state;
+        if (profile.date_of_birth || profile.dob) applicantFacts.date_of_birth = profile.date_of_birth || profile.dob;
+        if (profile.is_woman_entrepreneur != null) applicantFacts.is_woman_entrepreneur = Boolean(profile.is_woman_entrepreneur);
+        if (profile.full_name) applicantFacts.full_name = profile.full_name;
+        if (profile.marital_status) applicantFacts.marital_status = profile.marital_status;
+        if (profile.land_ownership_acres != null) applicantFacts.land_ownership_acres = Number(profile.land_ownership_acres);
+        if (profile.education_level) applicantFacts.education_level = profile.education_level;
 
-        const aiResponse = await fetch(`${AI_SERVER_URL}/api/eligibility`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ schemeId, profile }),
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
+        const aiResponse = await intelligenceClient.postJson('/v1/eligibility/check', {
+            applicant_facts: applicantFacts,
+            scheme_ids: [schemeId]
+        }, { timeoutMs: 15000 });
 
-        if (aiResponse.ok) {
-            const data = await aiResponse.json();
-            console.log("✅ Successfully retrieved eligibility from Python AI Server");
-            
-            // Persist AI result to Supabase if table exists
+        const evaluation = aiResponse?.evaluations?.[0];
+        if (evaluation) {
+            const rawStatus = (evaluation.status || 'UNKNOWN').toUpperCase();
+            // Invariant: strictly preserve PASS, FAIL, UNKNOWN, REVIEW
+            const validStatus = ['PASS', 'FAIL', 'UNKNOWN', 'REVIEW'].includes(rawStatus) ? rawStatus : 'UNKNOWN';
+
+            let verdict;
+            let verdictReason;
+            if (validStatus === 'PASS') {
+                verdict = 'ELIGIBLE';
+                verdictReason = `All statutory eligibility criteria passed for ${evaluation.scheme_name || schemeId}.`;
+            } else if (validStatus === 'FAIL') {
+                verdict = 'NOT_ELIGIBLE';
+                const firstFailed = (evaluation.rules_evaluated || []).find(r => r.status === 'FAIL');
+                verdictReason = firstFailed?.reason || (evaluation.failed_rules?.length ? `Failed rules: ${evaluation.failed_rules.join(', ')}` : 'One or more statutory criteria were not satisfied.');
+            } else {
+                // UNKNOWN or REVIEW: DO NOT transform to PASS or ELIGIBLE
+                verdict = 'MANUAL_REVIEW';
+                const missing = evaluation.missing_fields?.length ? ` Missing fields: ${evaluation.missing_fields.join(', ')}.` : '';
+                const conflicted = evaluation.conflicted_fields?.length ? ` Conflicted: ${evaluation.conflicted_fields.join(', ')}.` : '';
+                verdictReason = `Statutory review required.${missing}${conflicted}`;
+            }
+
+            const mappedRules = (evaluation.rules_evaluated || []).map(r => ({
+                id: r.rule_id,
+                ruleId: r.rule_id,
+                field: r.field,
+                operator: r.operator,
+                status: r.status === 'PASS' ? 'pass' : (r.status === 'FAIL' ? 'fail' : 'review'),
+                rawStatus: r.status,
+                reason: r.reason,
+                applicantValue: r.applicant_value,
+                expectedValue: r.expected_value,
+                hardConstraint: r.hard_constraint
+            }));
+
+            // Persist to Supabase eligibility_results table
             try {
                 await supabaseAdmin.from('eligibility_results').insert({
                     user_id: userId,
                     scheme_id: schemeId,
-                    verdict: data.verdict || 'MANUAL_REVIEW',
-                    evaluated_rules: data.rules || [],
+                    verdict,
+                    evaluated_rules: mappedRules,
                     evaluated_at: new Date().toISOString()
                 });
             } catch (_) {}
 
-            return data;
+            return {
+                source: 'intelligence',
+                degraded: false,
+                schemeId,
+                schemeName: evaluation.scheme_name || schemeId,
+                status: validStatus,
+                isEligible: Boolean(evaluation.is_eligible),
+                verdict,
+                verdictReason,
+                rules: mappedRules,
+                missingFields: evaluation.missing_fields || [],
+                conflictedFields: evaluation.conflicted_fields || [],
+                matchedRules: evaluation.matched_rules || [],
+                failedRules: evaluation.failed_rules || [],
+                profileSnapshot: applicantFacts,
+                requestId: aiResponse.request_id || null,
+                evaluatedAt: new Date().toISOString()
+            };
         }
     } catch (err) {
-        console.log(`⚠️ AI Server unreachable (${err.message}) - Falling back to local Eligibility Mock Engine`);
+        console.warn(`[eligibilityService] Intelligence /v1/eligibility/check unavailable (${err.message}) - Falling back to local engine`);
+        if (options && options.allowFallback === false) {
+            throw err;
+        }
     }
-    // -----------------------------------------
+    // -----------------------------------------------------
 
     // 4. Resolve scheme metadata
     const { scheme } = await schemeService.getSchemeById(schemeId);
@@ -252,6 +313,8 @@ const checkEligibility = async (userId, schemeId, profileOverride = null) => {
     } catch (_) { /* table may not exist yet */ }
 
     return {
+        source: 'local_fallback',
+        degraded: true,
         schemeId,
         schemeName: scheme.name,
         verdict,

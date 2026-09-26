@@ -1,5 +1,7 @@
+const crypto = require('crypto');
 const profileService = require('./profileService');
 const { supabaseAdmin } = require('../config/supabaseConfig');
+const intelligenceClient = require('./intelligenceClient');
 
 const httpError = (status, message) => {
     const error = new Error(message);
@@ -186,13 +188,21 @@ const GENERAL_ANSWERS = [
 
 const AI_SERVER_URL = process.env.AI_SERVER_URL || 'http://127.0.0.1:8000';
 
+const withFallbackMeta = (obj) => ({
+    source: 'local_fallback',
+    degraded: true,
+    ...obj
+});
+
 /**
  * Main chat service.
  * @param {string} userId - Authenticated user ID (may be null for anonymous)
  * @param {string} message - User's question
  * @param {Array}  history - Conversation history [{role, content}]
+ * @param {string} [conversationId] - Distinct conversation session ID
+ * @param {object} [options] - Options (e.g. { allowFallback: false })
  */
-const chat = async (userId, message, history = []) => {
+const chat = async (userId, message, history = [], conversationId = null, options = {}) => {
     if (!message || !message.trim()) throw httpError(400, 'Message is required');
 
     // Load user profile for personalization (optional, non-blocking)
@@ -201,32 +211,77 @@ const chat = async (userId, message, history = []) => {
         try { profile = await profileService.getProfileById(userId); } catch (_) { }
     }
 
-    // --- 1. DYNAMIC AI INTEGRATION ATTEMPT ---
-    // Try to call the real Python AI server first
+    const effectiveConversationId = conversationId || (userId ? String(userId) : undefined);
+
+    // --- 1. DYNAMIC AI INTEGRATION ATTEMPT (PHASE 15) ---
+    // Connect to FastAPI Intelligence microservice /v1/chat
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+        const payload = {
+            query: message,
+            conversation_id: effectiveConversationId,
+            language: 'en',
+            applicant_facts: profile || undefined
+        };
 
-        const aiResponse = await fetch(`${AI_SERVER_URL}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, history, profile }),
-            signal: controller.signal
+        const aiResponse = await intelligenceClient.postJson('/v1/chat', payload, {
+            timeoutMs: 30000
         });
-        
-        clearTimeout(timeoutId);
 
-        if (aiResponse.ok) {
-            const data = await aiResponse.json();
-            console.log("✅ Successfully retrieved response from Python AI Server");
-            return data; // Return the real AI response!
+        if (aiResponse && (aiResponse.answer || aiResponse.reply)) {
+            const answerText = aiResponse.answer || aiResponse.reply;
+
+            const citations = (aiResponse.citations || []).map(c => ({
+                chunkId: c.chunk_id || c.chunkId || null,
+                schemeId: c.scheme_id || c.schemeId || null,
+                schemeName: c.scheme_name || c.scheme_id || 'Statutory Policy Corpus',
+                source: c.url || 'Official Scheme Repository',
+                url: c.url || null,
+                excerpt: c.excerpt || ''
+            }));
+
+            const schemes = (aiResponse.suggested_schemes || []).map(s => {
+                const catalogMatch = SCHEME_CATALOGUE.find(c => c.id === s.scheme_id);
+                return {
+                    id: s.scheme_id,
+                    schemeId: s.scheme_id,
+                    title: s.scheme_name || (catalogMatch ? catalogMatch.title : s.scheme_id),
+                    name: s.scheme_name || (catalogMatch ? catalogMatch.name : s.scheme_id),
+                    subtitle: s.ministry || s.state || (catalogMatch ? catalogMatch.subtitle : ''),
+                    tags: [s.ministry, s.state].filter(Boolean),
+                    matchScore: Math.round((s.relevance_score || 0.8) * 100),
+                    matchType: (s.relevance_score || 0.8) >= 0.8 ? 'green' : 'orange',
+                    iconType: catalogMatch ? catalogMatch.iconType : 'ashoka'
+                };
+            });
+
+            return {
+                source: 'intelligence',
+                degraded: false,
+                reply: answerText,
+                answer: answerText,
+                citations,
+                schemes,
+                isGrounded: citations.length > 0,
+                showViewAll: schemes.length > 0,
+                conversationId: aiResponse.conversation_id || effectiveConversationId,
+                requestId: aiResponse.request_id || null,
+                intent: aiResponse.intent || 'SCHEME_DISCOVERY',
+                providerTelemetry: aiResponse.provider_telemetry || null
+            };
         }
     } catch (err) {
-        console.log(`⚠️ AI Server unreachable (${err.message}) - Falling back to local Mock Engine`);
+        console.warn(`[chatService] Intelligence /v1/chat unavailable (${err.message}) - Falling back to local engine`);
+        if (options && options.allowFallback === false) {
+            throw err;
+        }
     }
-    // -----------------------------------------
+    // ----------------------------------------------------
 
     // --- 2. FALLBACK MOCK LOGIC ---
+    return withFallbackMeta(computeLocalFallback(message, profile));
+};
+
+const computeLocalFallback = (message, profile) => {
     // Check student / Gujarat / education schemes query
     const msgLower = message.toLowerCase();
     if (

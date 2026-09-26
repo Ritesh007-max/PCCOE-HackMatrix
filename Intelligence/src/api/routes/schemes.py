@@ -5,7 +5,8 @@ CRITICAL INVARIANT: Retrieval never decides statutory eligibility.
 """
 
 import logging
-from typing import List
+import math
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 
@@ -22,6 +23,40 @@ from ..schemas import SchemeSearchRequest, SchemeSearchResponse, SchemeSearchRes
 logger = logging.getLogger("fin.api.routes.schemes")
 
 router = APIRouter(prefix="/v1/schemes", tags=["Schemes"])
+
+
+def _normalize_optional_str(val: Any) -> Optional[str]:
+    """
+    Normalizes optional metadata strings.
+    Preserves valid non-empty strings.
+    Converts None, NaN (float), and empty/whitespace strings to None.
+    Never produces literal 'nan' string or fabricates metadata.
+    """
+    if val is None:
+        return None
+    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+        return None
+    if isinstance(val, str):
+        cleaned = val.strip()
+        if not cleaned or cleaned.lower() == "nan":
+            return None
+        return cleaned
+    return None
+
+
+def _clean_dict(d: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Recursively replaces float NaN/inf values with None for JSON compliance."""
+    if not d or not isinstance(d, dict):
+        return {}
+    clean: Dict[str, Any] = {}
+    for k, v in d.items():
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            clean[k] = None
+        elif isinstance(v, dict):
+            clean[k] = _clean_dict(v)
+        else:
+            clean[k] = v
+    return clean
 
 
 @router.post(
@@ -63,16 +98,17 @@ async def search_schemes(
     items: List[SchemeSearchResultItem] = []
     for res in scheme_results:
         snippets = [c.content for c in res.best_matching_chunks[:3]]
+        meta = res.source_metadata or {}
         items.append(
             SchemeSearchResultItem(
                 scheme_id=res.scheme_slug,
                 scheme_name=res.scheme_name,
                 relevance_score=res.aggregate_score,
-                source_authority=res.source_metadata.get("ministry"),
-                source_url=res.source_metadata.get("source_url"),
+                source_authority=_normalize_optional_str(meta.get("ministry")),
+                source_url=_normalize_optional_str(meta.get("source_url")),
                 evidence_snippets=snippets,
-                state=res.source_metadata.get("state"),
-                details=res.source_metadata,
+                state=_normalize_optional_str(meta.get("state")),
+                details=_clean_dict(meta),
             )
         )
 

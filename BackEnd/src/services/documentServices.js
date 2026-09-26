@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { supabaseAdmin } = require('../config/supabaseConfig');
 const profileService = require('./profileService');
 const { throwIfError } = require('../utils/supabaseErrors');
+const intelligenceClient = require('./intelligenceClient');
 
 const DOCUMENTS_BUCKET = process.env.SUPABASE_DOCUMENTS_BUCKET || 'documents';
 const ALLOWED_TYPES = new Set([
@@ -211,10 +212,80 @@ const uploadDocument = async ({ file, documentType, applicationId, userId }) => 
     return mapDocument(data);
 };
 
-// The supplied documents table has no extraction-result columns. Avoid returning
-// mock extraction as if it were saved; OCR can be wired when its storage contract exists.
-const extractDocument = async () => {
-    throw httpError(501, 'Document extraction is not configured for the current documents schema');
+/**
+ * POST /api/documents/extract
+ * Forwards user document bytes from Supabase Storage to Intelligence /v1/documents/process
+ * and persists the verification and extraction status back to Supabase.
+ */
+const extractDocument = async ({ documentId, userId }) => {
+    if (!documentId) throw httpError(400, 'documentId is required');
+    if (!userId) throw httpError(400, 'User ID is required');
+
+    // 1. Verify document ownership and load metadata
+    const docRow = await fetchDocumentRow(documentId, userId);
+    if (!docRow.file_url) throw httpError(404, 'Document file storage path not found');
+
+    // 2. Download file bytes from Supabase Storage
+    const { data: fileBlob, error: downloadError } = await supabaseAdmin
+        .storage
+        .from(DOCUMENTS_BUCKET)
+        .download(docRow.file_url);
+
+    if (downloadError || !fileBlob) {
+        throw httpError(500, `Failed to retrieve document from storage: ${downloadError?.message || 'Empty file'}`);
+    }
+
+    const fileBuffer = Buffer.from(await fileBlob.arrayBuffer());
+
+    // 3. Build multipart form data for Intelligence /v1/documents/process
+    const formData = new FormData();
+    const fileName = docRow.file_name || 'document.pdf';
+    const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+    formData.append('files', blob, fileName);
+
+    let aiResponse;
+    try {
+        aiResponse = await intelligenceClient.postMultipart('/v1/documents/process', formData, {
+            timeoutMs: 30000
+        });
+    } catch (err) {
+        console.warn(`[documentServices] Intelligence /v1/documents/process failed: ${err.message}`);
+        throw httpError(
+            err.status || 503,
+            `Document processing failed: ${err.message || 'Intelligence service unavailable'}`
+        );
+    }
+
+    const processedItem = aiResponse?.documents?.[0] || null;
+
+    // 4. Update document verification status and remarks in Supabase
+    const isSuccess = processedItem && (processedItem.status === 'VALID' || processedItem.status === 'valid');
+    const updatePayload = {
+        verification_status: isSuccess ? 'VERIFIED' : 'REJECTED',
+        reviewer_remarks: processedItem
+            ? `AI OCR Parsed (${processedItem.extraction_method || 'text_extraction'}) | Pages: ${processedItem.page_count} | SHA: ${(processedItem.sha256 || '').slice(0, 12)}`
+            : 'Rejected by security/parsing pipeline',
+        updated_at: new Date().toISOString()
+    };
+
+    const { data: updatedDoc, error: updateError } = await supabaseAdmin
+        .from('documents')
+        .update(updatePayload)
+        .eq('id', documentId)
+        .select()
+        .single();
+
+    if (updateError) {
+        console.warn(`[documentServices] Could not update document row: ${updateError.message}`);
+    }
+
+    const signedUrl = await getSignedFileUrl(docRow.file_url);
+
+    return {
+        ...mapDocument(updatedDoc || { ...docRow, ...updatePayload }, signedUrl, { includeFileUrl: true }),
+        extraction: processedItem,
+        requestId: aiResponse?.request_id || null
+    };
 };
 
 const listDocuments = async (userId) => {

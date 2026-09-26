@@ -2,6 +2,9 @@ const profileService = require('./profileService');
 const schemeService = require('./schemeService');
 const { checkEligibility } = require('./eligibilityService');
 const { supabaseAdmin } = require('../config/supabaseConfig');
+const intelligenceClient = require('./intelligenceClient');
+
+const DOCUMENTS_BUCKET = process.env.SUPABASE_DOCUMENTS_BUCKET || 'documents';
 
 const httpError = (status, message) => {
     const error = new Error(message);
@@ -59,13 +62,14 @@ const loadUserDocuments = async (userId) => {
  * @param {string} userId - Authenticated user
  * @param {string} schemeId - Scheme to analyze readiness for
  * @param {object} [profileOverride] - Optional profile override
+ * @param {object} [options] - Execution options (e.g. { allowFallback: false })
  * @returns Application readiness report
  */
-const analyzeApplication = async (userId, schemeId, profileOverride = null) => {
+const analyzeApplication = async (userId, schemeId, profileOverride = null, options = {}) => {
     if (!userId) throw httpError(400, 'User ID is required');
     if (!schemeId) throw httpError(400, 'schemeId is required');
 
-    // Load profile
+    // 1. Load profile
     let profile = null;
     try {
         profile = await profileService.getProfileById(userId);
@@ -81,10 +85,121 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null) => {
         profile = { ...profile, ...profileOverride };
     }
 
-    // Find scheme
+    // 2. Find scheme
     const { scheme } = await schemeService.getSchemeById(schemeId);
 
-    // Run eligibility check
+    // 3. Attempt 21-Step Pipeline via Intelligence microservice if user has documents
+    if (profile.id) {
+        try {
+            const { data: userApps } = await supabaseAdmin
+                .from('applications')
+                .select('id, scheme_id')
+                .eq('applicant_id', profile.id);
+
+            const appIds = (userApps || []).map(a => a.id);
+            if (appIds.length > 0) {
+                const { data: docRows } = await supabaseAdmin
+                    .from('documents')
+                    .select('*')
+                    .in('application_id', appIds);
+
+                const validDocRows = (docRows || []).filter(d => Boolean(d.file_url));
+                if (validDocRows.length > 0) {
+                    const formData = new FormData();
+                    let filesAppended = 0;
+
+                    for (const doc of validDocRows) {
+                        try {
+                            const { data: blob } = await supabaseAdmin.storage
+                                .from(DOCUMENTS_BUCKET)
+                                .download(doc.file_url);
+
+                            if (blob) {
+                                const buffer = Buffer.from(await blob.arrayBuffer());
+                                const fileBlob = new Blob([buffer], { type: 'application/octet-stream' });
+                                formData.append('files', fileBlob, doc.file_name || 'document.pdf');
+                                filesAppended++;
+                            }
+                        } catch (_) {}
+                    }
+
+                    if (filesAppended > 0) {
+                        formData.append('query', scheme.name || schemeId);
+                        formData.append('target_scheme', schemeId);
+                        formData.append('session_id', String(userId));
+
+                        const aiAnalysis = await intelligenceClient.postMultipart('/v1/applications/analyze', formData, {
+                            timeoutMs: 60000
+                        });
+
+                        if (aiAnalysis && aiAnalysis.steps_completed === 21) {
+                            // Persist 21-step decision to Supabase applications table
+                            const targetApp = (userApps || []).find(a => a.scheme_id === schemeId) || userApps[0];
+                            if (targetApp) {
+                                try {
+                                    await supabaseAdmin
+                                        .from('applications')
+                                        .update({
+                                            status: aiAnalysis.processing_status || 'under_review',
+                                            eligibility_status: aiAnalysis.eligibility_decision?.verdict || 'under_review',
+                                            eligibility_score: aiAnalysis.eligibility_decision?.is_eligible ? 100 : 50,
+                                            rule_evaluations: aiAnalysis.eligibility_decision?.rules_evaluated || [],
+                                            missing_documents: aiAnalysis.missing_information?.missing_documents || [],
+                                            estimated_benefit: aiAnalysis.benefit_calculation?.benefit_amount || null,
+                                            llm_explanation: aiAnalysis.explanation?.summary || null,
+                                            explanation_citations: aiAnalysis.explanation?.citations || [],
+                                            decision_notes: `Phase 8/15 21-step pipeline completed | Status: ${aiAnalysis.processing_status}`,
+                                            reviewed_at: new Date().toISOString(),
+                                            updated_at: new Date().toISOString()
+                                        })
+                                        .eq('id', targetApp.id);
+                                } catch (_) {}
+                            }
+
+                            // Adapt response preserving existing FrontEnd contract while enriching with 21-step data
+                            const isEligible = Boolean(aiAnalysis.eligibility_decision?.is_eligible);
+                            const verdict = aiAnalysis.eligibility_decision?.verdict || (isEligible ? 'ELIGIBLE' : 'MANUAL_REVIEW');
+
+                            return {
+                                source: 'intelligence',
+                                degraded: false,
+                                schemeId,
+                                schemeName: scheme.name,
+                                readinessScore: isEligible ? 95 : 55,
+                                readinessLabel: isEligible ? 'Ready' : 'Needs Attention',
+                                eligibility: {
+                                    verdict,
+                                    reason: aiAnalysis.explanation?.summary || 'Evaluated via statutory rules.'
+                                },
+                                documents: {
+                                    required: (scheme.required_documents || []).length,
+                                    uploaded: filesAppended,
+                                    missing: (aiAnalysis.missing_information?.missing_documents || []).length,
+                                    details: aiAnalysis.documents_processed || []
+                                },
+                                profile: {
+                                    completionPercent: 90,
+                                    applicantProfile: aiAnalysis.applicant_profile
+                                },
+                                nextActions: isEligible
+                                    ? [{ priority: 'low', action: 'Ready to Apply', detail: 'Application validated through 21-step pipeline. Ready for submission.' }]
+                                    : [{ priority: 'high', action: 'Review Criteria', detail: aiAnalysis.explanation?.summary || 'Check scheme requirements.' }],
+                                pipeline_21_step: aiAnalysis,
+                                analyzedAt: new Date().toISOString()
+                            };
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn(`[applicationService] Intelligence /v1/applications/analyze unavailable (${err.message}) - Falling back to local readiness evaluation`);
+            if (options && options.allowFallback === false) {
+                throw err;
+            }
+        }
+    }
+
+    // 4. Fallback local readiness evaluation
     let eligibilityResult = null;
     try {
         eligibilityResult = await checkEligibility(userId, schemeId, profileOverride);
@@ -92,7 +207,6 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null) => {
         eligibilityResult = { verdict: 'MANUAL_REVIEW', verdictReason: e.message };
     }
 
-    // Check documents
     const uploadedDocs = await loadUserDocuments(userId);
     const requiredDocs = scheme.required_documents || [];
 
@@ -106,7 +220,6 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null) => {
     const missingDocs = documentStatus.filter(d => !d.uploaded);
     const uploadedCount = documentStatus.filter(d => d.uploaded).length;
 
-    // Profile completeness check
     const profileFields = {
         full_name: !!profile.full_name,
         annual_income: profile.annual_income != null,
@@ -118,13 +231,11 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null) => {
     const profileFilledCount = Object.values(profileFields).filter(Boolean).length;
     const profileCompletion = Math.round((profileFilledCount / Object.keys(profileFields).length) * 100);
 
-    // Readiness score: 40% eligibility, 40% documents, 20% profile
     const eligibilityScore = eligibilityResult?.verdict === 'ELIGIBLE' ? 40 : eligibilityResult?.verdict === 'MANUAL_REVIEW' ? 20 : 0;
     const docsScore = requiredDocs.length > 0 ? Math.round((uploadedCount / requiredDocs.length) * 40) : 40;
     const profileScore = Math.round((profileCompletion / 100) * 20);
     const readinessScore = eligibilityScore + docsScore + profileScore;
 
-    // Derive next actions
     const nextActions = [];
     if (eligibilityResult?.verdict !== 'ELIGIBLE') {
         nextActions.push({ priority: 'high', action: 'Review Eligibility', detail: eligibilityResult?.verdictReason || 'Check eligibility criteria.' });
@@ -140,6 +251,8 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null) => {
     }
 
     return {
+        source: 'local_readiness',
+        degraded: true,
         schemeId,
         schemeName: scheme.name,
         readinessScore,
