@@ -7,27 +7,24 @@
  *   - GET  /api/users/me       : Get current authenticated user profile
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://pccoe-hackmatrix-backend.onrender.com').replace(/\/+$/, '');
 
 /**
- * Resilient API fetcher with automatic fallback to 127.0.0.1 and Vite dev proxy (/api/...)
+ * Resilient API fetcher with automatic fallback to relative /api proxy
  */
 export async function safeApiFetch(endpointOrUrl, options = {}) {
-  const url = endpointOrUrl.startsWith('http') ? endpointOrUrl : `${API_BASE}${endpointOrUrl}`;
+  const cleanEndpoint = endpointOrUrl.startsWith('/') ? endpointOrUrl : `/${endpointOrUrl}`;
+  const url = endpointOrUrl.startsWith('http') ? endpointOrUrl : `${API_BASE}${cleanEndpoint}`;
   try {
     return await fetch(url, options);
   } catch (err) {
-    // If localhost failed (e.g. IPv6 binding, port mismatch or CORS policy), try 127.0.0.1
-    if (url.includes('localhost:5000')) {
-      try {
-        const fallbackUrl = url.replace('localhost:5000', '127.0.0.1:5000');
-        return await fetch(fallbackUrl, options);
-      } catch (err2) {
-        // Fallback to relative endpoint via Vite proxy (/api/...)
-        const relativeUrl = url.replace(/^http:\/\/(localhost|127\.0\.0\.1):5000/, '');
-        if (relativeUrl.startsWith('/api')) {
+    // If external call fails, fallback to relative /api via Vite proxy if applicable
+    if (url.includes('pccoe-hackmatrix-backend.onrender.com') || url.startsWith('http')) {
+      const relativeUrl = url.replace(/^https?:\/\/[^/]+/, '');
+      if (relativeUrl.startsWith('/api')) {
+        try {
           return await fetch(relativeUrl, options);
-        }
+        } catch (_) {}
       }
     }
     throw err;
