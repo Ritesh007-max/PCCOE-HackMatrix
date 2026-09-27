@@ -19,15 +19,31 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS || "http://localhost:5173,h
 
 app.use(cors({
     origin(origin, callback) {
-        // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server, Render health checks)
         if (!origin) return callback(null, true);
-        
-        // Allow explicitly configured origins or any localhost/127.0.0.1 port
-        if (allowedOrigins.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+
+        // Allow wildcard
+        if (allowedOrigins.includes("*")) {
             return callback(null, true);
         }
-        
-        return callback(new Error(`CORS error: Origin ${origin} not allowed`));
+
+        // Allow explicitly configured origins
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        // Allow any localhost/127.0.0.1 port
+        if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+            return callback(null, true);
+        }
+
+        // Allow any Vercel deployment preview or production domain (*.vercel.app)
+        if (/^https:\/\/[a-zA-Z0-9_\-]+\.vercel\.app$/.test(origin)) {
+            return callback(null, true);
+        }
+
+        // Return false instead of throwing 500 error
+        return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -39,6 +55,14 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         message: "Backend API is running"
+    });
+});
+
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
     });
 });
 

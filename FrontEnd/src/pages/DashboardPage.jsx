@@ -17,8 +17,8 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        setLoading(true);
-        const res = await authenticatedFetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/dashboard`);
+        const apiBase = (import.meta.env.VITE_API_URL || 'https://pccoe-hackmatrix-backend.onrender.com').replace(/\/+$/, '');
+        const res = await authenticatedFetch(`${apiBase}/api/dashboard`);
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.data) {
