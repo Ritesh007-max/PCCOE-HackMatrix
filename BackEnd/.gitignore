@@ -31,7 +31,6 @@ temp/
 .cache/
 .DS_Store
 Thumbs.db
-.idea/
 .vscode/*
 !.vscode/extensions.json
-package.json
+

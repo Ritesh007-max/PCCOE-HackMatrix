@@ -1,5 +1,4 @@
 const documentServices = require("../services/documentServices");
-const authMiddleware = require("../middleware/authMiddleware");
 
 const httpError = (status, message) => {
     const error = new Error(message);
