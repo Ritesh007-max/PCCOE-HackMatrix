@@ -179,6 +179,7 @@ export default function SignupPage({ initialMode = 'signup' }) {
           email: formData.email,
           password: formData.password,
         });
+      } else {
         // Sanitize mobile digits to prevent duplicate country codes (e.g. +91 91...)
         let rawMobileDigits = formData.mobile.replace(/\D/g, '');
         if (selectedCountry.code === '+91' && rawMobileDigits.length === 12 && rawMobileDigits.startsWith('91')) {
@@ -193,24 +194,23 @@ export default function SignupPage({ initialMode = 'signup' }) {
           fullName: formData.fullName,
           phone: finalPhone,
         });
-
       }
 
       // Check for backend errors (validation, invalid credentials, existing user, etc.)
-      if (!authResult.success) {
-        if (!authResult.isNetworkError) {
-          setErrorMsg(authResult.message);
+      if (!authResult || !authResult.success) {
+        if (!authResult?.isNetworkError) {
+          setErrorMsg(authResult?.message || 'Authentication failed. Please check your credentials.');
           setIsSubmitting(false);
           return;
         }
 
         if (!DEV_AUTH_BYPASS_ENABLED) {
-          setErrorMsg(authResult.message);
+          setErrorMsg(authResult?.message || 'Unable to connect to server. Please try again.');
           setIsSubmitting(false);
           return;
         }
 
-        console.warn('Backend server offline, continuing with local development session:', authResult.message);
+        console.warn('Backend server offline, continuing with local development session:', authResult?.message);
       }
 
       // Resolve proper registered citizen name (so login preserves the registration username)
@@ -231,9 +231,9 @@ export default function SignupPage({ initialMode = 'signup' }) {
         });
       } else {
         citizenFullName =
-          authResult.data?.user?.user_metadata?.full_name ||
-          authResult.data?.user?.user_metadata?.fullName ||
-          authResult.data?.user?.fullName ||
+          authResult?.data?.user?.user_metadata?.full_name ||
+          authResult?.data?.user?.user_metadata?.fullName ||
+          authResult?.data?.user?.fullName ||
           registeredProfile?.fullName ||
           '';
       }
@@ -241,7 +241,7 @@ export default function SignupPage({ initialMode = 'signup' }) {
       // Store authenticated session
       storeAuthSession({
         user: {
-          ...(authResult.data?.user || {}),
+          ...(authResult?.data?.user || {}),
           email: targetEmail,
           ...(citizenFullName ? { fullName: citizenFullName } : {}),
           state: registeredProfile?.state,
@@ -252,8 +252,8 @@ export default function SignupPage({ initialMode = 'signup' }) {
           dob: registeredProfile?.dob,
           gender: registeredProfile?.gender,
         },
-        accessToken: authResult.data?.access_token,
-        refreshToken: authResult.data?.refresh_token,
+        accessToken: authResult?.data?.access_token,
+        refreshToken: authResult?.data?.refresh_token,
         fallbackName: citizenFullName || (isSignIn ? (registeredProfile?.fullName || '') : formData.fullName.trim()),
       });
 
@@ -570,8 +570,30 @@ export default function SignupPage({ initialMode = 'signup' }) {
 
             {/* Error or Success Alert */}
             {errorMsg && (
-              <div className="signup-alert signup-alert-error" role="alert">
-                {errorMsg}
+              <div className="signup-alert signup-alert-error" role="alert" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span>{errorMsg}</span>
+                {errorMsg.toLowerCase().includes('already') && errorMsg.toLowerCase().includes('registered') && !isSignIn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSignIn(true);
+                      setErrorMsg('');
+                    }}
+                    style={{
+                      alignSelf: 'flex-start',
+                      background: 'none',
+                      border: 'none',
+                      color: '#065f46',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      padding: '0',
+                      textDecoration: 'underline',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    Click here to Sign In with this account &rarr;
+                  </button>
+                )}
               </div>
             )}
             {successMsg && (
