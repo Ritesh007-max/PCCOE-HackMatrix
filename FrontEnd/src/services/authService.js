@@ -7,25 +7,41 @@
  *   - GET  /api/users/me       : Get current authenticated user profile
  */
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'https://pccoe-hackmatrix-backend.onrender.com').replace(/\/+$/, '');
+export const getApiBase = () => {
+  if (import.meta.env.DEV) {
+    if (import.meta.env.VITE_API_URL && !import.meta.env.VITE_API_URL.includes('onrender.com')) {
+      return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
+    }
+    return 'http://localhost:5000';
+  }
+  return (import.meta.env.VITE_API_URL || 'https://pccoe-hackmatrix-backend.onrender.com').replace(/\/+$/, '');
+};
+
+const API_BASE = getApiBase();
 
 /**
- * Resilient API fetcher with automatic fallback to relative /api proxy
+ * Resilient API fetcher with automatic fallback to local backend / relative proxy
  */
 export async function safeApiFetch(endpointOrUrl, options = {}) {
   const cleanEndpoint = endpointOrUrl.startsWith('/') ? endpointOrUrl : `/${endpointOrUrl}`;
-  const url = endpointOrUrl.startsWith('http') ? endpointOrUrl : `${API_BASE}${cleanEndpoint}`;
+  const base = getApiBase();
+  const url = endpointOrUrl.startsWith('http') ? endpointOrUrl : `${base}${cleanEndpoint}`;
   try {
     return await fetch(url, options);
   } catch (err) {
-    // If external call fails, fallback to relative /api via Vite proxy if applicable
-    if (url.includes('pccoe-hackmatrix-backend.onrender.com') || url.startsWith('http')) {
-      const relativeUrl = url.replace(/^https?:\/\/[^/]+/, '');
-      if (relativeUrl.startsWith('/api')) {
-        try {
-          return await fetch(relativeUrl, options);
-        } catch (_) {}
-      }
+    // If call to remote/Render failed, immediately try local backend on port 5000
+    if (!url.includes('localhost:5000') && !url.includes('127.0.0.1:5000')) {
+      try {
+        const localUrl = `http://localhost:5000${cleanEndpoint}`;
+        return await fetch(localUrl, options);
+      } catch (_) {}
+    }
+    // Also try relative /api endpoint via Vite proxy if available
+    const relativeUrl = url.replace(/^https?:\/\/[^/]+/, '');
+    if (relativeUrl.startsWith('/api')) {
+      try {
+        return await fetch(relativeUrl, options);
+      } catch (_) {}
     }
     throw err;
   }
