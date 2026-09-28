@@ -1,4 +1,3 @@
-// 404 - Not Found Handler
 const notFoundHandler = (req, res, next) => {
     res.status(404).json({
         success: false,
@@ -6,7 +5,6 @@ const notFoundHandler = (req, res, next) => {
     });
 };
 
-// Global Error Handler
 const globalErrorHandler = (error, req, res, next) => {
     const uploadErrorStatus = error.name === 'MulterError'
         ? (error.code === 'LIMIT_FILE_SIZE' ? 413 : 400)

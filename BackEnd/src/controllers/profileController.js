@@ -53,13 +53,11 @@ const updateProfile = async (req, res, next) => {
             }
         }
 
-        if (filteredUpdates.date_of_birth !== undefined && filteredUpdates.dob === undefined) {
-            filteredUpdates.dob = filteredUpdates.date_of_birth;
-        }
+        if (filteredUpdates.date_of_birth !== undefined && filteredUpdates.dob === undefined) filteredUpdates.dob = filteredUpdates.date_of_birth;
+    
         delete filteredUpdates.date_of_birth;
-        if (filteredUpdates.city !== undefined && filteredUpdates.district === undefined) {
-            filteredUpdates.district = filteredUpdates.city;
-        }
+        if (filteredUpdates.city !== undefined && filteredUpdates.district === undefined) filteredUpdates.district = filteredUpdates.city;
+    
         delete filteredUpdates.city;
         if (filteredUpdates.caste_category !== undefined && filteredUpdates.category === undefined) {
             filteredUpdates.category = filteredUpdates.caste_category;

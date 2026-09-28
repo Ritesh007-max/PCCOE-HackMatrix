@@ -1,9 +1,5 @@
 const schemeService = require('../services/schemeService');
 
-/**
- * POST /api/schemes/search
- * Body: { query?, filters?: { type?, ministry?, tags?, maxBenefit? }, limit? }
- */
 const searchSchemes = async (req, res, next) => {
     try {
         const { query, filters, limit } = req.body;
@@ -17,9 +13,6 @@ const searchSchemes = async (req, res, next) => {
     }
 };
 
-/**
- * GET /api/schemes/:id
- */
 const getSchemeById = async (req, res, next) => {
     try {
         const { id } = req.params;
