@@ -1,10 +1,5 @@
 const eligibilityService = require('../services/eligibilityService');
 
-/**
- * POST /api/eligibility/check
- * Body: { schemeId }
- * Auth: Bearer token required (req.user set by authMiddleware)
- */
 const checkEligibility = async (req, res, next) => {
     try {
         const userId = req.user.id;
