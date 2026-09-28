@@ -34,9 +34,8 @@ const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const updates = req.body;
-        if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
-            return res.status(400).json({ success: false, message: 'Profile updates must be a JSON object' });
-        }
+        if (!updates || typeof updates !== 'object' || Array.isArray(updates)) return res.status(400).json({ success: false, message: 'Profile updates must be a JSON object' });
+        
 
         const allowedFields = profileService.ACCEPTED_FIELDS;
         const unsupportedFields = Object.keys(updates).filter((field) => !allowedFields.includes(field));
@@ -54,7 +53,6 @@ const updateProfile = async (req, res, next) => {
             }
         }
 
-        // Normalize schema names and legacy UI aliases before validating.
         if (filteredUpdates.date_of_birth !== undefined && filteredUpdates.dob === undefined) {
             filteredUpdates.dob = filteredUpdates.date_of_birth;
         }
