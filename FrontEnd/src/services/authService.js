@@ -7,41 +7,28 @@
  *   - GET  /api/users/me       : Get current authenticated user profile
  */
 
-export const getApiBase = () => {
-  if (import.meta.env.DEV) {
-    if (import.meta.env.VITE_API_URL && !import.meta.env.VITE_API_URL.includes('onrender.com')) {
-      return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
-    }
-    return 'http://localhost:5000';
-  }
-  return (import.meta.env.VITE_API_URL || 'https://pccoe-hackmatrix-backend.onrender.com').replace(/\/+$/, '');
-};
-
-const API_BASE = getApiBase();
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:5000';
 
 /**
- * Resilient API fetcher with automatic fallback to local backend / relative proxy
+ * Resilient API fetcher with automatic fallback to 127.0.0.1 and Vite dev proxy (/api/...)
  */
 export async function safeApiFetch(endpointOrUrl, options = {}) {
-  const cleanEndpoint = endpointOrUrl.startsWith('/') ? endpointOrUrl : `/${endpointOrUrl}`;
-  const base = getApiBase();
-  const url = endpointOrUrl.startsWith('http') ? endpointOrUrl : `${base}${cleanEndpoint}`;
+  const url = endpointOrUrl.startsWith('http') ? endpointOrUrl : `${API_BASE}${endpointOrUrl}`;
   try {
     return await fetch(url, options);
   } catch (err) {
-    // If call to remote/Render failed, immediately try local backend on port 5000
-    if (!url.includes('localhost:5000') && !url.includes('127.0.0.1:5000')) {
+    // If localhost failed (e.g. IPv6 binding, port mismatch or CORS policy), try 127.0.0.1
+    if (url.includes('localhost:5000')) {
       try {
-        const localUrl = `http://localhost:5000${cleanEndpoint}`;
-        return await fetch(localUrl, options);
-      } catch (_) {}
-    }
-    // Also try relative /api endpoint via Vite proxy if available
-    const relativeUrl = url.replace(/^https?:\/\/[^/]+/, '');
-    if (relativeUrl.startsWith('/api')) {
-      try {
-        return await fetch(relativeUrl, options);
-      } catch (_) {}
+        const fallbackUrl = url.replace('localhost:5000', '127.0.0.1:5000');
+        return await fetch(fallbackUrl, options);
+      } catch (_) {
+        // Fallback to relative endpoint via Vite proxy (/api/...)
+        const relativeUrl = url.replace(/^http:\/\/(localhost|127\.0\.0\.1):5000/, '');
+        if (relativeUrl.startsWith('/api')) {
+          return await fetch(relativeUrl, options);
+        }
+      }
     }
     throw err;
   }
@@ -49,7 +36,7 @@ export async function safeApiFetch(endpointOrUrl, options = {}) {
 
 const STORAGE_KEY_REGISTERED_USERS = 'fin_registered_users';
 const STORAGE_KEY_DEV_AUTH_BYPASS = 'fin_dev_auth_bypass';
-const DEV_AUTH_BYPASS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH_BYPASS === 'true';
+const DEV_AUTH_BYPASS_ENABLED = Boolean(typeof import.meta !== 'undefined' && import.meta.env?.DEV && import.meta.env?.VITE_ENABLE_DEV_AUTH_BYPASS === 'true');
 
 export function isDevelopmentAuthBypassSession() {
   if (!DEV_AUTH_BYPASS_ENABLED) return false;
@@ -60,35 +47,19 @@ export function isDevelopmentAuthBypassSession() {
     token === 'google-oauth-demo-token';
 }
 
-// Pre-seed known accounts so existing test logins immediately resolve correctly
-const PRESEEDED_ACCOUNTS = {
-  'hemangsingh47@gmail.com': {
-    email: 'hemangsingh47@gmail.com',
-    fullName: 'Hemang',
-    name: 'Hemang',
-  },
-  'hemang@gmail.com': {
-    email: 'hemang@gmail.com',
-    fullName: 'Hemang',
-    name: 'Hemang',
-  },
-};
+// Pre-seeded known accounts registry (clean state: accounts registered dynamically)
+const PRESEEDED_ACCOUNTS = {};
 
 /**
  * Format an email prefix into a clean, human-readable display name.
- * e.g. "hemangsingh47" -> "Hemang", "john.doe" -> "John Doe"
+ * e.g. "john.doe" -> "John Doe", "citizen123" -> "Citizen"
  */
 export function formatEmailPrefixToName(prefix) {
   if (!prefix || typeof prefix !== 'string') return 'Citizen';
   const cleanPrefix = prefix.trim();
   if (!cleanPrefix) return 'Citizen';
 
-  // Specific check for known user patterns
-  if (/^hemang/i.test(cleanPrefix)) {
-    return 'Hemang';
-  }
-
-  // Remove trailing digits (e.g. hemang47 -> hemang)
+  // Remove trailing digits (e.g. user47 -> user)
   let cleaned = cleanPrefix.replace(/\d+$/, '');
   cleaned = cleaned.replace(/[._-]+/g, ' ').trim();
   if (!cleaned) cleaned = cleanPrefix;
@@ -280,7 +251,7 @@ export async function registerUser({ email, password, fullName, phone }) {
  * Login user with email & password
  * @param {Object} params - { email, password }
  */
-export async function loginUser({ email, password }) {
+export async function loginUser({ email, password, loginMode }) {
   try {
     const res = await safeApiFetch('/api/users/login', {
       method: 'POST',
@@ -288,6 +259,7 @@ export async function loginUser({ email, password }) {
       body: JSON.stringify({
         email: email.trim(),
         password,
+        loginMode: loginMode || undefined,
       }),
     });
 
@@ -353,23 +325,26 @@ export function storeAuthSession({ user, accessToken, refreshToken, fallbackName
 
   const meta = user?.user_metadata || {};
   const registered = userEmail ? getRegisteredUserByEmail(userEmail) : null;
+  const userRole = user?.role || meta.role || (userEmail === 'reviewer@fin.gov.in' ? 'reviewer' : 'user');
 
   const userData = {
     id: user?.id || registered?.id || `citizen-${Date.now()}`,
     fullName: resolvedName,
     name: resolvedName,
     email: user?.email || registered?.email || userEmail,
+    role: userRole,
     phone: user?.phone || meta.phone || registered?.phone || '',
     state: user?.state || meta.state || registered?.state || '',
     district: user?.district || meta.district || registered?.district || '',
     occupation: user?.occupation || meta.occupation || registered?.occupation || '',
     income: user?.income || meta.income || registered?.income || '',
-    applicantType: user?.applicantType || meta.applicantType || registered?.applicantType || 'Individual',
+    applicantType: user?.applicantType || meta.applicantType || registered?.applicantType || (userRole === 'reviewer' ? 'Review Officer' : 'Individual'),
     dob: user?.dob || meta.dob || registered?.dob || '',
     gender: user?.gender || meta.gender || registered?.gender || '',
   };
 
   localStorage.setItem('fin_user', JSON.stringify(userData));
+  localStorage.setItem('fin_role', userRole);
   if (accessToken) localStorage.setItem('fin_token', accessToken);
   if (refreshToken) localStorage.setItem('fin_refresh_token', refreshToken);
   if (DEV_AUTH_BYPASS_ENABLED && developmentBypass) {
@@ -385,6 +360,20 @@ export function storeAuthSession({ user, accessToken, refreshToken, fallbackName
   window.dispatchEvent(new Event('storage'));
 
   return userData;
+}
+
+/**
+ * Get stored authenticated user role ('user' | 'reviewer')
+ */
+export function getStoredRole() {
+  try {
+    const directRole = localStorage.getItem('fin_role');
+    if (directRole) return directRole;
+    const user = getStoredUser();
+    return user?.role || 'user';
+  } catch {
+    return 'user';
+  }
 }
 
 /**
@@ -407,12 +396,39 @@ export async function logoutUser() {
   }
 
   localStorage.removeItem('fin_user');
+  localStorage.removeItem('fin_role');
   localStorage.removeItem('fin_token');
   localStorage.removeItem('fin_refresh_token');
   localStorage.removeItem(STORAGE_KEY_DEV_AUTH_BYPASS);
+  clearCachedUserData();
 
   window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: null }));
   window.dispatchEvent(new Event('storage'));
+}
+
+/**
+ * Invalidate and clear all user-scoped cached document and application data
+ */
+export function clearCachedUserData() {
+  try {
+    const storage = typeof window !== 'undefined' && window.localStorage
+      ? window.localStorage
+      : (typeof localStorage !== 'undefined' ? localStorage : null);
+    if (!storage) return;
+    const keysToRemove = [];
+    for (let i = 0; i < storage.length; i++) {
+      const k = storage.key(i);
+      if (k && (
+        k.startsWith('fin_documents_') ||
+        k.startsWith('fin_support_tickets_') ||
+        k.startsWith('fin_associated_applications_') ||
+        k.startsWith('fin_bookmarked_schemes')
+      )) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => storage.removeItem(k));
+  } catch (_) {}
 }
 
 /**
@@ -511,6 +527,7 @@ export function clearAuthSession() {
   localStorage.removeItem('fin_refresh_token');
   localStorage.removeItem('fin_last_activity');
   localStorage.removeItem(STORAGE_KEY_DEV_AUTH_BYPASS);
+  clearCachedUserData();
 
   window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: null }));
   window.dispatchEvent(new Event('storage'));
@@ -583,3 +600,35 @@ export async function fetchBackendProfile() {
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Change current user password via POST /api/users/change-password
+ */
+export async function changeAccountPassword({ currentPassword, newPassword }) {
+  try {
+    const res = await authenticatedFetch(`${API_BASE}/api/users/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || (data && !data.success)) {
+      return {
+        success: false,
+        message: data?.message || `Password update failed (${res.status})`,
+      };
+    }
+
+    return {
+      success: true,
+      message: data?.message || 'Password changed successfully',
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err.message || 'Unable to connect to authentication service',
+    };
+  }
+}
+

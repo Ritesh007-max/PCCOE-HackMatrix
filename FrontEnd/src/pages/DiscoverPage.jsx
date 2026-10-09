@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Search,
   SlidersHorizontal,
@@ -12,21 +12,80 @@ import {
   ChevronDown,
   X,
   ShieldCheck,
-  RotateCcw
+  RotateCcw,
+  Loader2,
+  Info,
+  ExternalLink,
+  Globe
 } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
-import { CATEGORIES, SCHEMES, SCHEME_TYPES } from '../data/schemesData';
+import { CATEGORIES, SCHEME_TYPES } from '../data/schemesData';
+import { searchSchemes, fetchSchemeStats } from '../services/schemeService';
+import { getStoredUser } from '../services/authService';
 import SchemeLogo from '../components/schemes/SchemeLogo';
+import { interpretFinancialBenefit } from '../utils/financialBenefitEngine.js';
+import { getSchemePortalDetails } from '../utils/schemeDetailsHelpers.js';
 
 import indiaGateHero from '../assets/india_gate_hero.jpg';
 import tricolorFlagPerfect from '../assets/tricolor_flag_perfect.png';
 
+export function adaptScheme(raw) {
+  if (!raw) return null;
+  const id = raw.id || raw.scheme_id || raw.slug || '';
+  const title = raw.title || raw.name || raw.scheme_name || 'Government Scheme';
+  const subtitle = raw.subtitle || raw.ministry || raw.sourceAuthority || 'Government of India';
+  const description = raw.description || raw.benefit_summary || raw.eligibility_summary || 'Official Government welfare initiative';
+  const tags = Array.isArray(raw.tags) && raw.tags.length > 0
+    ? raw.tags
+    : [raw.ministry, raw.state || 'All India'].filter(Boolean);
+
+  const interp = interpretFinancialBenefit(raw);
+  const benefitAmount = raw.benefitAmount || interp.amountDisplay;
+  const benefitSubtitle = raw.benefitSubtitle || interp.subtitle;
+
+  // Canonical jurisdiction identification (National Discovery Catalog)
+  const isStateSpecific = raw.state && raw.state !== 'All India' && raw.state !== 'Central';
+  const jurisdictionLabel = isStateSpecific ? `${raw.state} Scheme` : 'Central Scheme';
+
+  // Section 2: Canonical Discovery Metadata Fields
+  const portalDetails = getSchemePortalDetails(raw);
+  const implementingMinistry = portalDetails.ministry || 'Implementing Authority Not Specified';
+  const schemeType = portalDetails.schemeType || 'Government Welfare Programme';
+  const targetBeneficiaries = portalDetails.targetBeneficiaries || 'Eligible Indian Citizens';
+  const coverage = portalDetails.coverage || 'All India (Central)';
+  const officialWebsite = portalDetails.officialWebsite;
+
+  return {
+    ...raw,
+    id,
+    title,
+    subtitle,
+    description,
+    tags,
+    benefitAmount,
+    benefitSubtitle,
+    jurisdictionLabel,
+    implementingMinistry,
+    schemeType,
+    targetBeneficiaries,
+    coverage,
+    officialWebsite,
+    conditionText: raw.dbt_scheme ? 'Direct Benefit Transfer (DBT)' : 'Official Welfare Scheme',
+    conditionType: raw.dbt_scheme ? 'dbt' : 'canonical',
+    primaryAction: true,
+    logoType: raw.logoType || (title.toLowerCase().includes('kisan') ? 'tractor' : 'ashoka')
+  };
+}
+
 export default function DiscoverPage() {
+  const [searchParams] = useSearchParams();
+  const initialQuery = searchParams.get('q') || '';
+
   // --------------------------------------------------------------------------
   // Filter States
   // --------------------------------------------------------------------------
   const [activeCategoryPill, setActiveCategoryPill] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [selectedAgeGroup, setSelectedAgeGroup] = useState('');
   const [selectedIncomeRange, setSelectedIncomeRange] = useState('');
@@ -35,31 +94,70 @@ export default function DiscoverPage() {
   const [selectedSchemeTypes, setSelectedSchemeTypes] = useState([]);
   const [sortBy, setSortBy] = useState('relevant');
 
+  // Dynamic Data States
+  const [schemes, setSchemes] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [error, setError] = useState(null);
+  const [isDegraded, setIsDegraded] = useState(false);
+  const [searchSource, setSearchSource] = useState('database');
+  const [displayLimit, setDisplayLimit] = useState(50);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [liveCategoryCounts, setLiveCategoryCounts] = useState({});
+  const reqCounterRef = React.useRef(0);
+
+  // Fetch initial category stats directly from Supabase
+  useEffect(() => {
+    fetchSchemeStats().then((stats) => {
+      if (stats?.categoryCounts) {
+        setLiveCategoryCounts(stats.categoryCounts);
+      }
+      if (stats?.total) {
+        setTotalMatches(stats.total);
+      }
+    }).catch(() => {});
+  }, []);
+
   // Sidebar Toggles
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showAllSchemeTypes, setShowAllSchemeTypes] = useState(false);
 
-  // Bookmarks
+  // Multi-tenant user-scoped Bookmarks
+  const storedUser = getStoredUser() || {};
+  const bookmarkStorageKey = storedUser?.id
+    ? `fin_bookmarked_schemes_${storedUser.id}`
+    : 'fin_bookmarked_schemes_guest';
+
   const [bookmarkedIds, setBookmarkedIds] = useState(() => {
     try {
-      const stored = localStorage.getItem('fin_bookmarked_schemes');
+      const stored = localStorage.getItem(bookmarkStorageKey);
       return stored ? JSON.parse(stored) : [];
     } catch (e) {
       return [];
     }
   });
 
+  // Re-sync bookmarks if user session changes
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(bookmarkStorageKey);
+      setBookmarkedIds(stored ? JSON.parse(stored) : []);
+    } catch (e) {
+      setBookmarkedIds([]);
+    }
+  }, [bookmarkStorageKey]);
+
   // Modal State for Eligibility Quick Check
   const [modalScheme, setModalScheme] = useState(null);
 
-  // Save Bookmarks to localStorage
+  // Save Bookmarks to user-scoped localStorage
   const toggleBookmark = (schemeId) => {
     setBookmarkedIds((prev) => {
       const updated = prev.includes(schemeId)
         ? prev.filter((id) => id !== schemeId)
         : [...prev, schemeId];
       try {
-        localStorage.setItem('fin_bookmarked_schemes', JSON.stringify(updated));
+        localStorage.setItem(bookmarkStorageKey, JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });
@@ -125,100 +223,147 @@ export default function DiscoverPage() {
   };
 
   // --------------------------------------------------------------------------
-  // Filter & Sort Logic
+  // Dynamic API Fetch with Race-Condition Guard & Debouncing
   // --------------------------------------------------------------------------
-  const filteredSchemes = useMemo(() => {
-    return SCHEMES.filter((scheme) => {
-      // 1. Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesTitle = scheme.title.toLowerCase().includes(q);
-        const matchesSubtitle = scheme.subtitle.toLowerCase().includes(q);
-        const matchesDesc = scheme.description.toLowerCase().includes(q);
-        const matchesTags = scheme.tags.some((t) => t.toLowerCase().includes(q));
-        if (!matchesTitle && !matchesSubtitle && !matchesDesc && !matchesTags) {
-          return false;
-        }
-      }
+  const executeSearch = React.useCallback(async () => {
+    const currentReq = ++reqCounterRef.current;
+    setIsLoading(true);
+    setError(null);
 
-      // 2. Category Checkboxes or Active Pill
-      if (selectedCategories.length > 0) {
-        const matchesCat = scheme.categories.some((c) => selectedCategories.includes(c));
-        if (!matchesCat) return false;
-      } else if (activeCategoryPill && activeCategoryPill !== 'all') {
-        if (!scheme.categories.includes(activeCategoryPill)) return false;
-      }
+    try {
+      const categoriesFilter = selectedCategories.length > 0
+        ? selectedCategories
+        : (activeCategoryPill !== 'all' ? [activeCategoryPill] : undefined);
 
-      // 3. Age Group Filter
-      if (selectedAgeGroup) {
-        if (scheme.ageGroup !== 'All Ages' && scheme.ageGroup !== selectedAgeGroup) {
-          // Broad check
-          if (selectedAgeGroup === '60+' && scheme.ageGroup !== '60+' && scheme.ageGroup !== '18-60') {
-            return false;
-          }
-        }
-      }
+      const filters = {
+        categories: categoriesFilter,
+        state: selectedState && selectedState !== 'All India' ? selectedState : undefined,
+        socialCategory: selectedCasteCategory || undefined,
+        ageGroup: selectedAgeGroup || undefined,
+        incomeRange: selectedIncomeRange || undefined,
+        types: selectedSchemeTypes.length > 0 ? selectedSchemeTypes : undefined
+      };
 
-      // 4. Income Range Filter
-      if (selectedIncomeRange) {
-        if (scheme.incomeRange !== 'all' && scheme.incomeRange !== selectedIncomeRange) {
-          return false;
-        }
-      }
+      setDisplayLimit(50); // reset display window on new search
+      const res = await searchSchemes({
+        query: searchQuery.trim(),
+        filters,
+        limit: 50,
+        offset: 0
+      });
 
-      // 5. Caste / Social Category Filter
-      if (selectedCasteCategory) {
-        if (
-          scheme.casteCategories &&
-          !scheme.casteCategories.includes(selectedCasteCategory) &&
-          !scheme.casteCategories.includes('General')
-        ) {
-          return false;
-        }
+      if (currentReq === reqCounterRef.current) {
+        const adapted = (res.schemes || []).map(adaptScheme).filter(Boolean);
+        setSchemes(adapted);
+        setTotalMatches(res.total != null ? res.total : adapted.length);
+        setIsDegraded(Boolean(res.degraded));
+        setSearchSource(res.source || 'database');
+        setIsLoading(false);
       }
-
-      // 6. State Filter
-      if (selectedState && selectedState !== 'All India') {
-        if (scheme.state !== 'All India' && !scheme.state.includes(selectedState)) {
-          return false;
-        }
+    } catch (err) {
+      if (currentReq === reqCounterRef.current) {
+        setError(err.message || 'Failed to search schemes');
+        setSchemes([]);
+        setIsLoading(false);
       }
-
-      // 7. Scheme Type Filter
-      if (selectedSchemeTypes.length > 0) {
-        const matchesType = scheme.schemeTypes.some((t) => selectedSchemeTypes.includes(t));
-        if (!matchesType) return false;
-      }
-
-      return true;
-    }).sort((a, b) => {
-      if (sortBy === 'match_score') {
-        return b.matchScore - a.matchScore;
-      }
-      if (sortBy === 'highest_benefit') {
-        return (b.benefitValue || 0) - (a.benefitValue || 0);
-      }
-      if (sortBy === 'name_asc') {
-        return a.title.localeCompare(b.title);
-      }
-      // 'relevant' (default maintains reference ordering)
-      return 0;
-    });
+    }
   }, [
     searchQuery,
     selectedCategories,
     activeCategoryPill,
+    selectedState,
     selectedAgeGroup,
     selectedIncomeRange,
     selectedCasteCategory,
-    selectedState,
-    selectedSchemeTypes,
-    sortBy,
+    selectedSchemeTypes
   ]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      executeSearch();
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [executeSearch]);
+
+  // --------------------------------------------------------------------------
+  // Sorting
+  // --------------------------------------------------------------------------
+  const sortedSchemes = useMemo(() => {
+    const list = [...schemes];
+    if (sortBy === 'highest_benefit') {
+      return list.sort((a, b) => (Number(b.max_benefit) || 0) - (Number(a.max_benefit) || 0));
+    }
+    if (sortBy === 'name_asc') {
+      return list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    }
+    if (sortBy === 'name_desc') {
+      return list.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+    }
+    return list;
+  }, [schemes, sortBy]);
+
+  // Dynamic pagination from database
+  const handleLoadMore = async () => {
+    if (isLoadingMore) return;
+    if (displayLimit < sortedSchemes.length) {
+      setDisplayLimit((prev) => prev + 50);
+      return;
+    }
+    if (schemes.length < totalMatches) {
+      setIsLoadingMore(true);
+      try {
+        const categoriesFilter = selectedCategories.length > 0
+          ? selectedCategories
+          : (activeCategoryPill !== 'all' ? [activeCategoryPill] : undefined);
+
+        const filters = {
+          categories: categoriesFilter,
+          state: selectedState && selectedState !== 'All India' ? selectedState : undefined,
+          socialCategory: selectedCasteCategory || undefined,
+          ageGroup: selectedAgeGroup || undefined,
+          incomeRange: selectedIncomeRange || undefined,
+          types: selectedSchemeTypes.length > 0 ? selectedSchemeTypes : undefined
+        };
+
+        const res = await searchSchemes({
+          query: searchQuery.trim(),
+          filters,
+          limit: 50,
+          offset: schemes.length
+        });
+
+        const nextSchemes = (res.schemes || []).map(adaptScheme).filter(Boolean);
+        setSchemes((prev) => {
+          const existingIds = new Set(prev.map(s => s.id));
+          const newItems = nextSchemes.filter(s => !existingIds.has(s.id));
+          return [...prev, ...newItems];
+        });
+        setDisplayLimit((prev) => prev + nextSchemes.length);
+      } catch (err) {
+        console.warn('Failed to load more schemes from DB', err);
+      } finally {
+        setIsLoadingMore(false);
+      }
+    }
+  };
+
+  const visibleSchemes = sortedSchemes.slice(0, displayLimit);
+  const hasMore = sortedSchemes.length > displayLimit || schemes.length < totalMatches;
+
+  // Live category counts merged from database stats
+  const categoryCounts = useMemo(() => {
+    const counts = { all: totalMatches, ...liveCategoryCounts };
+    if (activeCategoryPill && activeCategoryPill !== 'all' && totalMatches != null) {
+      counts[activeCategoryPill] = totalMatches;
+    }
+    return counts;
+  }, [liveCategoryCounts, totalMatches, activeCategoryPill]);
 
   // Visible lists for right sidebar
   const visibleCategories = showAllCategories ? CATEGORIES.filter(c => c.id !== 'all') : CATEGORIES.filter(c => c.id !== 'all').slice(0, 5);
   const visibleSchemeTypes = showAllSchemeTypes ? SCHEME_TYPES : SCHEME_TYPES.slice(0, 5);
+
 
   return (
     <PageContainer>
@@ -274,7 +419,9 @@ export default function DiscoverPage() {
                 aria-pressed={isActive}
               >
                 <span>{cat.label}</span>
-                <span className="category-pill-count">({cat.count})</span>
+                {categoryCounts[cat.id] != null && (
+                  <span className="category-pill-count">({Number(categoryCounts[cat.id]).toLocaleString('en-IN')})</span>
+                )}
               </button>
             );
           })}
@@ -289,7 +436,7 @@ export default function DiscoverPage() {
             {/* Header: Results count + Sort by dropdown */}
             <div className="discover-results-header">
               <span className="discover-count-text">
-                {filteredSchemes.length} {filteredSchemes.length === 1 ? 'scheme' : 'schemes'} found
+                {isLoading ? 'Searching database...' : `${Number(totalMatches).toLocaleString('en-IN')} ${totalMatches === 1 ? 'scheme' : 'schemes'} found`}
               </span>
 
               <div className="discover-sort-container">
@@ -304,18 +451,50 @@ export default function DiscoverPage() {
                   >
                     <option value="relevant">Most Relevant</option>
                     <option value="highest_benefit">Highest Benefit</option>
-                    <option value="match_score">Match Score</option>
                     <option value="name_asc">Scheme Name (A - Z)</option>
+                    <option value="name_desc">Scheme Name (Z - A)</option>
                   </select>
                   <ChevronDown size={14} className="discover-sort-chevron-right" aria-hidden="true" />
                 </div>
               </div>
             </div>
 
-            {/* Scheme Cards */}
-            {filteredSchemes.length > 0 ? (
+            {/* Degraded State Notification */}
+            {isDegraded && !isLoading && (
+              <div style={{ background: '#FEF0C7', border: '1px solid #FEDF89', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#B54708', fontSize: '13px' }}>
+                <Info size={16} />
+                <span>Operating in database search mode. Intelligence hybrid ranking is temporarily degraded.</span>
+              </div>
+            )}
+
+            {/* Scheme Cards / Loading / Error / Empty */}
+            {isLoading ? (
               <div className="schemes-list-container">
-                {filteredSchemes.map((scheme) => (
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="scheme-card-item" style={{ minHeight: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Loader2 size={22} className="spin" style={{ color: '#073B30' }} />
+                    <span style={{ marginLeft: '10px', color: '#667085', fontSize: '14px' }}>Loading schemes...</span>
+                  </div>
+                ))}
+              </div>
+            ) : error ? (
+              <div className="discover-empty-state" style={{ borderColor: '#FECDCA', background: '#FEF3F2' }}>
+                <AlertTriangle size={28} style={{ color: '#D92D20', marginBottom: '8px' }} />
+                <h3 className="discover-empty-title" style={{ color: '#B42318' }}>Unable to load schemes</h3>
+                <p className="discover-empty-desc" style={{ color: '#7A271A' }}>{error}</p>
+                <button
+                  type="button"
+                  onClick={executeSearch}
+                  className="btn-apply-filters"
+                  style={{ width: 'auto', padding: '9px 20px', marginTop: '12px' }}
+                >
+                  <RotateCcw size={14} style={{ marginRight: '6px' }} />
+                  <span>Retry Search</span>
+                </button>
+              </div>
+            ) : sortedSchemes.length > 0 ? (
+              <div className="schemes-list-container">
+                {visibleSchemes.map((scheme) => (
                   <article key={scheme.id} className="scheme-card-item">
                     {/* 1. Logo Box */}
                     <div className="scheme-card-logo-box">
@@ -328,8 +507,45 @@ export default function DiscoverPage() {
                       <h3 className="scheme-card-subtitle">{scheme.subtitle}</h3>
                       <p className="scheme-card-description">{scheme.description}</p>
 
+                      {/* Canonical Metadata Grid (Section 2) */}
+                      <div className="scheme-card-meta-grid">
+                        <div className="scheme-card-meta-row">
+                          <span className="scheme-card-meta-key">Implementing Ministry:</span>
+                          <span className="scheme-card-meta-val">{scheme.implementingMinistry}</span>
+                        </div>
+                        <div className="scheme-card-meta-row">
+                          <span className="scheme-card-meta-key">Scheme Type:</span>
+                          <span className="scheme-card-meta-val">{scheme.schemeType}</span>
+                        </div>
+                        <div className="scheme-card-meta-row">
+                          <span className="scheme-card-meta-key">Target Beneficiaries:</span>
+                          <span className="scheme-card-meta-val">{scheme.targetBeneficiaries}</span>
+                        </div>
+                        <div className="scheme-card-meta-row">
+                          <span className="scheme-card-meta-key">Coverage:</span>
+                          <span className="scheme-card-meta-val">{scheme.coverage}</span>
+                        </div>
+                        <div className="scheme-card-meta-row">
+                          <span className="scheme-card-meta-key">Official Website:</span>
+                          {scheme.officialWebsite ? (
+                            <a
+                              href={scheme.officialWebsite}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="scheme-card-meta-link"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span>{scheme.officialWebsite}</span>
+                              <ExternalLink size={12} style={{ display: 'inline', marginLeft: '4px' }} />
+                            </a>
+                          ) : (
+                            <span className="scheme-card-meta-unverified">Official link not verified</span>
+                          )}
+                        </div>
+                      </div>
+
                       <div className="scheme-card-tags-row">
-                        {scheme.tags.map((tag) => (
+                        {(scheme.tags || []).map((tag) => (
                           <span key={tag} className="scheme-card-tag-pill">
                             {tag}
                           </span>
@@ -339,8 +555,8 @@ export default function DiscoverPage() {
 
                     {/* 3. Metrics Column */}
                     <div className="scheme-card-metrics-col">
-                      <div className={`scheme-match-badge match-${scheme.matchType || 'green'}`}>
-                        {scheme.matchScore}% Match
+                      <div className="scheme-match-badge match-blue">
+                        {scheme.jurisdictionLabel || 'Central Scheme'}
                       </div>
 
                       <div className="scheme-benefit-box">
@@ -352,34 +568,16 @@ export default function DiscoverPage() {
                       </div>
 
                       <div className="scheme-condition-status">
-                        {scheme.conditionType === 'success' && (
+                        {scheme.conditionType === 'dbt' ? (
                           <>
-                            <CheckCircle2 size={16} className="condition-icon success" aria-hidden="true" />
+                            <CheckCircle2 size={15} className="condition-icon success" aria-hidden="true" />
                             <span className="condition-text success">{scheme.conditionText}</span>
                           </>
-                        )}
-                        {scheme.conditionType === 'warning' && (
+                        ) : (
                           <>
-                            <AlertTriangle size={16} className="condition-icon warning" aria-hidden="true" />
-                            <span className="condition-text warning">{scheme.conditionText}</span>
+                            <ShieldCheck size={15} style={{ color: '#073B30' }} aria-hidden="true" />
+                            <span className="condition-text" style={{ color: '#344054' }}>{scheme.conditionText}</span>
                           </>
-                        )}
-                        {scheme.conditionType === 'lock' && (
-                          <>
-                            <Lock size={15} className="condition-icon amber" aria-hidden="true" />
-                            <span className="condition-text amber">{scheme.conditionText}</span>
-                          </>
-                        )}
-                        {scheme.conditionType === 'lock-link' && (
-                          <button
-                            type="button"
-                            onClick={() => handleCheckEligibility(scheme)}
-                            className="condition-interactive-btn"
-                            title="Check Eligibility Requirements"
-                          >
-                            <Lock size={15} className="condition-icon amber" aria-hidden="true" />
-                            <span className="condition-text amber">{scheme.conditionText}</span>
-                          </button>
                         )}
                       </div>
                     </div>
@@ -410,6 +608,21 @@ export default function DiscoverPage() {
                     </div>
                   </article>
                 ))}
+                {hasMore && (
+                  <div style={{ textAlign: 'center', padding: '24px 0 8px' }}>
+                    <button
+                      type="button"
+                      onClick={handleLoadMore}
+                      disabled={isLoadingMore}
+                      className="btn-apply-filters"
+                      style={{ width: 'auto', padding: '10px 28px' }}
+                    >
+                      {isLoadingMore
+                        ? 'Loading next batch...'
+                        : `Load more (${Math.max(0, totalMatches - Math.min(displayLimit, sortedSchemes.length)).toLocaleString('en-IN')} remaining)`}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="discover-empty-state">
@@ -484,7 +697,9 @@ export default function DiscoverPage() {
                       />
                       <span className="filter-checkbox-name">{cat.label}</span>
                     </div>
-                    <span className="filter-checkbox-count">({cat.count})</span>
+                    {categoryCounts[cat.id] != null && (
+                      <span className="filter-checkbox-count">({Number(categoryCounts[cat.id]).toLocaleString('en-IN')})</span>
+                    )}
                   </label>
                 ))}
               </div>

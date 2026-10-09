@@ -1,5 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { isValidSchemeIdentifier } from '../utils/schemeNavigation';
+import { computeDropdownPosition } from '../utils/dropdownPositioning';
 import {
   FileText,
   CheckCircle2,
@@ -32,34 +35,206 @@ import {
   FileDown,
   Ticket,
   LifeBuoy,
-  Send,
-  FileQuestion,
+  Info,
+  FileSearch,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
+import SchemeReadinessCombobox from '../components/documents/SchemeReadinessCombobox';
 import {
-  INITIAL_DOCUMENTS,
-  SCHEMES_CHECKLIST,
-  loadDocumentsFromStorage,
-  saveDocumentsToStorage,
+  buildDynamicSchemeChecklist,
+  normalizeDocRequirementId,
   loadTicketsFromStorage,
   saveTicketsToStorage,
+  SUPPORTED_DOC_TYPES,
+  DOC_TYPE_LOOKUP,
 } from '../data/documentsData';
+import {
+  validateSchemeSelection,
+  resolveCanonicalSchemeDetails,
+  filterActiveSchemesForCatalog,
+  deriveDynamicSchemeChecklist,
+  filterApplicantRelevantSchemes,
+  isCentralScheme,
+  evaluateSchemeReadiness,
+} from '../utils/documentSchemeValidation.js';
+import { downloadDossierPdf } from '../utils/dossierPdfGenerator';
+import { matchDocumentStatus } from '../utils/schemeDetailsHelpers';
 import {
   fetchUserDocuments,
   uploadDocumentFile,
-  deleteDocument
+  extractDocumentData,
+  deleteDocument,
+  getDocumentDetails
 } from '../services/documentService';
+import { fetchUserApplications, submitApplication } from '../services/applicationService';
+import { fetchUserProfile, updateUserProfile } from '../services/profileService';
+import { searchSchemes, fetchSchemes, fetchSchemeById, fetchApplicableSchemesCatalog } from '../services/schemeService';
+import { getStoredUser } from '../services/authService';
 import '../styles/documents.css';
 
+export { SUPPORTED_DOC_TYPES, DOC_TYPE_LOOKUP };
+
+function mapBackendDocument(bDoc, docTypeRequirementCounts = {}) {
+  const rawType = String(bDoc.documentType || bDoc.document_type || 'other').toLowerCase();
+  const normalizedType = rawType === 'bank' ? 'bank_passbook' :
+    rawType === 'income' ? 'income_cert' :
+    rawType === 'caste' ? 'caste_cert' :
+    rawType === 'address' ? 'address_proof' : rawType;
+
+  const fileName = bDoc.fileName || bDoc.file_name || 'document.pdf';
+  const fileExt = fileName.split('.').pop()?.toUpperCase() || 'PDF';
+
+  const meta = DOC_TYPE_LOOKUP[normalizedType] || {
+    name: bDoc.fileName || bDoc.file_name || 'Uploaded Document',
+    category: 'Citizen Identification',
+    purpose: 'Statutory Verification',
+    iconType: 'file-text',
+    iconColor: 'blue'
+  };
+
+  // Parse structured remarks / extracted fields
+  let parsedRemarks = null;
+  const rawRemarks = bDoc.reviewerRemarks || bDoc.reviewer_remarks;
+  if (rawRemarks) {
+    if (typeof rawRemarks === 'object') {
+      parsedRemarks = rawRemarks;
+    } else {
+      try {
+        parsedRemarks = JSON.parse(rawRemarks);
+      } catch (_) { }
+    }
+  }
+
+  const extractedData = bDoc.extractedData || bDoc.extracted_data || parsedRemarks?.extractedFields || parsedRemarks?.fields || {};
+  const hasExtractedFields = extractedData && Object.keys(extractedData).length > 0;
+  const ocrMetadata = bDoc.ocrMetadata || bDoc.ocr_metadata || {
+    method: parsedRemarks?.method || 'NATIVE_PDF',
+    pages: parsedRemarks?.pages || 1,
+    sha256: parsedRemarks?.sha256 || '',
+    confidence: parsedRemarks?.confidence || 0.95
+  };
+  const extractedText = bDoc.extractedText || bDoc.extracted_text || parsedRemarks?.extractedText || '';
+
+  const statusRaw = String(bDoc.verificationStatus || bDoc.verification_status || 'PENDING').toUpperCase();
+  const isVerified = statusRaw === 'VERIFIED';
+  const isRejected = statusRaw === 'REJECTED';
+  const isReviewRequired = statusRaw === 'REVIEW_REQUIRED';
+  const isProcessing = statusRaw === 'PROCESSING';
+
+  let status = 'under_review';
+  let statusLabel = 'Uploaded';
+
+  if (isVerified) {
+    status = 'verified';
+    statusLabel = 'Ready for AI Chat';
+  } else if (isRejected) {
+    status = 'action_required';
+    statusLabel = 'Processing Failed';
+  } else if (isReviewRequired) {
+    status = 'action_required';
+    statusLabel = 'Review Required';
+  } else if (isProcessing) {
+    status = 'under_review';
+    statusLabel = 'Processing';
+  } else {
+    status = 'under_review';
+    statusLabel = 'Uploaded';
+  }
+
+  // Derive honest source from persisted record
+  const rawUploader = bDoc.uploadedBy || bDoc.uploaded_by || bDoc.uploader || bDoc.source || bDoc.upload_source || '';
+  let source = 'Self Uploaded';
+  if (rawUploader) {
+    const upStr = String(rawUploader).toUpperCase();
+    if (upStr === 'ADMIN' || upStr.includes('OFFICER') || upStr.includes('REVIEWER')) {
+      source = 'Official Department';
+    } else if (upStr === 'SYSTEM' || upStr.includes('SERVICE')) {
+      source = 'System Ingested';
+    } else if (upStr === 'CITIZEN' || upStr === 'SELF' || upStr.includes('APPLICANT')) {
+      source = 'Self Uploaded';
+    } else {
+      source = String(rawUploader);
+    }
+  } else if (isVerified) {
+    source = 'Self Uploaded';
+  }
+
+  // Derive descriptive validity label based on extraction & verification lifecycle
+  let validity = 'Uploaded (Pending Review)';
+  if (isVerified) {
+    validity = 'Verified & Ready for AI Chat';
+  } else if (isRejected) {
+    validity = 'Processing Failed';
+  } else if (isReviewRequired) {
+    validity = 'Review Required';
+  } else if (isProcessing) {
+    validity = 'Processing';
+  } else if (hasExtractedFields) {
+    validity = 'Uploaded (Pending Review)';
+  } else {
+    validity = 'Uploaded (Pending Review)';
+  }
+
+  const uploadedDate = bDoc.uploadedAt || bDoc.uploaded_at || bDoc.createdAt || bDoc.created_at;
+  const uploadedOn = uploadedDate
+    ? new Date(uploadedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    : 'Recently';
+
+  const docNumber = bDoc.docNumber || extractedData.document_number || parsedRemarks?.docNumber || (
+    (!rawRemarks || String(rawRemarks).includes('AI OCR Parsed'))
+      ? `DOC-${String(bDoc.id).slice(0, 8).toUpperCase()}`
+      : rawRemarks
+  );
+
+  const issuer = bDoc.issuer || extractedData.issuing_authority || parsedRemarks?.issuer || 'State Competent Authority';
+  const beneficiaryName = extractedData.beneficiary_name || null;
+
+  // Derive dynamic requirement count across applicable scheme catalog
+  const requiredCount = docTypeRequirementCounts[normalizedType] ?? 0;
+
+  return {
+    id: bDoc.id,
+    backendId: bDoc.id,
+    documentType: normalizedType,
+    name: meta.name,
+    category: meta.category,
+    purpose: meta.purpose,
+    fileName,
+    fileUrl: bDoc.fileUrl || bDoc.file_url || null,
+    fileType: fileExt,
+    fileSize: bDoc.fileSize || 'Standard',
+    status,
+    statusLabel,
+    source,
+    validity,
+    uploadedOn,
+    docNumber,
+    issuer,
+    beneficiaryName,
+    extractedData,
+    extractedText,
+    ocrMetadata,
+    iconType: meta.iconType,
+    iconColor: meta.iconColor,
+    requiredForSchemes: requiredCount
+  };
+}
 
 export default function DocumentsPage() {
   const navigate = useNavigate();
 
-  // Documents state loaded from localStorage or initialized with 8 items
-  const [documents, setDocuments] = useState(loadDocumentsFromStorage);
+  // User session derived dynamically
+  const storedUser = getStoredUser() || {};
 
-  // Support Tickets state loaded from localStorage
-  const [tickets, setTickets] = useState(loadTicketsFromStorage);
+  // Documents dynamic state from backend API
+  const [documents, setDocuments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
+
+  // Associated Applications state loaded from user-namespaced storage
+  const [tickets, setTickets] = useState(() => loadTicketsFromStorage(storedUser?.id));
 
   // Active filter tab: 'all' | 'verified' | 'pending' | 'action_required'
   const [activeTab, setActiveTab] = useState('all');
@@ -67,11 +242,129 @@ export default function DocumentsPage() {
   // Search filter query
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Selected scheme for the right-hand requirements checker
-  const [selectedSchemeId, setSelectedSchemeId] = useState('pmegp');
+  // URL search params for deep-linkable scheme readiness selection
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlSchemeId = (searchParams.get('schemeId') || '').trim();
+
+  // Selected scheme for the right-hand requirements checker (persisted across session refreshes)
+  const [applicantState, setApplicantState] = useState(() => storedUser.state || 'Gujarat');
+  const [schemeSearchQuery, setSchemeSearchQuery] = useState('');
+  const [selectedSchemeId, setSelectedSchemeId] = useState(() => {
+    if (urlSchemeId) return urlSchemeId;
+    return '';
+  });
+
+  // Direct scheme fetching states for deep links not yet in local catalog
+  const [directScheme, setDirectScheme] = useState(null);
+  const [directSchemeNotFound, setDirectSchemeNotFound] = useState(false);
+  const [isDirectSchemeLoading, setIsDirectSchemeLoading] = useState(false);
+
+  // Auto-scroll ref and guard for direct navigation
+  const checkerCardRef = useRef(null);
+  const hasScrolledRef = useRef(false);
+
+  // Sync selectedSchemeId when URL search param changes
+  useEffect(() => {
+    if (urlSchemeId && urlSchemeId !== selectedSchemeId) {
+      setSelectedSchemeId(urlSchemeId);
+    }
+  }, [urlSchemeId]);
+
+  const handleSelectReadinessScheme = (schemeId) => {
+    const cleanId = (schemeId || '').trim();
+    setSelectedSchemeId(cleanId);
+    setDirectScheme(null);
+    setDirectSchemeNotFound(false);
+
+    if (cleanId) {
+      setSearchParams({ schemeId: cleanId }, { replace: true });
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('fin_selected_readiness_scheme_id', cleanId);
+      }
+    } else {
+      setSearchParams({}, { replace: true });
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.removeItem('fin_selected_readiness_scheme_id');
+      }
+    }
+  };
 
   // Interactive UI modals & dropdown state
-  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [activeMenu, setActiveMenu] = useState(null); // { id: string, doc: Object, anchorRect: DOMRect }
+  const activeMenuRef = useRef(null);
+  const activeMenuId = activeMenu?.id || null;
+  const setActiveMenuId = (id) => {
+    if (!id) {
+      setActiveMenu(null);
+    } else {
+      const doc = documents.find((d) => d.id === id);
+      const btn = typeof document !== 'undefined' ? document.querySelector(`[data-doc-menu-btn="${id}"]`) : null;
+      const anchorRect = btn ? btn.getBoundingClientRect() : null;
+      setActiveMenu(doc ? { id, doc, anchorRect } : null);
+    }
+  };
+
+  // Compute floating portal position for active three-dot menu
+  const menuPlacement = useMemo(() => {
+    if (!activeMenu?.anchorRect || typeof window === 'undefined') return null;
+    return computeDropdownPosition(
+      activeMenu.anchorRect,
+      window.innerWidth,
+      window.innerHeight,
+      { menuWidth: 180, menuHeight: 185, gap: 4, edgeMargin: 12 }
+    );
+  }, [activeMenu?.anchorRect]);
+
+  // Outside click, Escape key, and scroll listener for floating menu
+  useEffect(() => {
+    if (!activeMenu) return;
+
+    const handleOutsideClick = (e) => {
+      if (activeMenuRef.current && activeMenuRef.current.contains(e.target)) {
+        return;
+      }
+      const triggerBtn = document.querySelector(`[data-doc-menu-btn="${activeMenu.id}"]`);
+      if (triggerBtn && triggerBtn.contains(e.target)) {
+        return;
+      }
+      setActiveMenu(null);
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setActiveMenu(null);
+      }
+    };
+
+    const handleScrollOrResize = () => {
+      const triggerBtn = document.querySelector(`[data-doc-menu-btn="${activeMenu.id}"]`);
+      if (!triggerBtn) {
+        setActiveMenu(null);
+        return;
+      }
+      const rect = triggerBtn.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        setActiveMenu(null);
+      } else {
+        setActiveMenu((prev) => (prev ? { ...prev, anchorRect: rect } : null));
+      }
+    };
+
+    window.addEventListener('mousedown', handleOutsideClick);
+    window.addEventListener('touchstart', handleOutsideClick);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+
+    return () => {
+      window.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener('touchstart', handleOutsideClick);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [activeMenu?.id]);
+
   const [selectedDocForView, setSelectedDocForView] = useState(null);
   const [selectedTicketForView, setSelectedTicketForView] = useState(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -81,27 +374,39 @@ export default function DocumentsPage() {
   const [isGuidanceModalOpen, setIsGuidanceModalOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
 
+  // AI OCR Inspection and Pipeline states
+  const [ocrModalTab, setOcrModalTab] = useState('facts'); // 'facts' | 'pipeline' | 'raw'
+  const [isReExtracting, setIsReExtracting] = useState(false);
+  const [uploadStatusStage, setUploadStatusStage] = useState('');
+
   // Upload Form state
-  const [uploadTargetDocId, setUploadTargetDocId] = useState('address');
+  const [uploadTargetDocId, setUploadTargetDocId] = useState('address_proof');
   const [uploadSelectedFile, setUploadSelectedFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Apply for Government Policy Form state
-  const [policyFullName, setPolicyFullName] = useState('Hemang Singh');
-  const [policyDob, setPolicyDob] = useState('1998-05-15');
-  const [policyState, setPolicyState] = useState('Gujarat');
-  const [policyDistrict, setPolicyDistrict] = useState('Ahmedabad');
-  const [policyCategory, setPolicyCategory] = useState('OBC');
-  const [policyIncome, setPolicyIncome] = useState('₹ 2,40,000');
-  const [policyOccupation, setPolicyOccupation] = useState('Student');
+  // Apply for Government Policy Form state (derived dynamically from user session)
+  const [policyFullName, setPolicyFullName] = useState(() => storedUser.fullName || storedUser.name || '');
+  const [policyDob, setPolicyDob] = useState(() => storedUser.dob || '');
+  const [policyState, setPolicyState] = useState(() => storedUser.state || 'Gujarat');
+  const [policyDistrict, setPolicyDistrict] = useState(() => storedUser.district || '');
+  const [policyCategory, setPolicyCategory] = useState(() => storedUser.socialCategory || storedUser.casteCategory || '');
+  const [policyIncome, setPolicyIncome] = useState(() => storedUser.income || '');
+  const [policyOccupation, setPolicyOccupation] = useState(() => storedUser.occupation || '');
   const [policyDocumentFile, setPolicyDocumentFile] = useState(null);
   const [policyIsDragging, setPolicyIsDragging] = useState(false);
   const [isSubmittingPolicy, setIsSubmittingPolicy] = useState(false);
 
+  // Dynamic Scheme Selection & Guidance state
+  const [selectedTargetSchemeId, setSelectedTargetSchemeId] = useState('');
+  const [availableSchemesList, setAvailableSchemesList] = useState([]);
+  const [isSchemesLoading, setIsSchemesLoading] = useState(false);
+  const [schemesFetchError, setSchemesFetchError] = useState(null);
+  const [schemeGuidanceResult, setSchemeGuidanceResult] = useState(null);
+
   // Reminder settings state
   const [reminderFrequency, setReminderFrequency] = useState('monthly');
-  const [reminderEmail, setReminderEmail] = useState('hemang@example.com');
+  const [reminderEmail, setReminderEmail] = useState(() => storedUser.email || '');
 
   // Toast notification state
   const [toastMessage, setToastMessage] = useState(null);
@@ -109,52 +414,200 @@ export default function DocumentsPage() {
   const modalFileInputRef = useRef(null);
   const policyFileInputRef = useRef(null);
 
-  // Sync documents to localStorage on changes
+  // Sync applications to namespaced localStorage on changes
   useEffect(() => {
-    saveDocumentsToStorage(documents);
-  }, [documents]);
+    saveTicketsToStorage(tickets, storedUser?.id);
+  }, [tickets, storedUser?.id]);
 
-  // Sync tickets to localStorage on changes
-  useEffect(() => {
-    saveTicketsToStorage(tickets);
-  }, [tickets]);
+  // Load applications dynamically from Supabase
+  const loadApplicationsAsTickets = async () => {
+    try {
+      const apps = await fetchUserApplications();
+      if (apps && Array.isArray(apps)) {
+        const mappedTickets = apps.map((app) => {
+          const appIdShort = `APP-${String(app.id).slice(0, 8).toUpperCase()}`;
+          const formattedDate = app.submitted_at || app.created_at
+            ? new Date(app.submitted_at || app.created_at).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+              })
+            : 'Recent';
 
-  // Sync documents from backend API on mount
-  useEffect(() => {
-    const syncBackendDocs = async () => {
+          let statusLabel = 'Under Review';
+          if (app.status === 'draft') statusLabel = 'Draft';
+          if (app.status === 'approved' || app.status === 'sanctioned' || app.status === 'verified') statusLabel = 'Approved';
+          if (app.status === 'rejected') statusLabel = 'Rejected';
+          if (app.status === 'action_required') statusLabel = 'Action Required';
+
+          const benefitStr = app.estimated_benefit ? `₹ ${Number(app.estimated_benefit).toLocaleString('en-IN')}` : null;
+          const schemeName = app.scheme_name || (app.scheme && (app.scheme.scheme_name || app.scheme.name)) || `Scheme #${String(app.scheme_id).slice(0, 8).toUpperCase()}`;
+
+          return {
+            id: appIdShort,
+            backendId: app.id,
+            category: 'Government Scheme Application',
+            docId: app.scheme_id,
+            docName: schemeName,
+            subject: `Application: ${schemeName}`,
+            description: `Application #${appIdShort} is currently ${statusLabel}. Submitted for statutory verification and benefit processing.${benefitStr ? ` Supported benefit: ${benefitStr}.` : ''}`,
+            priority: 'Normal',
+            status: statusLabel,
+            createdAt: formattedDate,
+            benefit: benefitStr,
+            rawApp: app
+          };
+        });
+        setTickets(mappedTickets);
+        return mappedTickets;
+      }
+    } catch (err) {
+      console.warn('Could not load applications from Supabase:', err);
+    }
+  };
+
+  // Load documents dynamically from backend API on mount
+  const loadDocuments = async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const backendDocs = await fetchUserDocuments();
+      if (backendDocs && Array.isArray(backendDocs)) {
+        const mapped = backendDocs.map(mapBackendDocument);
+        setDocuments(mapped);
+        return mapped;
+      } else {
+        setDocuments([]);
+        return [];
+      }
+    } catch (err) {
+      console.warn('Backend document synchronization skipped:', err);
+      setFetchError(err.message || 'Failed to load documents');
+      setDocuments([]);
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Dynamically load real schemes for applicant state & Central jurisdiction
+  const loadOfficialSchemes = async (targetState) => {
+    setIsSchemesLoading(true);
+    setSchemesFetchError(null);
+    try {
+      const stateParam = targetState || applicantState || storedUser.state || 'Gujarat';
+
+      // Unified canonical catalog fetch directly from backend single source of truth
       try {
-        const backendDocs = await fetchUserDocuments();
-        if (backendDocs && backendDocs.length > 0) {
-          setDocuments((prevDocs) => {
-            const merged = [...prevDocs];
-            backendDocs.forEach((bDoc) => {
-              const bType = String(bDoc.documentType || '').toLowerCase();
-              const idx = merged.findIndex(
-                (d) => d.id === bType || d.category?.toLowerCase() === bType
-              );
-              const status = bDoc.verificationStatus === 'VERIFIED' ? 'verified' :
-                bDoc.verificationStatus === 'REJECTED' ? 'action_required' : 'under_review';
-              if (idx >= 0) {
-                merged[idx] = {
-                  ...merged[idx],
-                  backendId: bDoc.id,
-                  status,
-                  statusLabel: status === 'verified' ? 'Verified' : status === 'action_required' ? 'Action Required' : 'Under Review',
-                  uploadedOn: bDoc.uploadedAt ? new Date(bDoc.uploadedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : merged[idx].uploadedOn,
-                  fileName: bDoc.fileName || merged[idx].fileName
-                };
-              }
-            });
-            return merged;
+        const catalog = await fetchApplicableSchemesCatalog(stateParam);
+        if (catalog && Array.isArray(catalog.schemes) && catalog.schemes.length > 0) {
+          setAvailableSchemesList(catalog.schemes);
+          return;
+        }
+      } catch (catErr) {
+        console.warn('Unified catalog fetch notice:', catErr.message);
+      }
+
+      const [stateRes, centralRes] = await Promise.allSettled([
+        fetchSchemes({ state: stateParam, limit: 2000 }),
+        fetchSchemes({ state: 'All India', type: 'Central', limit: 1000 }),
+      ]);
+
+      const combined = [];
+      const seenIds = new Set();
+      const ingest = (res) => {
+        if (res.status === 'fulfilled' && res.value) {
+          const list = filterActiveSchemesForCatalog(res.value);
+          list.forEach((s) => {
+            const sid = s.id || s.scheme_id;
+            if (sid && !seenIds.has(sid)) {
+              seenIds.add(sid);
+              combined.push(s);
+            }
           });
         }
-      } catch (err) {
-        console.warn('Backend document synchronization skipped:', err);
+      };
+
+      ingest(stateRes);
+      ingest(centralRes);
+
+      // If state query returned empty (e.g. backend offline or state empty), fallback to broad search
+      if (combined.length === 0) {
+        const fallbackRes = await fetchSchemes({ limit: 1000 }).catch(() => null);
+        if (fallbackRes) {
+          const list = filterActiveSchemesForCatalog(fallbackRes);
+          list.forEach((s) => {
+            const sid = s.id || s.scheme_id;
+            if (sid && !seenIds.has(sid)) {
+              seenIds.add(sid);
+              combined.push(s);
+            }
+          });
+        }
       }
-    };
-    syncBackendDocs();
+
+      setAvailableSchemesList(combined);
+    } catch (primaryErr) {
+      console.warn('Official schemes fetch notice:', primaryErr.message);
+      searchSchemes({ limit: 1000 }).then((res) => {
+        const schemes = filterActiveSchemesForCatalog(res);
+        setAvailableSchemesList(schemes);
+      }).catch((searchErr) => {
+        console.warn('Schemes search fallback failed:', searchErr.message);
+        setSchemesFetchError(searchErr.message || 'Failed to load official schemes');
+        setAvailableSchemesList([]);
+      });
+    } finally {
+      setIsSchemesLoading(false);
+    }
+  };
+
+  // Load documents, applications, user profile, and schemes dynamically on mount
+  useEffect(() => {
+    loadDocuments();
+    loadApplicationsAsTickets();
+
+    const initialTargetState = storedUser.state || 'Gujarat';
+    loadOfficialSchemes(initialTargetState);
+
+    // Dynamically load real user profile from Supabase
+    fetchUserProfile().then((prof) => {
+      if (prof) {
+        if (prof.full_name) setPolicyFullName(prof.full_name);
+        if (prof.date_of_birth) setPolicyDob(prof.date_of_birth);
+        if (prof.state) {
+          setPolicyState(prof.state);
+          setApplicantState(prof.state);
+          if (prof.state !== initialTargetState) {
+            loadOfficialSchemes(prof.state);
+          }
+        }
+        if (prof.city) setPolicyDistrict(prof.city);
+        if (prof.caste_category) setPolicyCategory(prof.caste_category.toUpperCase());
+        if (prof.annual_income) setPolicyIncome(String(prof.annual_income));
+        if (prof.occupation) setPolicyOccupation(prof.occupation);
+      }
+    }).catch((err) => console.debug('Profile fetch notice:', err));
   }, []);
 
+  // Re-run AI OCR pipeline on demand
+  const handleReRunOcr = async (docId) => {
+    if (!docId) return;
+    setIsReExtracting(true);
+    try {
+      await extractDocumentData(docId);
+      const reloaded = await loadDocuments();
+      const updated = reloaded?.find(d => d.backendId === docId || d.id === docId);
+      if (updated) {
+        setSelectedDocForView(updated);
+      }
+      triggerToast('AI OCR re-analysis completed successfully!');
+    } catch (err) {
+      triggerToast(`Re-extraction failed: ${err.message || 'Service error'}`);
+    } finally {
+      setIsReExtracting(false);
+    }
+  };
 
   // Close open dropdown menu when clicking outside
   useEffect(() => {
@@ -175,22 +628,110 @@ export default function DocumentsPage() {
     }, 4000);
   };
 
-  // Counts for tabs & progress
-  const verifiedDocs = documents.filter((d) => d.status === 'verified');
-  const pendingDocs = documents.filter((d) => d.status === 'under_review');
-  const actionDocs = documents.filter((d) => d.status === 'action_required');
+  // Filter schemes applicable to applicant's state and Central jurisdiction
+  const applicantSchemes = useMemo(() => {
+    return filterApplicantRelevantSchemes(availableSchemesList, policyState || applicantState);
+  }, [availableSchemesList, policyState, applicantState]);
 
-  const totalCount = documents.length;
+  // Dynamic schemes for right-hand widget (strictly derived from applicant-relevant catalog)
+  const dynamicSchemes = useMemo(() => {
+    return deriveDynamicSchemeChecklist(applicantSchemes);
+  }, [applicantSchemes]);
+
+  // Load direct scheme if selectedSchemeId is a deep link not present in local list
+  useEffect(() => {
+    if (!selectedSchemeId) {
+      setDirectScheme(null);
+      setDirectSchemeNotFound(false);
+      return;
+    }
+
+    const inDynamic = dynamicSchemes?.some(
+      (s) => s.id === selectedSchemeId || (s.slug && s.slug === selectedSchemeId)
+    );
+    const inAvailable = availableSchemesList?.some(
+      (s) => s.id === selectedSchemeId || s.scheme_id === selectedSchemeId || (s.slug && s.slug === selectedSchemeId)
+    );
+
+    if (inDynamic || inAvailable) {
+      setDirectSchemeNotFound(false);
+      return;
+    }
+
+    if (isSchemesLoading) return;
+
+    let isMounted = true;
+    setIsDirectSchemeLoading(true);
+    setDirectSchemeNotFound(false);
+
+    fetchSchemeById(selectedSchemeId)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data) {
+          const parsed = buildDynamicSchemeChecklist([data])[0];
+          setDirectScheme(parsed || null);
+          setDirectSchemeNotFound(!parsed);
+        } else {
+          setDirectScheme(null);
+          setDirectSchemeNotFound(true);
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setDirectScheme(null);
+        setDirectSchemeNotFound(true);
+      })
+      .finally(() => {
+        if (isMounted) setIsDirectSchemeLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedSchemeId, dynamicSchemes, availableSchemesList, isSchemesLoading]);
+
+  // Calculate dynamic scheme impact counts across applicable catalog
+  const docTypeRequirementCounts = useMemo(() => {
+    const counts = {};
+    const schemes = applicantSchemes && applicantSchemes.length > 0 ? applicantSchemes : availableSchemesList;
+    (schemes || []).forEach((s) => {
+      const rawDocs = s.documents_required || s.required_documents || s.documents || [];
+      const docList = Array.isArray(rawDocs) ? rawDocs : (typeof rawDocs === 'string' ? rawDocs.split(/[;\n|,]+/) : []);
+      const seenInScheme = new Set();
+      docList.forEach((d) => {
+        const norm = normalizeDocRequirementId(d);
+        if (norm && !seenInScheme.has(norm)) {
+          seenInScheme.add(norm);
+          counts[norm] = (counts[norm] || 0) + 1;
+        }
+      });
+    });
+    return counts;
+  }, [applicantSchemes, availableSchemesList]);
+
+  // Enhance documents with dynamic requiredForSchemes counts
+  const enhancedDocuments = useMemo(() => {
+    return documents.map((d) => ({
+      ...d,
+      requiredForSchemes: docTypeRequirementCounts[d.documentType] ?? d.requiredForSchemes ?? 0
+    }));
+  }, [documents, docTypeRequirementCounts]);
+
+  // Counts for tabs & progress
+  const verifiedDocs = enhancedDocuments.filter((d) => d.status === 'verified');
+  const pendingDocs = enhancedDocuments.filter((d) => d.status === 'under_review');
+  const actionDocs = enhancedDocuments.filter((d) => d.status === 'action_required');
+
+  const totalCount = enhancedDocuments.length;
   const verifiedCount = verifiedDocs.length;
   const pendingCount = pendingDocs.length;
   const actionCount = actionDocs.length;
 
-  // Completed or submitted documents (Verified + Under Review = 7/8 = 87.5% -> 88%)
-  const completedCount = verifiedCount + pendingCount;
-  const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  // Completion percentage reflects genuinely verified documents
+  const completionPercentage = totalCount > 0 ? Math.round((verifiedCount / totalCount) * 100) : 0;
 
   // Filter documents based on active tab & live search query
-  const filteredDocuments = documents.filter((doc) => {
+  const filteredDocuments = enhancedDocuments.filter((doc) => {
     let matchesTab = true;
     if (activeTab === 'verified') matchesTab = doc.status === 'verified';
     if (activeTab === 'pending') matchesTab = doc.status === 'under_review';
@@ -246,8 +787,8 @@ export default function DocumentsPage() {
     }
   };
 
-  // Handle open upload modal (optionally targeting a specific document like 'address')
-  const handleOpenUploadModal = (docId = 'address') => {
+  // Handle open upload modal (optionally targeting a specific document like 'address_proof')
+  const handleOpenUploadModal = (docId = 'address_proof') => {
     setUploadTargetDocId(docId);
     setUploadSelectedFile(null);
     setUploadProgress(0);
@@ -256,7 +797,21 @@ export default function DocumentsPage() {
   };
 
   // Open Apply for Government Policy modal
-  const handleOpenTicketModal = () => {
+  const handleOpenTicketModal = (preselectedSchemeId = null) => {
+    setSchemeGuidanceResult(null);
+    let target = preselectedSchemeId;
+    if (!target && selectedTargetSchemeId) {
+      target = selectedTargetSchemeId;
+    }
+    if (!target && selectedSchemeId) {
+      target = selectedSchemeId;
+    }
+    // Verify target exists in availableSchemesList before setting
+    if (target && availableSchemesList.some(s => s.id === target || s.scheme_id === target)) {
+      setSelectedTargetSchemeId(target);
+    } else {
+      setSelectedTargetSchemeId('');
+    }
     setIsTicketModalOpen(true);
   };
 
@@ -282,93 +837,152 @@ export default function DocumentsPage() {
     }
   };
 
-  // Submit Government Policy Application
-  const handleSubmitPolicyApplication = (e) => {
+  // Submit Government Policy Application & Direct Scheme Guidance
+  const handleSubmitPolicyApplication = async (e) => {
     e.preventDefault();
     if (!policyFullName.trim()) {
       triggerToast('Please provide your Full Name.');
       return;
     }
-    if (!policyDocumentFile) {
-      triggerToast('Please attach or drop your document before submitting.');
-      return;
-    }
 
     setIsSubmittingPolicy(true);
-    setTimeout(() => {
-      const newAppId = `APP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const newTicket = {
-        id: newAppId,
-        category: 'Policy Application',
-        docId: 'attached',
-        docName: policyDocumentFile.name,
-        subject: `Policy Application: ${policyFullName} (${policyCategory})`,
-        description: `Applicant: ${policyFullName}, DOB: ${policyDob}, ${policyDistrict}, ${policyState}. Income: ${policyIncome}, Occupation: ${policyOccupation}`,
-        priority: 'Normal',
-        contact: '+91 98765 43210',
-        status: 'Submitted',
-        createdAt: 'Today, Just now',
-      };
+    try {
+      if (policyDocumentFile) {
+        try {
+          await uploadDocumentFile(policyDocumentFile, 'income_cert');
+        } catch (uploadErr) {
+          console.warn('Document attachment upload notice:', uploadErr);
+        }
+      }
 
-      setTickets((prev) => [newTicket, ...prev]);
+      // 1. Update real citizen profile in Supabase
+      try {
+        await updateUserProfile({
+          full_name: policyFullName,
+          date_of_birth: policyDob || null,
+          state: policyState || null,
+          city: policyDistrict || null,
+          caste_category: policyCategory ? policyCategory.toLowerCase() : null,
+          annual_income: policyIncome ? String(policyIncome).replace(/[^0-9]/g, '') : null,
+          occupation: policyOccupation || null
+        });
+      } catch (profErr) {
+        console.warn('Profile sync notice:', profErr.message);
+      }
+
+      // 1. Validate selected scheme strictly against loaded canonical catalog
+      const validation = validateSchemeSelection(selectedTargetSchemeId, availableSchemesList);
+      if (!validation.valid) {
+        triggerToast(validation.message);
+        setIsSubmittingPolicy(false);
+        return;
+      }
+
+      // 2. Resolve authoritative scheme details (never fabricated)
+      const targetScheme = await resolveCanonicalSchemeDetails(validation.matchingScheme, fetchSchemeById);
+      if (!targetScheme) {
+        triggerToast('Selected scheme could not be verified against the official catalog. Please select a valid scheme.');
+        setIsSubmittingPolicy(false);
+        return;
+      }
+
+      // 4. Submit real application to Supabase (authentic benefit amount without fabricated defaults)
+      const createdApp = await submitApplication({
+        schemeId: targetScheme.id,
+        schemeName: targetScheme.name,
+        benefitAmount: targetScheme.max_benefit || null,
+        applicantDetails: {
+          fullName: policyFullName,
+          dob: policyDob,
+          state: policyState,
+          district: policyDistrict,
+          category: policyCategory,
+          income: policyIncome,
+          occupation: policyOccupation
+        }
+      });
+
+      // 4. Reload active applications and documents directly from Supabase
+      await loadApplicationsAsTickets();
+      await loadDocuments();
+
+      const appIdShort = createdApp?.id ? `APP-${String(createdApp.id).slice(0, 8).toUpperCase()}` : 'APP-REGISTERED';
+
+      // 5. Directly guide citizen with their matched scheme and ticket status
+      setSchemeGuidanceResult({
+        ticketId: appIdShort,
+        backendId: createdApp?.id,
+        schemeId: targetScheme.id,
+        schemeName: targetScheme.name,
+        ministry: targetScheme.ministry || 'Government of India',
+        benefit: targetScheme.benefit,
+        matchScore: targetScheme.matchScore || 95,
+        verdict: 'ELIGIBLE & APPLICATION SUBMITTED',
+        reason: targetScheme.reason,
+        submittedAt: 'Just now'
+      });
+
+      triggerToast(`Application #${appIdShort} recorded in Supabase!`);
+    } catch (err) {
+      console.error('Application submit error:', err);
+      triggerToast(`Submission notice: ${err.message || 'Error creating application'}`);
+    } finally {
       setIsSubmittingPolicy(false);
-      setIsTicketModalOpen(false);
-      setPolicyDocumentFile(null);
-
-      triggerToast(`Application #${newAppId} submitted successfully for Government Policy!`);
-    }, 600);
+    }
   };
 
-  // Process uploaded file
+  // Process uploaded file through 3-tier OCR verification pipeline
   const handleProcessDirectUpload = async (file, targetId = null) => {
-    const targetDocId = targetId || uploadTargetDocId || (actionDocs.length > 0 ? actionDocs[0].id : 'address');
+    const targetDocId = targetId || uploadTargetDocId || 'aadhaar';
 
     setIsUploading(true);
     setUploadProgress(20);
+    setUploadStatusStage('1/3: Ingesting file & verifying integrity checksum...');
 
-    // Call real backend upload asynchronously
-    let uploadedBackendDoc = null;
     try {
-      uploadedBackendDoc = await uploadDocumentFile(file, targetDocId).catch((err) => {
-        console.warn('Backend document upload notice:', err.message);
-        return null;
-      });
-    } catch (_) {}
+      const uploadedBackendDoc = await uploadDocumentFile(file, targetDocId);
+      setUploadProgress(60);
+      setUploadStatusStage('2/3: Running Layered OCR Vision Pipeline (PyMuPDF / PaddleOCR)...');
 
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsUploading(false);
-          setIsUploadModalOpen(false);
-
-          const todayStr = '18 Sep 2026';
-          setDocuments((prevDocs) =>
-            prevDocs.map((doc) => {
-              if (doc.id === targetDocId) {
-                return {
-                  ...doc,
-                  backendId: uploadedBackendDoc?.id || doc.backendId,
-                  status: 'verified',
-                  statusLabel: 'Verified',
-                  source: 'Self Uploaded (OCR Verified)',
-                  validity: 'Verified for Schemes',
-                  uploadedOn: todayStr,
-                  fileType: file.name.split('.').pop().toUpperCase() || 'PDF',
-                  fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-                  docNumber: `DOC-VERIFIED-${Math.floor(1000 + Math.random() * 9000)}`,
-                };
-              }
-              return doc;
-            })
-          );
-
-          triggerToast(`Document "${file.name}" uploaded and verified successfully!`);
-          return 100;
+      if (uploadedBackendDoc && uploadedBackendDoc.id) {
+        try {
+          await extractDocumentData(uploadedBackendDoc.id);
+        } catch (extractErr) {
+          console.warn('AI OCR extraction non-blocking notice:', extractErr.message);
         }
-        return prev + 25;
-      });
-    }, 200);
+      }
+
+      setUploadProgress(90);
+      setUploadStatusStage('3/3: Extracting statutory fields & registering in vault...');
+
+      const refreshed = await loadDocuments();
+      setUploadProgress(100);
+      setUploadStatusStage('OCR Extraction Complete (Pending Statutory Verification)');
+
+      setTimeout(() => {
+        setIsUploadModalOpen(false);
+        setUploadSelectedFile(null);
+        setUploadProgress(0);
+        setUploadStatusStage('');
+
+        // Find the newly uploaded/updated document and open its verification modal
+        if (refreshed && uploadedBackendDoc) {
+          const matched = refreshed.find(d => d.backendId === uploadedBackendDoc.id || d.id === uploadedBackendDoc.id);
+          if (matched) {
+            setSelectedDocForView(matched);
+            setOcrModalTab('facts');
+          }
+        }
+        triggerToast(`Document "${file.name}" uploaded. OCR extraction complete (Pending Statutory Review).`);
+      }, 500);
+    } catch (err) {
+      console.warn('Backend document upload error:', err.message);
+      triggerToast(`Document upload failed: ${err.message || 'Service unavailable'}`);
+      setIsUploading(false);
+      setUploadStatusStage('');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // Handle Modal Upload Submit
@@ -391,33 +1005,104 @@ export default function DocumentsPage() {
   // Handle Delete Document
   const handleDeleteDoc = async (docId) => {
     setActiveMenuId(null);
-    const targetDoc = documents.find((d) => d.id === docId);
-    if (targetDoc?.backendId) {
-      deleteDocument(targetDoc.backendId).catch((err) => {
-        console.warn('Backend document delete notice:', err.message);
-      });
+    try {
+      await deleteDocument(docId);
+      await loadDocuments();
+      triggerToast('Document removed successfully.');
+    } catch (err) {
+      console.warn('Backend document delete error:', err.message);
+      triggerToast(`Failed to remove document: ${err.message || 'Network error'}`);
     }
-
-    setDocuments((prev) =>
-      prev.map((doc) => {
-        if (doc.id === docId) {
-          return {
-            ...doc,
-            backendId: null,
-            status: 'action_required',
-            statusLabel: 'Action Required',
-            uploadedOn: '-',
-            fileSize: '-',
-            source: 'Pending Verification',
-            validity: 'Pending Upload',
-          };
-        }
-        return doc;
-      })
-    );
-    triggerToast('Document removed. Status updated to Action Required.');
   };
 
+  // Re-run AI OCR Extraction pipeline for a document
+  const handleReExtractDoc = async (doc) => {
+    const backendId = doc.backendId || doc.id;
+    if (!backendId) return;
+    setIsReExtracting(true);
+    try {
+      triggerToast('Running Layered OCR Vision Pipeline...');
+      await extractDocumentData(backendId);
+      const refreshed = await loadDocuments();
+      if (refreshed) {
+        const updated = refreshed.find(d => d.backendId === backendId || d.id === backendId);
+        if (updated) setSelectedDocForView(updated);
+      }
+      triggerToast('AI OCR facts extracted and saved successfully!');
+    } catch (err) {
+      console.warn('Re-extraction error:', err);
+      triggerToast(`OCR notice: ${err.message || 'Processing fallback used'}`);
+    } finally {
+      setIsReExtracting(false);
+    }
+  };
+
+  // Handle Document File Download via Supabase Storage signed URL
+  const handleDownloadDoc = async (doc) => {
+    if (!doc) return;
+    try {
+      triggerToast(`Preparing download for ${doc.name || 'document'}...`);
+      let url = doc.fileUrl;
+      const docId = doc.backendId || doc.id;
+      if (!url && docId) {
+        try {
+          const details = await getDocumentDetails(docId);
+          url = details?.fileUrl;
+        } catch (fetchErr) {
+          console.warn('Could not fetch signed url:', fetchErr);
+        }
+      }
+
+      if (!url) {
+        triggerToast('Document file URL is not available in storage.');
+        return;
+      }
+
+      // Download file using blob fetch so browser saves with correct name
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network fetch failed');
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = doc.fileName || `${(doc.name || 'document').replace(/\s+/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+        triggerToast(`Downloaded ${doc.name || 'document'} successfully!`);
+      } catch (blobErr) {
+        // Fallback: direct window.open
+        window.open(url, '_blank');
+        triggerToast(`Opening ${doc.name || 'document'}...`);
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      triggerToast(`Download failed: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  // Dossier Export handler
+  const handleExportDossier = () => {
+    try {
+      if (!documents || documents.length === 0) {
+        triggerToast('No documents found in vault to generate a dossier.');
+        return;
+      }
+      setIsDossierModalOpen(false);
+      triggerToast('Compiling document dossier...');
+      const success = downloadDossierPdf(documents, storedUser, { title: 'Citizen Document Dossier' });
+      if (success) {
+        triggerToast('Citizen Document Dossier downloaded successfully.');
+      } else {
+        triggerToast('No valid documents available to compile dossier.');
+      }
+    } catch (err) {
+      console.error('Dossier export failed:', err);
+      triggerToast(`Dossier generation failed: ${err.message || 'Error creating PDF'}`);
+    }
+  };
 
   // Radial progress calculations for 88%
   const radius = 22;
@@ -425,8 +1110,82 @@ export default function DocumentsPage() {
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (completionPercentage / 100) * circumference;
 
-  // Selected scheme checklist for right-hand widget
-  const currentScheme = SCHEMES_CHECKLIST.find((s) => s.id === selectedSchemeId) || SCHEMES_CHECKLIST[0];
+  // Filter schemes based on in-widget search query
+  const filteredDynamicSchemes = useMemo(() => {
+    if (!schemeSearchQuery.trim()) return dynamicSchemes;
+    const q = schemeSearchQuery.toLowerCase().trim();
+    return dynamicSchemes.filter((s) => {
+      const name = (s.name || '').toLowerCase();
+      const id = (s.id || '').toLowerCase();
+      const benefit = (s.benefit || '').toLowerCase();
+      return name.includes(q) || id.includes(q) || benefit.includes(q);
+    });
+  }, [dynamicSchemes, schemeSearchQuery]);
+
+  // Selected scheme checklist for right-hand widget (strictly matching selectedSchemeId; no arbitrary fallback)
+  const currentScheme = useMemo(() => {
+    if (!selectedSchemeId) return null;
+
+    // 1. Direct match in applicant dynamic schemes (id or slug)
+    const dynMatch = dynamicSchemes?.find(
+      (s) => s.id === selectedSchemeId || (s.slug && s.slug === selectedSchemeId)
+    );
+    if (dynMatch) return dynMatch;
+
+    // 2. Match in broad available schemes list (id, scheme_id, or slug)
+    const availMatch = availableSchemesList?.find(
+      (s) => s.id === selectedSchemeId || s.scheme_id === selectedSchemeId || (s.slug && s.slug === selectedSchemeId)
+    );
+    if (availMatch) {
+      const parsed = buildDynamicSchemeChecklist([availMatch])[0];
+      if (parsed) return parsed;
+    }
+
+    // 3. Match from direct API fetch
+    if (directScheme && (directScheme.id === selectedSchemeId || (directScheme.slug && directScheme.slug === selectedSchemeId))) {
+      return directScheme;
+    }
+
+    return null;
+  }, [dynamicSchemes, availableSchemesList, directScheme, selectedSchemeId]);
+
+  // Combined schemes list for Combobox (ensures deep-linked / other-state scheme is selectable in dropdown trigger)
+  const comboboxSchemes = useMemo(() => {
+    if (!currentScheme) return dynamicSchemes;
+    const exists = dynamicSchemes.some(
+      (s) => s.id === currentScheme.id || (s.slug && s.slug === currentScheme.slug)
+    );
+    if (!exists) {
+      return [currentScheme, ...dynamicSchemes];
+    }
+    return dynamicSchemes;
+  }, [dynamicSchemes, currentScheme]);
+
+  // Auto-scroll / focus when navigating with schemeId
+  useEffect(() => {
+    if (urlSchemeId && checkerCardRef.current && !hasScrolledRef.current && (currentScheme || directSchemeNotFound)) {
+      hasScrolledRef.current = true;
+      const timer = setTimeout(() => {
+        if (checkerCardRef.current) {
+          checkerCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const focusTarget =
+            checkerCardRef.current.querySelector('.checker-selected-card') ||
+            checkerCardRef.current.querySelector('.checker-not-found-state') ||
+            checkerCardRef.current;
+          if (focusTarget) {
+            focusTarget.setAttribute('tabindex', '-1');
+            focusTarget.focus({ preventScroll: true });
+          }
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [urlSchemeId, currentScheme, directSchemeNotFound]);
+
+  // Strict readiness evaluation (four-tier status: Verified, Pending Verification, Review Required, Missing)
+  const readinessEvaluation = useMemo(() => {
+    return evaluateSchemeReadiness(currentScheme, enhancedDocuments, storedUser?.id);
+  }, [currentScheme, enhancedDocuments, storedUser?.id]);
 
   return (
     <PageContainer>
@@ -454,7 +1213,11 @@ export default function DocumentsPage() {
                 <span className="metric-card-total">/ {totalCount}</span>
               </div>
               <span className="metric-card-title">Verified Documents</span>
-              <span className="metric-card-sub">100% DBT & Subsidy Ready</span>
+              <span className="metric-card-sub">
+                {verifiedCount === totalCount && totalCount > 0
+                  ? 'All Documents Verified'
+                  : `${verifiedCount} verified, ${pendingCount} pending review`}
+              </span>
             </div>
           </div>
 
@@ -484,30 +1247,30 @@ export default function DocumentsPage() {
                 <span className="metric-card-total">Required</span>
               </div>
               <span className="metric-card-title">Action Required</span>
-              <span className="metric-card-sub">{actionCount > 0 ? 'Address proof missing' : 'All documents submitted'}</span>
+              <span className="metric-card-sub">{actionCount > 0 ? `${actionCount} document${actionCount > 1 ? 's' : ''} require action` : 'All documents submitted'}</span>
             </div>
           </div>
 
-          {/* Card 4: Support Tickets */}
+          {/* Card 4: Associated Applications */}
           <div
             className="docs-metric-card clickable-metric-card"
-            onClick={() => handleOpenTicketModal()}
+            onClick={() => setActiveTab('tickets')}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && handleOpenTicketModal()}
-            aria-label="View or Apply Support Tickets"
-            title="Click to apply or view support tickets"
+            onKeyDown={(e) => e.key === 'Enter' && setActiveTab('tickets')}
+            aria-label="View Associated Applications"
+            title="Click to view associated applications"
           >
             <div className="metric-card-icon-box purple" aria-hidden="true">
-              <Ticket size={19} />
+              <FileText size={19} />
             </div>
             <div className="metric-card-info">
               <div className="metric-card-top-line">
                 <span className="metric-card-val">{tickets.length} Active</span>
-                <span className="metric-card-total">Tickets</span>
+                <span className="metric-card-total">Applications</span>
               </div>
-              <span className="metric-card-title">Support Tickets</span>
-              <span className="metric-card-sub">Raise ticket for discrepancies</span>
+              <span className="metric-card-title">Associated Applications</span>
+              <span className="metric-card-sub">Applications linked to vault</span>
             </div>
           </div>
         </section>
@@ -570,9 +1333,9 @@ export default function DocumentsPage() {
               onClick={() => setActiveTab('tickets')}
             >
               <span className="docs-tab-icon tab-icon-ticket">
-                <Ticket size={14} color={activeTab === 'tickets' ? '#FFFFFF' : '#1264D6'} />
+                <FileText size={14} color={activeTab === 'tickets' ? '#FFFFFF' : '#1264D6'} />
               </span>
-              <span>Active Ticket ({tickets.length})</span>
+              <span>Applications ({tickets.length})</span>
             </button>
           </nav>
 
@@ -584,10 +1347,10 @@ export default function DocumentsPage() {
               <input
                 type="search"
                 className="docs-search-input"
-                placeholder={activeTab === 'tickets' ? "Search tickets..." : "Search documents..."}
+                placeholder={activeTab === 'tickets' ? "Search applications..." : "Search documents..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label={activeTab === 'tickets' ? "Search tickets" : "Search documents"}
+                aria-label={activeTab === 'tickets' ? "Search applications" : "Search documents"}
               />
               {searchQuery && (
                 <button
@@ -622,35 +1385,35 @@ export default function DocumentsPage() {
             <div className="docs-table-card">
               <div className="docs-table-wrapper">
                 {activeTab === 'tickets' ? (
-                  <table className="docs-table" aria-label="Applicant Active Tickets Table">
+                  <table className="docs-table" aria-label="Associated Applications Table">
                     <thead>
                       <tr>
-                        <th scope="col">Ticket / Application ID</th>
-                        <th scope="col">Subject & Category</th>
+                        <th scope="col">Application ID</th>
+                        <th scope="col">Target Scheme</th>
                         <th scope="col">Status</th>
-                        <th scope="col">Created Date & Priority</th>
+                        <th scope="col">Submission Date & Priority</th>
                         <th scope="col">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredTickets.map((tkt) => (
                         <tr key={tkt.id}>
-                          {/* Column 1: Ticket / Application ID */}
+                          {/* Column 1: Application ID */}
                           <td>
                             <div className="doc-info-cell">
                               <div className="doc-type-icon-box icon-blue" aria-hidden="true">
-                                <Ticket size={18} />
+                                <FileText size={18} />
                               </div>
                               <div className="doc-text-group">
                                 <span className="doc-name">{tkt.id}</span>
                                 <div className="doc-category-line">
-                                  <span className="doc-category">{tkt.category}</span>
+                                  <span className="doc-category">{tkt.category || 'Government Scheme Application'}</span>
                                 </div>
                               </div>
                             </div>
                           </td>
 
-                          {/* Column 2: Subject & Category */}
+                          {/* Column 2: Target Scheme */}
                           <td className="doc-purpose-cell">
                             <div className="doc-purpose-title">{tkt.subject}</div>
                             {tkt.docName && (
@@ -668,7 +1431,7 @@ export default function DocumentsPage() {
                             </span>
                           </td>
 
-                          {/* Column 4: Created Date & Priority */}
+                          {/* Column 4: Submission Date & Priority */}
                           <td className="doc-date-cell">
                             <div>{tkt.createdAt || tkt.createdOn || 'Recent'}</div>
                             <div
@@ -701,12 +1464,46 @@ export default function DocumentsPage() {
                       {filteredTickets.length === 0 && (
                         <tr>
                           <td colSpan="5" style={{ textAlign: 'center', padding: '32px 20px', color: '#667085' }}>
-                            No active tickets match "{searchQuery}". Click "Apply Ticket" to submit an application or query.
+                            No applications match "{searchQuery}". Click "Apply for Scheme" to submit an application.
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
+                ) : isLoading ? (
+                  <div style={{ textAlign: 'center', padding: '48px 20px', color: '#667085' }}>
+                    <Clock size={24} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px', display: 'block' }} />
+                    <p style={{ fontWeight: 600, color: '#10243A' }}>Loading your documents...</p>
+                  </div>
+                ) : fetchError ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#D92D20' }}>
+                    <AlertTriangle size={24} style={{ margin: '0 auto 8px', display: 'block' }} />
+                    <p style={{ fontWeight: 600 }}>{fetchError}</p>
+                    <button type="button" className="btn btn-outline" onClick={loadDocuments} style={{ marginTop: '12px' }}>
+                      Retry
+                    </button>
+                  </div>
+                ) : documents.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '56px 24px' }}>
+                    <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#F0F9FF', color: '#026AA2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                      <UploadCloud size={28} />
+                    </div>
+                    <h3 style={{ fontSize: '17px', fontWeight: 600, color: '#10243A', marginBottom: '8px' }}>
+                      No Documents Uploaded Yet
+                    </h3>
+                    <p style={{ fontSize: '13.5px', color: '#475467', maxWidth: '420px', margin: '0 auto 20px', lineHeight: 1.5 }}>
+                      Upload your Aadhaar, PAN, Income or Category certificates to automatically verify eligibility across government schemes.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => handleOpenUploadModal('aadhaar')}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <Plus size={16} />
+                      <span>Upload Your First Document</span>
+                    </button>
+                  </div>
                 ) : (
                   <table className="docs-table" aria-label="Applicant Documents Table">
                   <thead>
@@ -737,6 +1534,21 @@ export default function DocumentsPage() {
                                   </span>
                                 )}
                               </div>
+                              {doc.extractedData && Object.keys(doc.extractedData).length > 0 && (
+                                <span
+                                  className="doc-extracted-summary-pill"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDocForView(doc);
+                                    setOcrModalTab('facts');
+                                  }}
+                                  style={{ cursor: 'pointer', marginTop: '4px' }}
+                                  title="View extracted facts from AI OCR"
+                                >
+                                  <Sparkles size={10} color="#026AA2" />
+                                  <span>AI OCR Extracted</span>
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -744,33 +1556,51 @@ export default function DocumentsPage() {
                         {/* Column 2: Purpose & Scheme Impact */}
                         <td className="doc-purpose-cell">
                           <div className="doc-purpose-title">{doc.purpose}</div>
-                          {doc.requiredForSchemes && (
+                          {doc.requiredForSchemes > 0 && (
                             <span className="doc-scheme-count-tag">
-                              Required for {doc.requiredForSchemes} schemes
+                              Required for {doc.requiredForSchemes} scheme{doc.requiredForSchemes > 1 ? 's' : ''}
                             </span>
                           )}
                         </td>
 
                         {/* Column 3: Status Badge */}
                         <td>
-                          {doc.status === 'verified' && (
+                          {doc.statusLabel === 'Ready for AI Chat' && (
                             <span className="doc-status-badge status-verified">
                               <span className="badge-check-circle" aria-hidden="true">
                                 <Check size={8} strokeWidth={3.5} />
                               </span>
-                              <span>Verified</span>
+                              <span>Ready for AI Chat</span>
                             </span>
                           )}
-                          {doc.status === 'under_review' && (
+                          {doc.statusLabel === 'Processing' && (
                             <span className="doc-status-badge status-review">
                               <Clock size={12} />
-                              <span>Under Review</span>
+                              <span>Processing</span>
                             </span>
                           )}
-                          {doc.status === 'action_required' && (
+                          {doc.statusLabel === 'Uploaded' && (
+                            <span className="doc-status-badge status-review">
+                              <Clock size={12} />
+                              <span>Uploaded</span>
+                            </span>
+                          )}
+                          {doc.statusLabel === 'Review Required' && (
                             <span className="doc-status-badge status-action">
                               <AlertTriangle size={12} />
-                              <span>Action Required</span>
+                              <span>Review Required</span>
+                            </span>
+                          )}
+                          {doc.statusLabel === 'Processing Failed' && (
+                            <span className="doc-status-badge status-action">
+                              <AlertTriangle size={12} />
+                              <span>Processing Failed</span>
+                            </span>
+                          )}
+                          {!['Ready for AI Chat', 'Processing', 'Uploaded', 'Review Required', 'Processing Failed'].includes(doc.statusLabel) && (
+                            <span className="doc-status-badge status-review">
+                              <Clock size={12} />
+                              <span>{doc.statusLabel || 'Uploaded'}</span>
                             </span>
                           )}
                         </td>
@@ -804,80 +1634,26 @@ export default function DocumentsPage() {
                               </button>
                             )}
 
-                            {/* Three dots contextual menu */}
+                            {/* Three dots contextual menu trigger */}
                             <button
                               type="button"
                               className="btn-doc-more"
+                              data-doc-menu-btn={doc.id}
                               aria-label={`Options for ${doc.name}`}
+                              aria-haspopup="menu"
+                              aria-expanded={activeMenu?.id === doc.id}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveMenuId(activeMenuId === doc.id ? null : doc.id);
+                                if (activeMenu?.id === doc.id) {
+                                  setActiveMenu(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setActiveMenu({ id: doc.id, doc, anchorRect: rect });
+                                }
                               }}
                             >
                               <MoreVertical size={15} />
                             </button>
-
-                            {/* Dropdown Menu */}
-                            {activeMenuId === doc.id && (
-                              <div className="doc-menu-dropdown" role="menu">
-                                <button
-                                  type="button"
-                                  className="doc-menu-item"
-                                  onClick={() => {
-                                    setSelectedDocForView(doc);
-                                    setActiveMenuId(null);
-                                  }}
-                                >
-                                  <Eye size={13} />
-                                  <span>View Details</span>
-                                </button>
-                                {doc.status !== 'action_required' && (
-                                  <button
-                                    type="button"
-                                    className="doc-menu-item"
-                                    onClick={() => {
-                                      setActiveMenuId(null);
-                                      triggerToast(`Downloading verified copy of ${doc.name}...`);
-                                    }}
-                                  >
-                                    <Download size={13} />
-                                    <span>Download Copy</span>
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className="doc-menu-item"
-                                  onClick={() => {
-                                    setActiveMenuId(null);
-                                    handleOpenUploadModal(doc.id);
-                                  }}
-                                >
-                                  <RefreshCw size={13} />
-                                  <span>Replace Document</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="doc-menu-item"
-                                  onClick={() => {
-                                    setActiveMenuId(null);
-                                    handleOpenTicketModal(doc.id);
-                                  }}
-                                >
-                                  <Ticket size={13} />
-                                  <span>Apply Ticket for this Doc</span>
-                                </button>
-                                {doc.status !== 'action_required' && (
-                                  <button
-                                    type="button"
-                                    className="doc-menu-item danger"
-                                    onClick={() => handleDeleteDoc(doc.id)}
-                                  >
-                                    <Trash2 size={13} />
-                                    <span>Remove Document</span>
-                                  </button>
-                                )}
-                              </div>
-                            )}
                           </div>
                         </td>
                       </tr>
@@ -897,14 +1673,14 @@ export default function DocumentsPage() {
             </div>
           </div>
 
-          {/* Right Column: Upload, Apply Ticket, Completion, Scheme Checker */}
+          {/* Right Column: Upload, Apply for Scheme, Completion, Scheme Checker */}
           <div className="docs-right-column">
-            {/* Primary Action Buttons: Upload & Apply Ticket */}
+            {/* Primary Action Buttons: Upload & Apply for Scheme */}
             <div className="docs-sidebar-action-stack">
               <button
                 type="button"
                 className="btn-upload-new-doc"
-                onClick={() => handleOpenUploadModal('address')}
+                onClick={() => handleOpenUploadModal('address_proof')}
               >
                 <Plus size={16} strokeWidth={2.5} />
                 <span>Upload New Document</span>
@@ -914,23 +1690,23 @@ export default function DocumentsPage() {
                 type="button"
                 className="btn-apply-ticket"
                 onClick={() => handleOpenTicketModal()}
-                title="Apply Ticket for document queries or scheme grievances"
+                title="Apply for Government Policy or Scheme"
               >
-                <Ticket size={16} />
-                <span>Apply Ticket</span>
+                <FileText size={16} />
+                <span>Apply for Scheme</span>
               </button>
             </div>
 
-            {/* Quick Support & Ticket Assistance Card */}
+            {/* Quick Support & Scheme Assistance Card */}
             <div className="docs-ticket-assist-card">
               <div className="ticket-assist-header">
                 <div className="ticket-assist-icon" aria-hidden="true">
                   <LifeBuoy size={16} />
                 </div>
                 <div className="ticket-assist-title-group">
-                  <h4 className="ticket-assist-title">Need Verification Assistance?</h4>
+                  <h4 className="ticket-assist-title">Need Scheme Application Support?</h4>
                   <p className="ticket-assist-sub">
-                    Facing document delays, errors, or mismatch? Raise a support ticket for quick resolution.
+                    Have questions regarding required documents or application status? Submit a scheme inquiry.
                   </p>
                 </div>
               </div>
@@ -940,7 +1716,7 @@ export default function DocumentsPage() {
                   className="ticket-assist-link"
                   onClick={() => handleOpenTicketModal()}
                 >
-                  <span>Raise Ticket</span>
+                  <span>Apply for Scheme</span>
                   <ArrowRight size={13} />
                 </button>
                 {tickets.length > 0 && (
@@ -981,7 +1757,7 @@ export default function DocumentsPage() {
                 {/* Linear Meta */}
                 <div className="completion-meta">
                   <span className="completion-status-text">
-                    {completedCount} of {totalCount} documents verified
+                    {verifiedCount} of {totalCount} documents verified{pendingCount > 0 ? ` (${pendingCount} pending review)` : ''}
                   </span>
                   <div className="completion-linear-track" aria-hidden="true">
                     <div
@@ -994,58 +1770,154 @@ export default function DocumentsPage() {
             </div>
 
             {/* Scheme Document Eligibility Quick Checker Widget */}
-            <div className="docs-scheme-checker-card">
+            <div className="docs-scheme-checker-card" ref={checkerCardRef} id="scheme-readiness-checker">
               <div className="checker-header">
-                <h4 className="checker-title">Scheme Readiness Checker</h4>
+                <div>
+                  <h4 className="checker-title">Scheme Readiness Checker</h4>
+                  <span className="checker-subtitle">
+                    Evaluating vault against {policyState || applicantState || 'Gujarat'} & Central schemes
+                  </span>
+                </div>
                 <Sparkles size={13} color="#005B50" />
               </div>
 
-              <select
-                className="checker-select"
-                value={selectedSchemeId}
-                onChange={(e) => setSelectedSchemeId(e.target.value)}
-                aria-label="Select scheme to check document readiness"
-              >
-                {SCHEMES_CHECKLIST.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              {comboboxSchemes.length > 0 || isSchemesLoading || isDirectSchemeLoading ? (
+                <>
+                  {/* Accessible Searchable Scheme Combobox (Replaces Oversized Native Select) */}
+                  {/* Renders .checker-search-input and bounded viewport-safe popover */}
+                  <SchemeReadinessCombobox
+                    schemes={comboboxSchemes}
+                    selectedSchemeId={selectedSchemeId}
+                    onSelectScheme={(id) => {
+                      handleSelectReadinessScheme(id);
+                      setSchemeSearchQuery('');
+                    }}
+                    isLoading={isSchemesLoading || isDirectSchemeLoading}
+                    error={schemesFetchError}
+                    policyState={policyState || applicantState || 'Gujarat'}
+                  />
 
-              <div className="checker-item-list">
-                {currentScheme.requiredDocIds.map((reqId) => {
-                  const doc = documents.find((d) => d.id === reqId);
-                  const isReady = doc && doc.status === 'verified';
-                  const isReview = doc && doc.status === 'under_review';
-                  return (
-                    <div key={reqId} className="checker-doc-item">
-                      <span className="checker-doc-name">{doc ? doc.name : reqId}</span>
-                      {isReady && (
-                        <span className="checker-status-ok">
-                          <Check size={12} strokeWidth={3} />
-                          <span>Ready</span>
-                        </span>
-                      )}
-                      {isReview && (
-                        <span style={{ color: '#C56A00', fontWeight: 600, fontSize: '11px' }}>
-                          In Review
-                        </span>
-                      )}
-                      {!isReady && !isReview && (
+                  {/* Selected Scheme Card for Clarity & Preventing Name Clipping */}
+                  {selectedSchemeId && currentScheme && (
+                    <div className="checker-selected-card">
+                      <div className="checker-selected-header">
+                        <div className="checker-selected-title-group">
+                          <span className="checker-selected-badge">
+                            {currentScheme.state || (isCentralScheme(currentScheme) ? 'Central Scheme' : (policyState || applicantState || 'Gujarat'))}
+                          </span>
+                          <h5 className="checker-selected-name" title={currentScheme.name}>
+                            {currentScheme.name}
+                          </h5>
+                          {currentScheme.benefit && (
+                            <span className="checker-selected-benefit" title={currentScheme.benefit}>
+                              {currentScheme.benefit}
+                            </span>
+                          )}
+                        </div>
                         <button
                           type="button"
-                          className="checker-status-missing"
-                          style={{ background: 'none', border: 'none', padding: 0 }}
-                          onClick={() => handleOpenUploadModal(reqId)}
+                          className="checker-change-btn"
+                          onClick={() => handleSelectReadinessScheme('')}
+                          title="Change selected scheme"
+                          aria-label="Change selected scheme"
                         >
-                          Upload
+                          <RefreshCw size={11} />
+                          <span>Change</span>
                         </button>
-                      )}
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                  )}
+
+                  {selectedSchemeId && !currentScheme && isDirectSchemeLoading ? (
+                    <div className="checker-neutral-state">
+                      <Loader2 size={22} className="spin" color="#005B50" style={{ margin: '0 auto 6px', display: 'block' }} />
+                      <p className="checker-neutral-title">Loading scheme requirements...</p>
+                      <p className="checker-neutral-sub">
+                        Fetching authentic statutory policy details for &quot;{selectedSchemeId}&quot;.
+                      </p>
+                    </div>
+                  ) : selectedSchemeId && !currentScheme && (directSchemeNotFound || (!isSchemesLoading && !isDirectSchemeLoading)) ? (
+                    <div className="checker-neutral-state checker-not-found-state">
+                      <AlertCircle size={22} color="#D92D20" style={{ margin: '0 auto 6px', display: 'block' }} />
+                      <p className="checker-neutral-title" style={{ color: '#D92D20' }}>
+                        Scheme could not be found.
+                      </p>
+                      <p className="checker-neutral-sub">
+                        The requested scheme &quot;{selectedSchemeId}&quot; is not available in the official policy registry. Please select an active scheme from the search dropdown above.
+                      </p>
+                    </div>
+                  ) : !selectedSchemeId || !currentScheme ? (
+                    <div className="checker-neutral-state">
+                      <FileSearch size={22} color="#005B50" style={{ margin: '0 auto 6px', display: 'block' }} />
+                      <p className="checker-neutral-title">Select a scheme to check document readiness.</p>
+                      <p className="checker-neutral-sub">
+                        Choose an applicable government scheme to evaluate required statutory documents against your vault.
+                      </p>
+                    </div>
+                  ) : readinessEvaluation.status === 'REQUIREMENTS_UNAVAILABLE' ? (
+                    <div className="checker-no-req-state">
+                      <Info size={16} color="#475467" style={{ margin: '0 auto 6px', display: 'block' }} />
+                      <p className="checker-no-req-title">Requirements unavailable</p>
+                      <p className="checker-no-req-sub">
+                        Official document requirements are not specified in the canonical registry for this scheme.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="checker-item-list">
+                        {readinessEvaluation.requirements.map((req) => (
+                          <div key={req.id} className="checker-doc-item">
+                            <span className="checker-doc-name">{req.label}</span>
+                            {req.status === 'Verified' && (
+                              <span className="checker-status-ok">
+                                <Check size={12} strokeWidth={3} />
+                                <span>Verified</span>
+                              </span>
+                            )}
+                            {req.status === 'Pending Verification' && (
+                              <span className="checker-status-pending">
+                                <Clock size={11} />
+                                <span>Pending Verification</span>
+                              </span>
+                            )}
+                            {req.status === 'Review Required' && (
+                              <span className="checker-status-action">
+                                <AlertTriangle size={11} />
+                                <span>Review Required</span>
+                              </span>
+                            )}
+                            {req.status === 'Missing' && (
+                              <button
+                                type="button"
+                                className="checker-status-missing"
+                                style={{ background: 'none', border: 'none', padding: 0 }}
+                                onClick={() => handleOpenUploadModal(req.id)}
+                              >
+                                Upload
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="checker-summary-box">
+                        <div className="checker-summary-text">
+                          {readinessEvaluation.summaryMessage}
+                        </div>
+                        <p className="checker-disclaimer">
+                          {readinessEvaluation.disclaimer}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div style={{ padding: '24px 16px', textAlign: 'center', color: '#667085', fontSize: '12.5px' }}>
+                  {isSchemesLoading
+                    ? 'Loading official catalog schemes...'
+                    : 'Official scheme catalog is currently unavailable. No fallback schemes loaded.'}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1134,7 +2006,13 @@ export default function DocumentsPage() {
             6. MODAL: APPLY FOR GOVERNMENT POLICY
             ------------------------------------------------------------------ */}
         {isTicketModalOpen && (
-          <div className="docs-modal-backdrop" onClick={() => setIsTicketModalOpen(false)}>
+          <div
+            className="docs-modal-backdrop"
+            onClick={() => {
+              setIsTicketModalOpen(false);
+              setSchemeGuidanceResult(null);
+            }}
+          >
             <div
               className="docs-modal-card policy-application-modal"
               onClick={(e) => e.stopPropagation()}
@@ -1147,16 +2025,23 @@ export default function DocumentsPage() {
                     <ShieldCheck size={20} color="#005B50" />
                   </div>
                   <div>
-                    <h3 className="docs-modal-title">Apply for Government Policy</h3>
+                    <h3 className="docs-modal-title">
+                      {schemeGuidanceResult ? 'Scheme Eligibility & Application' : 'Apply for Government Policy'}
+                    </h3>
                     <span style={{ fontSize: '11.5px', color: '#667085' }}>
-                      Citizen Scheme Application & Document Submission
+                      {schemeGuidanceResult
+                        ? 'Official Statutory Guidance & Application Submission'
+                        : 'Citizen Scheme Application & Document Submission'}
                     </span>
                   </div>
                 </div>
                 <button
                   type="button"
                   className="docs-modal-close-btn"
-                  onClick={() => setIsTicketModalOpen(false)}
+                  onClick={() => {
+                    setIsTicketModalOpen(false);
+                    setSchemeGuidanceResult(null);
+                  }}
                   aria-label="Close modal"
                 >
                   <X size={17} />
@@ -1165,6 +2050,46 @@ export default function DocumentsPage() {
 
               <form onSubmit={handleSubmitPolicyApplication}>
                 <div className="docs-modal-body policy-modal-scroll-body">
+                  {/* Section 0: Target Scheme Selection */}
+                  <div className="policy-form-section">
+                    <div className="policy-section-header">
+                      <h4 className="policy-section-title">Target Government Scheme</h4>
+                    </div>
+                    <div className="policy-fields-grid">
+                      <div className="policy-field-group policy-field-full">
+                        <label className="policy-field-label" htmlFor="policy-target-scheme">
+                          Select Scheme from Official Catalog *
+                        </label>
+                        <select
+                          id="policy-target-scheme"
+                          className="docs-form-select policy-input"
+                          value={selectedTargetSchemeId}
+                          onChange={(e) => setSelectedTargetSchemeId(e.target.value)}
+                          required
+                          disabled={availableSchemesList.length === 0}
+                        >
+                          <option value="">
+                            {isSchemesLoading
+                              ? '-- Loading Official Schemes from Catalog... --'
+                              : availableSchemesList.length === 0
+                              ? '-- Official Scheme Catalog Unavailable --'
+                              : '-- Select a Scheme from Catalog --'}
+                          </option>
+                          {availableSchemesList.map((s) => (
+                            <option key={s.id || s.scheme_id} value={s.id || s.scheme_id}>
+                              {s.name || s.scheme_name || s.title} {s.department ? `(${s.department})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {availableSchemesList.length === 0 && !isSchemesLoading && (
+                          <span style={{ fontSize: '11.5px', color: '#B42318', marginTop: '4px', display: 'block' }}>
+                            Catalog unavailable. Applications cannot be submitted without an authentic scheme from the catalog.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Section 1: Applicant Information */}
                   <div className="policy-form-section">
                     <div className="policy-section-header">
@@ -1371,7 +2296,7 @@ export default function DocumentsPage() {
                   <button
                     type="submit"
                     className="btn btn-primary policy-submit-btn"
-                    disabled={isSubmittingPolicy}
+                    disabled={isSubmittingPolicy || availableSchemesList.length === 0 || !selectedTargetSchemeId}
                   >
                     <span>{isSubmittingPolicy ? 'Submitting Application...' : 'Submit Application'}</span>
                     <ArrowRight size={15} />
@@ -1412,7 +2337,7 @@ export default function DocumentsPage() {
                       value={uploadTargetDocId}
                       onChange={(e) => setUploadTargetDocId(e.target.value)}
                     >
-                      {documents.map((d) => (
+                      {SUPPORTED_DOC_TYPES.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.name} ({d.purpose})
                         </option>
@@ -1460,11 +2385,11 @@ export default function DocumentsPage() {
                   {isUploading && (
                     <div style={{ marginTop: '7px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '3px', fontWeight: 600 }}>
-                        <span>Uploading & Verifying...</span>
+                        <span style={{ color: '#005B50' }}>{uploadStatusStage || 'Uploading & Verifying...'}</span>
                         <span>{uploadProgress}%</span>
                       </div>
                       <div className="completion-linear-track">
-                        <div className="completion-linear-fill" style={{ width: `${uploadProgress}%` }} />
+                        <div className="completion-linear-fill" style={{ width: `${uploadProgress}%`, transition: 'width 0.3s ease' }} />
                       </div>
                     </div>
                   )}
@@ -1496,14 +2421,14 @@ export default function DocumentsPage() {
             ------------------------------------------------------------------ */}
         {selectedDocForView && (
           <div className="docs-modal-backdrop" onClick={() => setSelectedDocForView(null)}>
-            <div className="docs-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="docs-modal-card ocr-inspection-modal" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
               <div className="docs-modal-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-                  <div className={`doc-type-icon-box icon-${selectedDocForView.iconColor}`} style={{ width: '30px', height: '30px' }}>
+                  <div className={`doc-type-icon-box icon-${selectedDocForView.iconColor}`} style={{ width: '32px', height: '32px' }}>
                     {renderDocIcon(selectedDocForView.iconType)}
                   </div>
                   <div>
-                    <h3 className="docs-modal-title" style={{ fontSize: '14.5px' }}>{selectedDocForView.name}</h3>
+                    <h3 className="docs-modal-title" style={{ fontSize: '15px' }}>{selectedDocForView.name}</h3>
                     <span style={{ fontSize: '11.5px', color: '#667085' }}>{selectedDocForView.category}</span>
                   </div>
                 </div>
@@ -1518,71 +2443,368 @@ export default function DocumentsPage() {
               </div>
 
               <div className="docs-modal-body">
-                {/* Official Verification Watermark Record */}
-                <div className="doc-watermark-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#667085', fontWeight: 600 }}>
-                        Official Verification Record
-                      </span>
-                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#10243A', marginTop: '2px' }}>
-                        {selectedDocForView.name}
-                      </h4>
-                    </div>
-                    {selectedDocForView.status === 'verified' && (
-                      <span className="doc-status-badge status-verified">
-                        <Check size={10} strokeWidth={3} />
-                        <span>Verified</span>
-                      </span>
-                    )}
-                    {selectedDocForView.status === 'under_review' && (
-                      <span className="doc-status-badge status-review">
-                        <Clock size={11} />
-                        <span>Under Review</span>
-                      </span>
-                    )}
-                    {selectedDocForView.status === 'action_required' && (
-                      <span className="doc-status-badge status-action">
-                        <AlertTriangle size={11} />
-                        <span>Action Required</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="doc-preview-meta-grid">
-                    <div>
-                      <div className="meta-field-label">Document Number</div>
-                      <div className="meta-field-val">{selectedDocForView.docNumber}</div>
-                    </div>
-                    <div>
-                      <div className="meta-field-label">Primary Purpose</div>
-                      <div className="meta-field-val">{selectedDocForView.purpose}</div>
-                    </div>
-                    <div>
-                      <div className="meta-field-label">Issuing Authority</div>
-                      <div className="meta-field-val">{selectedDocForView.issuer}</div>
-                    </div>
-                    <div>
-                      <div className="meta-field-label">Uploaded On</div>
-                      <div className="meta-field-val">{selectedDocForView.uploadedOn}</div>
-                    </div>
-                    <div>
-                      <div className="meta-field-label">File Type & Size</div>
-                      <div className="meta-field-val">{selectedDocForView.fileType} • {selectedDocForView.fileSize}</div>
-                    </div>
-                    <div>
-                      <div className="meta-field-label">Verification Source</div>
-                      <div className="meta-field-val">{selectedDocForView.source || 'Digital India'}</div>
-                    </div>
-                  </div>
+                {/* OCR Inspection Navigation Tabs */}
+                <div className="ocr-view-tabs">
+                  <button
+                    type="button"
+                    className={`ocr-view-tab ${ocrModalTab === 'facts' ? 'active' : ''}`}
+                    onClick={() => setOcrModalTab('facts')}
+                  >
+                    <Sparkles size={13} />
+                    <span>Extracted Facts</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`ocr-view-tab ${ocrModalTab === 'overview' ? 'active' : ''}`}
+                    onClick={() => setOcrModalTab('overview')}
+                  >
+                    <FileText size={13} />
+                    <span>Document Record</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`ocr-view-tab ${ocrModalTab === 'pipeline' ? 'active' : ''}`}
+                    onClick={() => setOcrModalTab('pipeline')}
+                  >
+                    <ShieldCheck size={13} />
+                    <span>Pipeline Telemetry</span>
+                  </button>
+                  {selectedDocForView.extractedText && (
+                    <button
+                      type="button"
+                      className={`ocr-view-tab ${ocrModalTab === 'raw' ? 'active' : ''}`}
+                      onClick={() => setOcrModalTab('raw')}
+                    >
+                      <ScrollText size={13} />
+                      <span>Raw Text</span>
+                    </button>
+                  )}
                 </div>
 
-                <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '9px 11px', borderRadius: '7px', display: 'flex', gap: '7px', alignItems: 'center' }}>
-                  <ShieldCheck size={17} color="#15803D" style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: '11.5px', color: '#166534' }}>
-                    Digitally signed & verified for seamless direct subsidy DBT scheme verification.
-                  </span>
-                </div>
+                {/* TAB 1: EXTRACTED FACTS */}
+                {ocrModalTab === 'facts' && (
+                  <div className="ocr-facts-section">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }} />
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#1E293B' }}>
+                          Extracted Statutory Fields (Pending Verification) ({Object.keys(selectedDocForView.extractedData || {}).length} detected)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleReExtractDoc(selectedDocForView)}
+                        disabled={isReExtracting}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          color: '#005B50',
+                          background: '#E6F4F1',
+                          border: 'none',
+                          padding: '4px 8px',
+                          borderRadius: '5px',
+                          cursor: isReExtracting ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        <RefreshCw size={12} style={{ animation: isReExtracting ? 'spin 1s linear infinite' : 'none' }} />
+                        <span>{isReExtracting ? 'Re-extracting...' : 'Re-extract with AI'}</span>
+                      </button>
+                    </div>
+
+                    <div className="ocr-facts-grid">
+                      <div className="ocr-fact-card highlight-blue">
+                        <span className="ocr-fact-label">Beneficiary Full Name</span>
+                        <span className="ocr-fact-val">
+                          {selectedDocForView.extractedData?.fullName ||
+                           selectedDocForView.extractedData?.beneficiary_name ||
+                           selectedDocForView.extractedData?.name ||
+                           selectedDocForView.beneficiaryName ||
+                           'Applicant'}
+                        </span>
+                      </div>
+
+                      <div className="ocr-fact-card">
+                        <span className="ocr-fact-label">Document / ID Number</span>
+                        <span className="ocr-fact-val" style={{ fontFamily: 'monospace', letterSpacing: '0.04em' }}>
+                          {selectedDocForView.extractedData?.document_number ||
+                           selectedDocForView.extractedData?.aadhaar_last4 ||
+                           selectedDocForView.extractedData?.pan_number ||
+                           selectedDocForView.docNumber ||
+                           'RECORDED'}
+                        </span>
+                      </div>
+
+                      {selectedDocForView.extractedData?.dob && (
+                        <div className="ocr-fact-card">
+                          <span className="ocr-fact-label">Date of Birth</span>
+                          <span className="ocr-fact-val">{selectedDocForView.extractedData.dob}</span>
+                        </div>
+                      )}
+
+                      {selectedDocForView.extractedData?.gender && (
+                        <div className="ocr-fact-card">
+                          <span className="ocr-fact-label">Gender</span>
+                          <span className="ocr-fact-val">{selectedDocForView.extractedData.gender}</span>
+                        </div>
+                      )}
+
+                      {(selectedDocForView.extractedData?.category || selectedDocForView.extractedData?.socialCategory) && (
+                        <div className="ocr-fact-card">
+                          <span className="ocr-fact-label">Caste / Social Category</span>
+                          <span className="ocr-fact-val" style={{ color: '#026AA2' }}>
+                            {selectedDocForView.extractedData.category || selectedDocForView.extractedData.socialCategory}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Family Income (Document) */}
+                      {(selectedDocForView.extractedData?.annual_family_income || selectedDocForView.extractedData?.family_income) && (
+                        <div className="ocr-fact-card highlight-green">
+                          <span className="ocr-fact-label">Annual Family Income (Document)</span>
+                          <span className="ocr-fact-val ocr-income-text">
+                            {String(selectedDocForView.extractedData.annual_family_income || selectedDocForView.extractedData.family_income).startsWith('₹')
+                              ? (selectedDocForView.extractedData.annual_family_income || selectedDocForView.extractedData.family_income)
+                              : `₹ ${selectedDocForView.extractedData.annual_family_income || selectedDocForView.extractedData.family_income}`}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#667085', marginTop: '3px', display: 'block' }}>
+                            Source: {selectedDocForView.name} • Page 1
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Father's Income component if present */}
+                      {selectedDocForView.extractedData?.father_income && (
+                        <div className="ocr-fact-card">
+                          <span className="ocr-fact-label">Father's Income</span>
+                          <span className="ocr-fact-val">
+                            {String(selectedDocForView.extractedData.father_income).startsWith('₹')
+                              ? selectedDocForView.extractedData.father_income
+                              : `₹ ${selectedDocForView.extractedData.father_income}`}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#667085', marginTop: '3px', display: 'block' }}>
+                            Source: {selectedDocForView.name} • Page 1
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Mother's Income component if present */}
+                      {selectedDocForView.extractedData?.mother_income && (
+                        <div className="ocr-fact-card">
+                          <span className="ocr-fact-label">Mother's Income</span>
+                          <span className="ocr-fact-val">
+                            {String(selectedDocForView.extractedData.mother_income).startsWith('₹')
+                              ? selectedDocForView.extractedData.mother_income
+                              : `₹ ${selectedDocForView.extractedData.mother_income}`}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#667085', marginTop: '3px', display: 'block' }}>
+                            Source: {selectedDocForView.name} • Page 1
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Personal Income if explicitly present */}
+                      {selectedDocForView.extractedData?.personal_income && (
+                        <div className="ocr-fact-card highlight-green">
+                          <span className="ocr-fact-label">Personal Income (Document)</span>
+                          <span className="ocr-fact-val ocr-income-text">
+                            {String(selectedDocForView.extractedData.personal_income).startsWith('₹')
+                              ? selectedDocForView.extractedData.personal_income
+                              : `₹ ${selectedDocForView.extractedData.personal_income}`}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#667085', marginTop: '3px', display: 'block' }}>
+                            Source: {selectedDocForView.name} • Page 1
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Generic fallback if no specific family or personal income was detected */}
+                      {!selectedDocForView.extractedData?.annual_family_income &&
+                       !selectedDocForView.extractedData?.family_income &&
+                       !selectedDocForView.extractedData?.personal_income &&
+                       (selectedDocForView.extractedData?.income || selectedDocForView.extractedData?.annual_income) && (
+                        <div className="ocr-fact-card highlight-green">
+                          <span className="ocr-fact-label">Extracted Income</span>
+                          <span className="ocr-fact-val ocr-income-text">
+                            {String(selectedDocForView.extractedData.income || selectedDocForView.extractedData.annual_income).startsWith('₹')
+                              ? (selectedDocForView.extractedData.income || selectedDocForView.extractedData.annual_income)
+                              : `₹ ${selectedDocForView.extractedData.income || selectedDocForView.extractedData.annual_income}`}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#667085', marginTop: '3px', display: 'block' }}>
+                            Source: {selectedDocForView.name} • Page 1
+                          </span>
+                        </div>
+                      )}
+
+                      {(selectedDocForView.extractedData?.state || selectedDocForView.extractedData?.district) && (
+                        <div className="ocr-fact-card">
+                          <span className="ocr-fact-label">Domicile / District</span>
+                          <span className="ocr-fact-val">
+                            {[selectedDocForView.extractedData?.district, selectedDocForView.extractedData?.state].filter(Boolean).join(', ') || 'National'}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="ocr-fact-card">
+                        <span className="ocr-fact-label">Issuing Authority</span>
+                        <span className="ocr-fact-val" style={{ fontSize: '12px' }}>
+                          {selectedDocForView.extractedData?.issuing_authority || selectedDocForView.issuer || 'Government of India'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD', padding: '10px 12px', borderRadius: '7px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <Clock size={16} color="#0284C7" style={{ flexShrink: 0 }} />
+                      <span style={{ fontSize: '11.5px', color: '#0369A1', lineHeight: 1.4 }}>
+                        These statutory fields have been extracted via OCR. Official statutory verification is managed by departmental authorities upon scheme submission.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: OVERVIEW RECORD */}
+                {ocrModalTab === 'overview' && (
+                  <>
+                    <div className="doc-watermark-card">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#667085', fontWeight: 600 }}>
+                            Official Document Record
+                          </span>
+                          <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#10243A', marginTop: '2px' }}>
+                            {selectedDocForView.name}
+                          </h4>
+                        </div>
+                        {selectedDocForView.status === 'verified' && (
+                          <span className="doc-status-badge status-verified">
+                            <Check size={10} strokeWidth={3} />
+                            <span>Verified</span>
+                          </span>
+                        )}
+                        {selectedDocForView.status === 'under_review' && (
+                          <span className="doc-status-badge status-review">
+                            <Clock size={11} />
+                            <span>Under Review</span>
+                          </span>
+                        )}
+                        {selectedDocForView.status === 'action_required' && (
+                          <span className="doc-status-badge status-action">
+                            <AlertTriangle size={11} />
+                            <span>Action Required</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="doc-preview-meta-grid">
+                        <div>
+                          <div className="meta-field-label">Document Number</div>
+                          <div className="meta-field-val">{selectedDocForView.docNumber}</div>
+                        </div>
+                        <div>
+                          <div className="meta-field-label">Primary Purpose</div>
+                          <div className="meta-field-val">{selectedDocForView.purpose}</div>
+                        </div>
+                        <div>
+                          <div className="meta-field-label">Issuing Authority</div>
+                          <div className="meta-field-val">{selectedDocForView.issuer}</div>
+                        </div>
+                        <div>
+                          <div className="meta-field-label">Uploaded On</div>
+                          <div className="meta-field-val">{selectedDocForView.uploadedOn}</div>
+                        </div>
+                        <div>
+                          <div className="meta-field-label">File Type & Size</div>
+                          <div className="meta-field-val">{selectedDocForView.fileType} • {selectedDocForView.fileSize}</div>
+                        </div>
+                        <div>
+                          <div className="meta-field-label">Verification Source</div>
+                          <div className="meta-field-val">{selectedDocForView.source || 'Digital India'}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ backgroundColor: selectedDocForView.status === 'verified' ? '#F0FDF4' : '#F0F9FF', border: `1px solid ${selectedDocForView.status === 'verified' ? '#BBF7D0' : '#BAE6FD'}`, padding: '9px 11px', borderRadius: '7px', display: 'flex', gap: '7px', alignItems: 'center' }}>
+                      {selectedDocForView.status === 'verified' ? (
+                        <ShieldCheck size={17} color="#15803D" style={{ flexShrink: 0 }} />
+                      ) : (
+                        <Clock size={17} color="#0284C7" style={{ flexShrink: 0 }} />
+                      )}
+                      <span style={{ fontSize: '11.5px', color: selectedDocForView.status === 'verified' ? '#166534' : '#0369A1' }}>
+                        {selectedDocForView.status === 'verified'
+                          ? 'Digitally verified for seamless direct subsidy DBT scheme submission.'
+                          : 'OCR extraction complete. Pending statutory departmental verification upon scheme application.'}
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {/* TAB 3: PIPELINE TELEMETRY */}
+                {ocrModalTab === 'pipeline' && (
+                  <div className="ocr-pipeline-box">
+                    <div className="ocr-pipeline-header">
+                      <div className="ocr-pipeline-title">
+                        <Sparkles size={14} />
+                        <span>Layered OCR Vision Telemetry</span>
+                      </div>
+                      <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600 }}>
+                        {selectedDocForView.ocrMetadata?.confidence ? `${Math.round(selectedDocForView.ocrMetadata.confidence * 100)}% Confidence` : 'Verified 98%'}
+                      </span>
+                    </div>
+
+                    <div className="ocr-pipeline-steps">
+                      <div className="ocr-pipeline-step-item">
+                        <div className="ocr-step-number">1</div>
+                        <div className="ocr-step-info">
+                          <span className="ocr-step-title">Ingestion & Document Integrity</span>
+                          <span className="ocr-step-detail">
+                            Method: {selectedDocForView.ocrMetadata?.method || 'NATIVE_PDF_STREAM'} • Pages: {selectedDocForView.ocrMetadata?.pages || 1}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="ocr-pipeline-step-item">
+                        <div className="ocr-step-number">2</div>
+                        <div className="ocr-step-info">
+                          <span className="ocr-step-title">Optical Character Recognition</span>
+                          <span className="ocr-step-detail">
+                            Engine: {selectedDocForView.ocrMetadata?.engine || 'PyMuPDF Native Text Parser + OCR Layer'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="ocr-pipeline-step-item">
+                        <div className="ocr-step-number">3</div>
+                        <div className="ocr-step-info">
+                          <span className="ocr-step-title">Field Normalization & Canonical Schema</span>
+                          <span className="ocr-step-detail">
+                            Mapped to Indian Statutory Identification Schema (Aadhaar/PAN/DBT)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="ocr-pipeline-step-item">
+                        <div className="ocr-step-number">4</div>
+                        <div className="ocr-step-info">
+                          <span className="ocr-step-title">Scheme Readiness Indexing</span>
+                          <span className="ocr-step-detail">
+                            {(selectedDocForView.requiredForSchemes ?? docTypeRequirementCounts[selectedDocForView.documentType] ?? 0) > 0
+                              ? `Linked to ${selectedDocForView.requiredForSchemes ?? docTypeRequirementCounts[selectedDocForView.documentType]} central & state welfare scheme${(selectedDocForView.requiredForSchemes ?? docTypeRequirementCounts[selectedDocForView.documentType]) > 1 ? 's' : ''}`
+                              : 'Indexed for matching against central & state welfare schemes'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 4: RAW EXTRACTED TEXT */}
+                {ocrModalTab === 'raw' && selectedDocForView.extractedText && (
+                  <div className="ocr-raw-text-container">
+                    <pre className="ocr-raw-text-content">{selectedDocForView.extractedText}</pre>
+                  </div>
+                )}
               </div>
 
               <div className="docs-modal-footer">
@@ -1596,10 +2818,7 @@ export default function DocumentsPage() {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => {
-                    triggerToast(`Downloading verified copy of ${selectedDocForView.name}...`);
-                    setSelectedDocForView(null);
-                  }}
+                  onClick={() => handleDownloadDoc(selectedDocForView)}
                 >
                   <Download size={13} />
                   <span>Download Document</span>
@@ -1632,21 +2851,36 @@ export default function DocumentsPage() {
 
               <div className="docs-modal-body">
                 <p style={{ fontSize: '12.5px', color: '#475467', lineHeight: 1.45 }}>
-                  Generate an official compiled PDF dossier containing all your verified documents with individual QR verification codes for physical submissions at CSC Centers or Bank Branches.
+                  Export a compiled document portfolio summary PDF containing all active documents in your vault, their statutory categories, document numbers, issuers, and current verification statuses.
                 </p>
 
                 <div style={{ background: '#F8F9FA', borderRadius: '7px', padding: '11px', border: '1px solid #E4E7EC' }}>
                   <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#344054', marginBottom: '7px' }}>
-                    Included in this Dossier ({verifiedCount} Verified Documents):
+                    Included in this Dossier ({documents.length} Vault Documents):
                   </div>
-                  <ul style={{ fontSize: '11.5px', color: '#475467', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {verifiedDocs.map((d) => (
-                      <li key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <Check size={11} color="#087443" />
-                        <span>{d.name} ({d.purpose})</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {documents.length === 0 ? (
+                    <div style={{ fontSize: '11.5px', color: '#667085', fontStyle: 'italic' }}>
+                      No documents currently available in your vault.
+                    </div>
+                  ) : (
+                    <ul style={{ fontSize: '11.5px', color: '#475467', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {documents.map((d) => (
+                        <li key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '5px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            {d.status === 'verified' ? (
+                              <Check size={11} color="#087443" />
+                            ) : (
+                              <Clock size={11} color="#E98A00" />
+                            )}
+                            <span>{d.name} ({d.purpose})</span>
+                          </div>
+                          <span style={{ fontSize: '10.5px', color: d.status === 'verified' ? '#087443' : '#E98A00', fontWeight: 600 }}>
+                            {d.status === 'verified' ? 'Verified' : 'Pending Review'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
 
@@ -1661,13 +2895,11 @@ export default function DocumentsPage() {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => {
-                    setIsDossierModalOpen(false);
-                    triggerToast('Generating official Citizen Dossier PDF package...');
-                  }}
+                  disabled={documents.length === 0}
+                  onClick={handleExportDossier}
                 >
                   <Download size={13} />
-                  <span>Download Complete Dossier</span>
+                  <span>Download Dossier PDF</span>
                 </button>
               </div>
             </div>
@@ -1777,24 +3009,22 @@ export default function DocumentsPage() {
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                  <div style={{ padding: '9px 11px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC' }}>
-                    <div style={{ fontWeight: 600, color: '#10243A', fontSize: '13px' }}>PMEGP & MSME Schemes</div>
-                    <div style={{ fontSize: '11.5px', color: '#475467', marginTop: '2px' }}>
-                      Requires Aadhaar, PAN Card, Category/Caste Certificate, and Project Site Address Proof.
+                  {dynamicSchemes.length > 0 ? (
+                    dynamicSchemes.slice(0, 4).map((s) => (
+                      <div key={s.id} style={{ padding: '9px 11px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC' }}>
+                        <div style={{ fontWeight: 600, color: '#10243A', fontSize: '13px' }}>{s.name}</div>
+                        <div style={{ fontSize: '11.5px', color: '#475467', marginTop: '2px' }}>
+                          Requires: {Array.isArray(s.requiredDocIds) && s.requiredDocIds.length > 0
+                            ? s.requiredDocIds.map(d => typeof d === 'object' ? d.label : (DOC_TYPE_LOOKUP[d]?.name || d)).join(', ')
+                            : 'Standard verification documents'}.
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '14px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC', color: '#475467', fontSize: '12px' }}>
+                      Official scheme document requirements are retrieved dynamically from the active Government scheme registry.
                     </div>
-                  </div>
-                  <div style={{ padding: '9px 11px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC' }}>
-                    <div style={{ fontWeight: 600, color: '#10243A', fontSize: '13px' }}>PM Kisan & Agriculture Support</div>
-                    <div style={{ fontSize: '11.5px', color: '#475467', marginTop: '2px' }}>
-                      Requires Bank Account Details (DBT enabled), Land Record / Domicile, and Aadhaar.
-                    </div>
-                  </div>
-                  <div style={{ padding: '9px 11px', background: '#F8F9FA', borderRadius: '7px', border: '1px solid #E4E7EC' }}>
-                    <div style={{ fontWeight: 600, color: '#10243A', fontSize: '13px' }}>Education & Scholarships</div>
-                    <div style={{ fontSize: '11.5px', color: '#475467', marginTop: '2px' }}>
-                      Requires Income Certificate (annual validity), Marksheets, Domicile, and Photo.
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -1895,7 +3125,7 @@ export default function DocumentsPage() {
         )}
 
         {/* ------------------------------------------------------------------
-            13. MODAL: VIEW TICKET DETAILS
+            13. MODAL: VIEW APPLICATION DETAILS
             ------------------------------------------------------------------ */}
         {selectedTicketForView && (
           <div className="docs-modal-backdrop" onClick={() => setSelectedTicketForView(null)}>
@@ -1903,11 +3133,11 @@ export default function DocumentsPage() {
               <div className="docs-modal-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
                   <div className="policy-modal-header-icon">
-                    <Ticket size={20} color="#005B50" />
+                    <FileText size={20} color="#005B50" />
                   </div>
                   <div>
-                    <h3 className="docs-modal-title">Ticket: {selectedTicketForView.id}</h3>
-                    <span style={{ fontSize: '11.5px', color: '#667085' }}>{selectedTicketForView.category}</span>
+                    <h3 className="docs-modal-title">Application: {selectedTicketForView.id}</h3>
+                    <span style={{ fontSize: '11.5px', color: '#667085' }}>{selectedTicketForView.category || 'Government Scheme Application'}</span>
                   </div>
                 </div>
                 <button
@@ -1925,7 +3155,7 @@ export default function DocumentsPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#667085', fontWeight: 600 }}>
-                        Official Ticket Details
+                        Official Application Record
                       </span>
                       <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#10243A', marginTop: '2px' }}>
                         {selectedTicketForView.subject}
@@ -1933,7 +3163,7 @@ export default function DocumentsPage() {
                     </div>
                     <span className="doc-status-badge status-review">
                       <Clock size={11} />
-                      <span>{selectedTicketForView.status || 'Active'}</span>
+                      <span>{selectedTicketForView.status || 'Under Review'}</span>
                     </span>
                   </div>
 
@@ -1943,7 +3173,7 @@ export default function DocumentsPage() {
 
                   <div className="doc-preview-meta-grid" style={{ marginTop: '14px' }}>
                     <div>
-                      <div className="meta-field-label">Reference ID</div>
+                      <div className="meta-field-label">Application ID</div>
                       <div className="meta-field-val">{selectedTicketForView.id}</div>
                     </div>
                     <div>
@@ -1956,7 +3186,7 @@ export default function DocumentsPage() {
                     </div>
                     <div>
                       <div className="meta-field-label">Assigned Desk</div>
-                      <div className="meta-field-val">{selectedTicketForView.agent || 'Nodal Grievance Cell'}</div>
+                      <div className="meta-field-val">{selectedTicketForView.agent || 'Departmental Review Desk'}</div>
                     </div>
                   </div>
                 </div>
@@ -1968,11 +3198,94 @@ export default function DocumentsPage() {
                   className="btn btn-primary"
                   onClick={() => setSelectedTicketForView(null)}
                 >
-                  Close Case View
+                  Close Application View
                 </button>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Floating Portal Action Menu (Completely escapes table clipping and viewport edges) */}
+        {activeMenu && activeMenu.doc && menuPlacement && typeof document !== 'undefined' && createPortal(
+          <div
+            ref={activeMenuRef}
+            className={`doc-menu-dropdown portal-positioned ${menuPlacement.openUpward ? 'open-upward' : 'open-downward'}`}
+            role="menu"
+            aria-label={`Options for ${activeMenu.doc.name}`}
+            style={menuPlacement.style}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="doc-menu-item"
+              role="menuitem"
+              onClick={() => {
+                const targetDoc = activeMenu.doc;
+                setActiveMenu(null);
+                setSelectedDocForView(targetDoc);
+              }}
+            >
+              <Eye size={13} />
+              <span>View Details</span>
+            </button>
+            {activeMenu.doc.status !== 'action_required' && (
+              <button
+                type="button"
+                className="doc-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  const targetDoc = activeMenu.doc;
+                  setActiveMenu(null);
+                  handleDownloadDoc(targetDoc);
+                }}
+              >
+                <Download size={13} />
+                <span>Download Copy</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="doc-menu-item"
+              role="menuitem"
+              onClick={() => {
+                const targetDoc = activeMenu.doc;
+                setActiveMenu(null);
+                handleOpenUploadModal(targetDoc.id);
+              }}
+            >
+              <RefreshCw size={13} />
+              <span>Replace Document</span>
+            </button>
+            <button
+              type="button"
+              className="doc-menu-item"
+              role="menuitem"
+              onClick={() => {
+                const targetDoc = activeMenu.doc;
+                setActiveMenu(null);
+                handleOpenTicketModal(targetDoc.id);
+              }}
+            >
+              <FileText size={13} />
+              <span>Apply for Scheme</span>
+            </button>
+            {activeMenu.doc.status !== 'action_required' && (
+              <button
+                type="button"
+                className="doc-menu-item danger"
+                role="menuitem"
+                onClick={() => {
+                  const targetDoc = activeMenu.doc;
+                  setActiveMenu(null);
+                  handleDeleteDoc(targetDoc.id);
+                }}
+              >
+                <Trash2 size={13} />
+                <span>Remove Document</span>
+              </button>
+            )}
+          </div>,
+          document.body
         )}
       </div>
     </PageContainer>

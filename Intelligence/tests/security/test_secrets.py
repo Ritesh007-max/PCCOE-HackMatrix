@@ -52,7 +52,7 @@ class TestSecretRedaction(unittest.TestCase):
     def test_mask_credential(self):
         key = "fin_super_secret_internal_key"
         masked = mask_credential(key)
-        self.assertTrue(masked.startswith("poli..."))
+        self.assertTrue(masked.startswith("fin_"))
         self.assertTrue(masked.endswith("..._key"))
         self.assertNotIn("super_secret", masked)
 

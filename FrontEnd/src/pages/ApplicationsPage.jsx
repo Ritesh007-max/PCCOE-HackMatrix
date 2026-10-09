@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Clock,
@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
 import { StandUpIndiaLogo, MudraLogo } from '../components/common/BrandAssets';
-import { fetchUserApplications, submitApplication } from '../services/applicationService';
+import { fetchUserApplications } from '../services/applicationService';
 
 // Assets
 import ashokStambhOriginal from '../assets/ashok_stambh_original.png';
@@ -31,154 +31,20 @@ import indiaGateHero from '../assets/india_gate_hero.jpg';
 import tricolorRibbon from '../assets/tricolor_flag_perfect.png';
 import cardMonumentSketch from '../assets/card_monument_sketch.png';
 
-// Dataset matching image copy 3.png
-const INITIAL_APPLICATIONS = [
-  {
-    id: 'pmegp',
-    schemeTitle: 'PMEGP',
-    schemeSubtitle: "Prime Minister's Employment Generation Programme",
-    applicationId: 'FIN202600123',
-    appliedDate: '15 Sep 2026',
-    rawDate: '2026-09-15',
-    benefitAmount: '₹1,25,000',
-    benefitSubtitle: 'Estimated Benefit',
-    benefitNumeric: 125000,
-    status: 'under_review',
-    statusBadge: 'Under Review',
-    statusMessage: 'Your application is under review.',
-    actionLabel: 'View Application',
-    actionType: 'view',
-    logoType: 'ashoka',
-    submittedDocs: [
-      { name: 'Aadhaar Card (Biometric Verified)', verified: true },
-      { name: 'PAN Card (NSDL Linked)', verified: true },
-      { name: 'Detailed Project Report (DPR)', verified: true },
-      { name: 'Special Category Caste Certificate', verified: true }
-    ],
-    steps: [
-      { label: 'Submitted', date: '15 Sep 2026', status: 'completed' },
-      { label: 'Verification', date: 'In Progress', status: 'current-green' },
-      { label: 'Approval', date: '', status: 'upcoming' },
-      { label: 'Disbursement', date: '', status: 'upcoming' }
-    ]
-  },
-  {
-    id: 'msme-financial-support',
-    schemeTitle: 'MSME Financial Support',
-    schemeSubtitle: 'Ministry of Micro, Small and Medium Enterprises',
-    applicationId: 'FIN202600087',
-    appliedDate: '02 Sep 2026',
-    rawDate: '2026-09-02',
-    benefitAmount: '₹80,000',
-    benefitSubtitle: 'Estimated Benefit',
-    benefitNumeric: 80000,
-    status: 'action_required',
-    statusBadge: 'Action Required',
-    statusMessage: 'Please upload additional documents.',
-    actionLabel: 'Continue Application',
-    actionType: 'continue',
-    logoType: 'msme',
-    submittedDocs: [
-      { name: 'Udyam Registration Certificate', verified: true },
-      { name: 'Bank Statement (Last 6 Months)', verified: false, reason: 'Page 3 missing stamp' },
-      { name: 'Electricity Bill for Business Premises', verified: false, reason: 'Expired bill' }
-    ],
-    steps: [
-      { label: 'Submitted', date: '02 Sep 2026', status: 'completed' },
-      { label: 'Verification', date: 'Pending Documents', status: 'error' },
-      { label: 'Approval', date: '', status: 'upcoming' },
-      { label: 'Disbursement', date: '', status: 'upcoming' }
-    ]
-  },
-  {
-    id: 'pm-kisan',
-    schemeTitle: 'PM Kisan Samman Nidhi',
-    schemeSubtitle: 'Income Support for Small & Marginal Farmers',
-    applicationId: 'FIN202600045',
-    appliedDate: '28 Aug 2026',
-    rawDate: '2026-08-28',
-    benefitAmount: '₹6,000 / year',
-    benefitSubtitle: 'Estimated Benefit',
-    benefitNumeric: 6000,
-    status: 'approved',
-    statusBadge: 'Approved',
-    statusMessage: 'Your application has been approved.',
-    actionLabel: 'View Application',
-    actionType: 'view',
-    logoType: 'kisan',
-    submittedDocs: [
-      { name: 'Land Record (7/12 & 8A Extract)', verified: true },
-      { name: 'Aadhaar Seeded Bank Passbook', verified: true },
-      { name: 'Self-declaration Affidavit', verified: true }
-    ],
-    steps: [
-      { label: 'Submitted', date: '28 Aug 2026', status: 'completed' },
-      { label: 'Verification', date: '05 Sep 2026', status: 'completed' },
-      { label: 'Approved', date: '12 Sep 2026', status: 'completed' },
-      { label: 'Disbursement', date: '', status: 'upcoming' }
-    ]
-  },
-  {
-    id: 'stand-up-india',
-    schemeTitle: 'Stand Up India',
-    schemeSubtitle: 'Credit Guarantee for SC/ST and Women Entrepreneurs',
-    applicationId: 'FIN202600032',
-    appliedDate: '10 Aug 2026',
-    rawDate: '2026-08-10',
-    benefitAmount: '₹50 Lakh',
-    benefitSubtitle: 'Estimated Benefit',
-    benefitNumeric: 5000000,
-    status: 'draft',
-    statusBadge: 'Draft',
-    statusMessage: 'Application not yet submitted.',
-    actionLabel: 'Continue Application',
-    actionType: 'continue',
-    logoType: 'standup',
-    submittedDocs: [
-      { name: 'Identity Proof (Aadhaar)', verified: true },
-      { name: 'Business Plan Draft', verified: false, reason: 'Pending final review' }
-    ],
-    steps: [
-      { label: 'Draft', date: '10 Aug 2026', status: 'current-green' },
-      { label: 'Submitted', date: '', status: 'upcoming' },
-      { label: 'Verification', date: '', status: 'upcoming' },
-      { label: 'Approval', date: '', status: 'upcoming' }
-    ]
-  },
-  {
-    id: 'mudra-yojana',
-    schemeTitle: 'Mudra Yojana',
-    schemeSubtitle: 'Collateral-free Loans for Micro Enterprises',
-    applicationId: 'FIN202600018',
-    appliedDate: '25 Jul 2026',
-    rawDate: '2026-07-25',
-    benefitAmount: '₹10 Lakh',
-    benefitSubtitle: 'Estimated Benefit',
-    benefitNumeric: 1000000,
-    status: 'not_started',
-    statusBadge: 'Not Started',
-    statusMessage: 'Start your application to avail benefits.',
-    actionLabel: 'Start Application',
-    actionType: 'start',
-    logoType: 'mudra',
-    submittedDocs: [],
-    steps: [
-      { label: 'Not Started', date: '', status: 'current-green' },
-      { label: 'Submitted', date: '', status: 'upcoming' },
-      { label: 'Verification', date: '', status: 'upcoming' },
-      { label: 'Approval', date: '', status: 'upcoming' }
-    ]
-  }
-];
+import { downloadReceipt, mapBackendApplication } from '../utils/applicationHelpers';
 
 export default function ApplicationsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const targetAppId = searchParams.get('appId') || searchParams.get('open');
 
   // Search, filter, and sorting states
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('latest');
-  const [applicationsList, setApplicationsList] = useState(INITIAL_APPLICATIONS);
+  const [applicationsList, setApplicationsList] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   // Modal and menu states
   const [selectedApp, setSelectedApp] = useState(null);
@@ -189,71 +55,40 @@ export default function ApplicationsPage() {
 
   const menuRef = useRef(null);
 
-  // Sync applications from backend API on mount
-  useEffect(() => {
-    const syncBackendApps = async () => {
-      try {
-        const backendApps = await fetchUserApplications();
-        if (backendApps && backendApps.length > 0) {
-          setApplicationsList((prevApps) => {
-            const merged = [...prevApps];
-            backendApps.forEach((bApp) => {
-              const existingIdx = merged.findIndex(
-                (a) => a.id === bApp.scheme_id || a.applicationId === bApp.id
-              );
-              const status = bApp.status || 'under_review';
-              const statusBadge = status === 'under_review' ? 'Under Review' :
-                status === 'approved' ? 'Approved' :
-                status === 'action_required' ? 'Action Required' :
-                status === 'draft' ? 'Draft' : 'Not Started';
+  // Load applications dynamically from backend API on mount
+  const loadApplications = async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const data = await fetchUserApplications();
+      if (Array.isArray(data)) {
+        const mapped = data.map(mapBackendApplication);
+        setApplicationsList(mapped);
 
-              if (existingIdx >= 0) {
-                merged[existingIdx] = {
-                  ...merged[existingIdx],
-                  status,
-                  statusBadge,
-                  appliedDate: bApp.submitted_at
-                    ? new Date(bApp.submitted_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                    : merged[existingIdx].appliedDate
-                };
-              } else {
-                merged.unshift({
-                  id: bApp.scheme_id || bApp.id,
-                  schemeTitle: bApp.scheme_name || 'Government Scheme',
-                  schemeSubtitle: 'Government of India Programme',
-                  applicationId: `FIN${String(bApp.id).slice(0, 8).toUpperCase()}`,
-                  appliedDate: bApp.submitted_at
-                    ? new Date(bApp.submitted_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                    : 'Today',
-                  rawDate: bApp.submitted_at ? bApp.submitted_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
-                  benefitAmount: bApp.estimated_benefit ? `₹${Number(bApp.estimated_benefit).toLocaleString('en-IN')}` : '₹1,25,000',
-                  benefitSubtitle: 'Estimated Benefit',
-                  benefitNumeric: bApp.estimated_benefit || 125000,
-                  status,
-                  statusBadge,
-                  statusMessage: `Your application is ${statusBadge.toLowerCase()}.`,
-                  actionLabel: 'View Application',
-                  actionType: 'view',
-                  logoType: 'ashoka',
-                  submittedDocs: [],
-                  steps: [
-                    { label: 'Submitted', date: 'Today', status: 'completed' },
-                    { label: 'Verification', date: 'In Progress', status: 'current-green' },
-                    { label: 'Approval', date: '', status: 'upcoming' },
-                    { label: 'Disbursement', date: '', status: 'upcoming' }
-                  ]
-                });
-              }
-            });
-            return merged;
-          });
+        if (targetAppId) {
+          const cleanTarget = targetAppId.trim().toLowerCase();
+          const found = mapped.find(a =>
+            String(a.id || '').toLowerCase() === cleanTarget ||
+            String(a.dbId || '').toLowerCase() === cleanTarget ||
+            String(a.applicationId || '').toLowerCase() === cleanTarget
+          );
+          if (found) setSelectedApp(found);
         }
-      } catch (err) {
-        console.warn('Backend applications sync notice:', err);
+      } else {
+        setApplicationsList([]);
       }
-    };
-    syncBackendApps();
-  }, []);
+    } catch (err) {
+      console.warn('Backend applications sync notice:', err);
+      setFetchError(err.message || 'Failed to load applications');
+      setApplicationsList([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadApplications();
+  }, [targetAppId]);
 
   // Close kebab dropdown when clicking outside
   useEffect(() => {
@@ -280,9 +115,10 @@ export default function ApplicationsPage() {
     return applicationsList.filter((app) => {
       // 1. Status Filter
       if (statusFilter !== 'all') {
-        if (statusFilter === 'under_review' && app.status !== 'under_review') return false;
+        if (statusFilter === 'under_review' && !['under_review', 'submitted', 'pending'].includes(app.status)) return false;
         if (statusFilter === 'action_required' && app.status !== 'action_required') return false;
-        if (statusFilter === 'approved' && app.status !== 'approved') return false;
+        if (statusFilter === 'approved' && !['approved', 'sanctioned'].includes(app.status)) return false;
+        if (statusFilter === 'rejected' && app.status !== 'rejected') return false;
         if (statusFilter === 'draft' && app.status !== 'draft') return false;
         if (statusFilter === 'not_started' && app.status !== 'not_started') return false;
       }
@@ -311,7 +147,7 @@ export default function ApplicationsPage() {
       }
       return 0;
     });
-  }, [searchQuery, statusFilter, sortBy]);
+  }, [applicationsList, searchQuery, statusFilter, sortBy]);
 
   // Helper to render scheme logo
   const renderSchemeLogo = (logoType) => {
@@ -419,7 +255,7 @@ export default function ApplicationsPage() {
               <FileText size={22} />
             </div>
             <div className="kpi-content">
-              <span className="kpi-number">5</span>
+              <span className="kpi-number">{applicationsList.length}</span>
               <span className="kpi-title">Total Applications</span>
               <span className="kpi-subtext">Across all schemes</span>
             </div>
@@ -431,7 +267,9 @@ export default function ApplicationsPage() {
               <Clock size={22} />
             </div>
             <div className="kpi-content">
-              <span className="kpi-number">2</span>
+              <span className="kpi-number">
+                {applicationsList.filter((a) => ['under_review', 'submitted', 'pending'].includes(a.status)).length}
+              </span>
               <span className="kpi-title">Under Review</span>
               <span className="kpi-subtext">Applications in process</span>
             </div>
@@ -443,7 +281,9 @@ export default function ApplicationsPage() {
               <CheckCircle2 size={22} />
             </div>
             <div className="kpi-content">
-              <span className="kpi-number">1</span>
+              <span className="kpi-number">
+                {applicationsList.filter((a) => ['approved', 'sanctioned'].includes(a.status)).length}
+              </span>
               <span className="kpi-title">Approved</span>
               <span className="kpi-subtext">Successfully approved</span>
             </div>
@@ -455,7 +295,9 @@ export default function ApplicationsPage() {
               <AlertTriangle size={22} />
             </div>
             <div className="kpi-content">
-              <span className="kpi-number">1</span>
+              <span className="kpi-number">
+                {applicationsList.filter((a) => a.status === 'action_required').length}
+              </span>
               <span className="kpi-title">Action Required</span>
               <span className="kpi-subtext">Needs your attention</span>
             </div>
@@ -496,6 +338,7 @@ export default function ApplicationsPage() {
                   <option value="under_review">Under Review</option>
                   <option value="action_required">Action Required</option>
                   <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
                   <option value="draft">Draft</option>
                   <option value="not_started">Not Started</option>
                 </select>
@@ -520,7 +363,37 @@ export default function ApplicationsPage() {
 
             {/* Applications List */}
             <div className="applications-list-container">
-              {filteredApplications.length === 0 ? (
+              {isLoading ? (
+                <div style={{ textAlign: 'center', padding: '48px 20px', color: '#667085' }}>
+                  <Clock size={24} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px', display: 'block' }} />
+                  <p style={{ fontWeight: 600, color: '#10243A' }}>Loading your applications...</p>
+                </div>
+              ) : fetchError ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#D92D20' }}>
+                  <AlertCircle size={24} style={{ margin: '0 auto 8px', display: 'block' }} />
+                  <p style={{ fontWeight: 600 }}>{fetchError}</p>
+                  <button type="button" className="app-btn-view" onClick={loadApplications} style={{ marginTop: '12px' }}>
+                    Retry
+                  </button>
+                </div>
+              ) : applicationsList.length === 0 ? (
+                <div className="applications-empty-state" style={{ padding: '48px 24px', textAlign: 'center' }}>
+                  <FileText size={40} color="#005B50" style={{ margin: '0 auto 12px', display: 'block' }} />
+                  <h3 className="empty-state-title">No Applications Submitted Yet</h3>
+                  <p className="empty-state-sub" style={{ maxWidth: '440px', margin: '0 auto 20px' }}>
+                    You have not applied for any government schemes yet. Explore schemes tailored to your profile and submit your first application.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/discover')}
+                    className="app-btn-view"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <span>Discover Schemes</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              ) : filteredApplications.length === 0 ? (
                 <div className="applications-empty-state">
                   <AlertCircle size={36} color="#98A2B3" />
                   <h3 className="empty-state-title">No applications found</h3>
@@ -574,12 +447,14 @@ export default function ApplicationsPage() {
                         <div className="app-card-status-block">
                           <span
                             className={`app-status-badge ${
-                              app.status === 'under_review'
+                              app.status === 'under_review' || app.status === 'submitted' || app.status === 'pending'
                                 ? 'under-review'
                                 : app.status === 'action_required'
                                 ? 'action-required'
-                                : app.status === 'approved'
+                                : app.status === 'approved' || app.status === 'sanctioned'
                                 ? 'approved'
+                                : app.status === 'rejected'
+                                ? 'rejected'
                                 : app.status === 'draft'
                                 ? 'draft'
                                 : 'not-started'
@@ -594,6 +469,24 @@ export default function ApplicationsPage() {
                           >
                             {app.statusMessage}
                           </span>
+
+                          {(app.status === 'action_required' || app.status === 'rejected') && app.remarks && (
+                            <span
+                              style={{
+                                display: 'block',
+                                marginTop: '4px',
+                                fontSize: '11.5px',
+                                color: app.status === 'rejected' ? '#B42318' : '#B54708',
+                                backgroundColor: app.status === 'rejected' ? '#FEF3F2' : '#FFFAEB',
+                                border: `1px solid ${app.status === 'rejected' ? '#FECDCA' : '#FEDF89'}`,
+                                borderRadius: '4px',
+                                padding: '3px 8px',
+                                fontWeight: 500
+                              }}
+                            >
+                              <strong>Reviewer Remark:</strong> {app.remarks}
+                            </span>
+                          )}
                         </div>
 
                         {/* Section D: Action Button & Menu */}
@@ -654,6 +547,7 @@ export default function ApplicationsPage() {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  downloadReceipt(app);
                                   showToast(`Downloaded receipt for ${app.applicationId}`);
                                   setActiveMenuId(null);
                                 }}
@@ -907,12 +801,20 @@ export default function ApplicationsPage() {
                   </span>
                 </div>
                 <div className="app-modal-meta-item">
+                  <span className="meta-field-label">Applicant Name</span>
+                  <span className="meta-field-val">{selectedApp.applicantName || 'Applicant'}</span>
+                </div>
+                <div className="app-modal-meta-item">
                   <span className="meta-field-label">Submission Date</span>
                   <span className="meta-field-val">{selectedApp.appliedDate}</span>
                 </div>
                 <div className="app-modal-meta-item">
-                  <span className="meta-field-label">Estimated Financial Grant</span>
+                  <span className="meta-field-label">Supported Benefit</span>
                   <span className="meta-field-val">{selectedApp.benefitAmount}</span>
+                </div>
+                <div className="app-modal-meta-item">
+                  <span className="meta-field-label">Last Updated</span>
+                  <span className="meta-field-val">{selectedApp.lastUpdated || selectedApp.appliedDate}</span>
                 </div>
               </div>
 
@@ -920,17 +822,17 @@ export default function ApplicationsPage() {
               <div
                 style={{
                   padding: '10px 14px',
-                  backgroundColor: selectedApp.status === 'action_required' ? '#FEF3F2' : '#F0FDF4',
+                  backgroundColor: selectedApp.status === 'action_required' ? '#FEF3F2' : selectedApp.status === 'rejected' ? '#FEF3F2' : '#F0FDF4',
                   borderRadius: '8px',
-                  border: `1px solid ${selectedApp.status === 'action_required' ? '#FECDCA' : '#BBF7D0'}`,
+                  border: `1px solid ${selectedApp.status === 'action_required' || selectedApp.status === 'rejected' ? '#FECDCA' : '#BBF7D0'}`,
                   fontSize: '12.5px',
-                  color: selectedApp.status === 'action_required' ? '#B42318' : '#087443',
+                  color: selectedApp.status === 'action_required' || selectedApp.status === 'rejected' ? '#B42318' : '#087443',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px'
                 }}
               >
-                {selectedApp.status === 'action_required' ? (
+                {selectedApp.status === 'action_required' || selectedApp.status === 'rejected' ? (
                   <AlertTriangle size={16} />
                 ) : (
                   <ShieldCheck size={16} />
@@ -938,12 +840,20 @@ export default function ApplicationsPage() {
                 <span>{selectedApp.statusMessage}</span>
               </div>
 
+              {/* Remarks */}
+              {selectedApp.remarks && (
+                <div style={{ fontSize: '12px', color: '#475467', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', border: '1px solid #EAECF0' }}>
+                  <strong style={{ color: '#10243A' }}>Remarks: </strong>
+                  <span>{selectedApp.remarks}</span>
+                </div>
+              )}
+
               {/* Submitted Documents Checklist */}
-              {selectedApp.submittedDocs && selectedApp.submittedDocs.length > 0 && (
-                <div>
-                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#10243A', marginBottom: '8px' }}>
-                    Document Verification Checklist
-                  </h4>
+              <div>
+                <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#10243A', marginBottom: '8px', marginTop: '4px' }}>
+                  Submitted Documents ({selectedApp.submittedDocs?.length || 0})
+                </h4>
+                {selectedApp.submittedDocs && selectedApp.submittedDocs.length > 0 ? (
                   <div className="app-modal-docs-list">
                     {selectedApp.submittedDocs.map((doc, i) => (
                       <div key={i} className="app-modal-doc-row">
@@ -952,37 +862,53 @@ export default function ApplicationsPage() {
                           <span>{doc.name}</span>
                         </div>
                         <span className={`doc-status-pill ${doc.verified ? 'verified' : 'pending'}`}>
-                          {doc.verified ? 'Verified ✓' : doc.reason || 'Pending Action'}
+                          {doc.verified ? 'Verified ✓' : doc.reason || 'Pending Verification'}
                         </span>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p style={{ fontSize: '12px', color: '#667085', margin: '4px 0 0 0', fontStyle: 'italic' }}>
+                    No documents directly attached to this application record.
+                  </p>
+                )}
+              </div>
 
               {/* Modal Footer */}
               <div className="app-modal-footer">
                 <button
                   type="button"
                   onClick={() => {
+                    downloadReceipt(selectedApp);
                     showToast(`Official acknowledgement receipt downloaded for ${selectedApp.applicationId}`);
                   }}
                   className="modal-btn-cancel"
                   style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Download size={13} />
-                  <span>Download Receipt (PDF)</span>
+                  <span>Download Receipt</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedApp(null);
-                    navigate(`/schemes/${selectedApp.id}`);
-                  }}
-                  className="modal-btn-primary"
-                >
-                  View Scheme Guidelines
-                </button>
+                {selectedApp.isSchemeAvailable ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedApp(null);
+                      navigate(`/schemes/${selectedApp.id}`);
+                    }}
+                    className="modal-btn-primary"
+                  >
+                    View Scheme Guidelines
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="modal-btn-primary"
+                    style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                  >
+                    Scheme Guidelines Unavailable
+                  </button>
+                )}
               </div>
             </div>
           </div>

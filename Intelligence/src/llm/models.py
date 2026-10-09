@@ -23,15 +23,58 @@ except (ImportError, ValueError):
 
 class UserIntent(str, Enum):
     """Enumeration of user intent categories."""
+    # Universal FIN Intent Taxonomy
+    GENERAL_FIN_INFO = "GENERAL_FIN_INFO"
+    WEBSITE_HELP = "WEBSITE_HELP"
+    FEATURE_HELP = "FEATURE_HELP"
+    NAVIGATION = "NAVIGATION"
+    SCHEME_SEARCH = "SCHEME_SEARCH"
+    SCHEME_DETAILS = "SCHEME_DETAILS"
+    SCHEME_ELIGIBILITY = "SCHEME_ELIGIBILITY"
+    SCHEME_BENEFITS = "SCHEME_BENEFITS"
+    SCHEME_DOCUMENTS = "SCHEME_DOCUMENTS"
+    SCHEME_APPLICATION_PROCESS = "SCHEME_APPLICATION_PROCESS"
+    SCHEME_SOURCE = "SCHEME_SOURCE"
+    SCHEME_FAQ = "SCHEME_FAQ"
+    SCHEME_COMPARISON = "SCHEME_COMPARISON"
+    RECOMMENDATION_REASON = "RECOMMENDATION_REASON"
+    ELIGIBILITY_REASON = "ELIGIBILITY_REASON"
+    APPLICATION_STATUS = "APPLICATION_STATUS"
+    APPLICATION_PROCESS = "APPLICATION_PROCESS"
+    DOCUMENT_STATUS = "DOCUMENT_STATUS"
+    DOCUMENT_CONTENT = "DOCUMENT_CONTENT"
+    DOCUMENT_SUMMARY = "DOCUMENT_SUMMARY"
+    DOCUMENT_COMPARISON = "DOCUMENT_COMPARISON"
+    PROFILE_INFO = "PROFILE_INFO"
+    PROFILE_UPDATE_HELP = "PROFILE_UPDATE_HELP"
+    DASHBOARD_INFO = "DASHBOARD_INFO"
+    SUGGESTED_SCHEMES = "SUGGESTED_SCHEMES"
+    DISCOVER_SCHEMES = "DISCOVER_SCHEMES"
+    OFFICIAL_SOURCE = "OFFICIAL_SOURCE"
+    POLICY_EXPLANATION = "POLICY_EXPLANATION"
+    FOLLOW_UP_QUESTION = "FOLLOW_UP_QUESTION"
+    CLARIFICATION_REQUIRED = "CLARIFICATION_REQUIRED"
+    OUT_OF_SCOPE = "OUT_OF_SCOPE"
+
+    # Backward-compatible Phase 18 Canonical Intents
+    PERSONAL_FACT_LOOKUP = "PERSONAL_FACT_LOOKUP"
+    DOCUMENT_QUERY = "DOCUMENT_QUERY"
+    SCHEME_RECOMMENDATION = "SCHEME_RECOMMENDATION"
+    ELIGIBILITY_QUERY = "ELIGIBILITY_QUERY"
+    BENEFIT_QUERY = "BENEFIT_QUERY"
+    POLICY_INFORMATION = "POLICY_INFORMATION"
+    DOCUMENT_REQUIREMENTS = "DOCUMENT_REQUIREMENTS"
+    MISSING_INFORMATION = "MISSING_INFORMATION"
+    DECISION_EXPLANATION = "DECISION_EXPLANATION"
+    UNKNOWN = "UNKNOWN"
+
+    # Backward-compatible legacy intents
     SCHEME_DISCOVERY = "SCHEME_DISCOVERY"
     ELIGIBILITY_QUESTION = "ELIGIBILITY_QUESTION"
     BENEFIT_QUESTION = "BENEFIT_QUESTION"
-    APPLICATION_PROCESS = "APPLICATION_PROCESS"
-    DOCUMENT_REQUIREMENTS = "DOCUMENT_REQUIREMENTS"
     STATUS_QUERY = "STATUS_QUERY"
     COMPARISON = "COMPARISON"
     GENERAL_INFORMATION = "GENERAL_INFORMATION"
-    UNKNOWN = "UNKNOWN"
 
     @classmethod
     def from_str(cls, val: Any) -> "UserIntent":
@@ -43,22 +86,48 @@ class UserIntent(str, Enum):
         for item in cls:
             if item.value == v or item.name == v:
                 return item
-        if any(s in v for s in ("SCHEME", "SEARCH", "FIND", "DISCOVERY", "EXPLORE", "SCHOLARSHIP")):
-            return cls.SCHEME_DISCOVERY
+        if "OUT_OF_SCOPE" in v or "TRIVIA" in v or "JOKE" in v or "GAME" in v:
+            return cls.OUT_OF_SCOPE
+        if "WEBSITE" in v or "PORTAL" in v:
+            return cls.WEBSITE_HELP
+        if "DASHBOARD" in v:
+            return cls.DASHBOARD_INFO
+        if "SUGGEST" in v:
+            return cls.SUGGESTED_SCHEMES
+        if "DISCOVER" in v:
+            return cls.DISCOVER_SCHEMES
+        if "PROFILE" in v:
+            return cls.PROFILE_INFO
+        if "PERSONAL" in v or "FACT_LOOKUP" in v:
+            return cls.PERSONAL_FACT_LOOKUP
+        if "DOCUMENT_SUMMARY" in v or "DOC_SUMMARY" in v or ("DOC" in v and "SUMMAR" in v):
+            return cls.DOCUMENT_SUMMARY
+        if "DOCUMENT_QUERY" in v or "DOC_QUERY" in v:
+            return cls.DOCUMENT_QUERY
+        if any(s in v for s in ("SCHEME_REC", "RECOMMEND", "EXPLORE")):
+            return cls.SCHEME_RECOMMENDATION
+        if any(s in v for s in ("SCHEME_SEARCH", "SEARCH", "FIND", "SCHOLARSHIP")):
+            return cls.SCHEME_SEARCH
         if "ELIGIB" in v or "QUALIF" in v:
-            return cls.ELIGIBILITY_QUESTION
+            return cls.SCHEME_ELIGIBILITY
         if "BENEFIT" in v or "SUBSIDY" in v or "MONEY" in v:
-            return cls.BENEFIT_QUESTION
-        if "APPLY" in v or "APPLICATION" in v or "PROCESS" in v:
-            return cls.APPLICATION_PROCESS
+            return cls.SCHEME_BENEFITS
+        if "MISSING" in v or "INCOMPLETE" in v:
+            return cls.MISSING_INFORMATION
+        if "EXPLANATION" in v or "WHY" in v or "REASON" in v:
+            return cls.ELIGIBILITY_REASON
+        if "CLARIF" in v:
+            return cls.CLARIFICATION_REQUIRED
+        if "APPLY" in v or "APPLICATION_PROCESS" in v or "PROCEDURE" in v:
+            return cls.SCHEME_APPLICATION_PROCESS
         if "DOC" in v:
-            return cls.DOCUMENT_REQUIREMENTS
+            return cls.SCHEME_DOCUMENTS
         if "STATUS" in v or "TRACK" in v:
-            return cls.STATUS_QUERY
+            return cls.APPLICATION_STATUS
         if "COMPARE" in v or "COMPARISON" in v:
-            return cls.COMPARISON
-        if "INFO" in v:
-            return cls.GENERAL_INFORMATION
+            return cls.SCHEME_COMPARISON
+        if "INFO" in v or "POLICY" in v:
+            return cls.POLICY_EXPLANATION
         return cls.UNKNOWN
 
 

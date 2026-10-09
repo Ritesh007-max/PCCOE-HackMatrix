@@ -24,6 +24,8 @@ const FIELD_TO_COLUMN = {
     employer_name: 'employer_name',
     category: 'caste_category',
     caste_category: 'caste_category',
+    social_category: 'caste_category',
+    mobile_number: 'phone',
     is_disabled: 'disability_status',
     disability_status: 'disability_status',
     disability_percentage: 'disability_percentage',
@@ -46,8 +48,8 @@ const PROFILE_SELECT = [
 ].join(', ');
 
 const COMPLETION_FIELDS = [
-    'full_name', 'phone', 'date_of_birth', 'gender', 'address_line1', 'city',
-    'state', 'pincode', 'annual_income', 'occupation', 'caste_category'
+    'full_name', 'phone', 'date_of_birth', 'gender', 'city',
+    'state', 'annual_income', 'occupation', 'caste_category'
 ];
 
 const calculateProfileCompletion = (profile) => {
@@ -63,6 +65,8 @@ const toProfile = (row) => row ? ({
     dob: row.date_of_birth,
     district: row.city,
     category: row.caste_category,
+    social_category: row.caste_category,
+    mobile_number: row.phone,
     is_disabled: row.disability_status,
     land_acres: row.land_holding_acres,
     income: row.annual_income,
@@ -97,9 +101,16 @@ const mapUpdatesToColumns = (updates) => {
     );
     for (const [field, value] of entries) {
         const column = FIELD_TO_COLUMN[field];
-        // If both a UI alias and a physical/canonical field are supplied, the
-        // canonical value wins.
-        if (column && value !== undefined) row[column] = value;
+        if (column && value !== undefined) {
+            let val = value;
+            if (column === 'caste_category' && typeof val === 'string') {
+                val = val.trim().toLowerCase();
+            }
+            if (column === 'gender' && typeof val === 'string') {
+                val = val.trim().toLowerCase();
+            }
+            row[column] = val;
+        }
     }
     return row;
 };

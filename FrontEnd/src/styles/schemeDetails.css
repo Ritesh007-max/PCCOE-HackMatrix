@@ -133,6 +133,30 @@
   white-space: nowrap;
 }
 
+.scheme-status-pill.closed {
+  background-color: #FEF3F2;
+  border-color: #FECDCA;
+  color: #B42318;
+}
+
+.scheme-status-pill.upcoming {
+  background-color: #EFF8FF;
+  border-color: #B2DDFF;
+  color: #175CD3;
+}
+
+.scheme-status-pill.unspecified {
+  background-color: #F8F9FA;
+  border-color: #EAECF0;
+  color: #475467;
+}
+
+.scheme-status-pill.ongoing {
+  background-color: #ECFDF3;
+  border-color: #A6F4C5;
+  color: #087443;
+}
+
 .status-live-dot {
   width: 7px;
   height: 7px;
@@ -140,6 +164,27 @@
   background-color: #12B76A;
   box-shadow: 0 0 0 2px rgba(18, 183, 106, 0.25);
   animation: pulseDot 2s infinite ease-in-out;
+}
+
+.status-closed-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #D92D20;
+}
+
+.status-upcoming-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #175CD3;
+}
+
+.status-unspecified-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #98A2B3;
 }
 
 @keyframes pulseDot {
@@ -878,6 +923,16 @@
   color: #D97706;
 }
 
+.highlight-icon-round.red {
+  background-color: #FEF3F2;
+  color: #D92D20;
+}
+
+.highlight-icon-round.gray {
+  background-color: #F2F4F7;
+  color: #475467;
+}
+
 .highlight-text-wrap {
   display: flex;
   flex-direction: column;
@@ -988,6 +1043,31 @@
   background-color: #052d25;
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(7, 59, 48, 0.2);
+}
+
+.btn-check-docs-main {
+  background-color: #E6F4F1;
+  border: 1px solid #B2DDDA;
+  color: #073B30;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: all 0.15s ease;
+}
+
+.btn-check-docs-main:hover {
+  background-color: #D3ECE7;
+  border-color: #79C2BA;
+  transform: translateY(-1px);
 }
 
 .btn-save-main {
@@ -1503,4 +1583,106 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVE DESIGN BREAKPOINTS
+   -------------------------------------------------------------------------- */
+@media (max-width: 1060px) {
+  .scheme-content-grid {
+    grid-template-columns: 1fr;
+  }
+  .scheme-right-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .scheme-hero-card {
+    grid-template-columns: 1fr;
+  }
+  .scheme-hero-media {
+    border-left: none;
+    border-top: 1px solid #EAECF0;
+    min-height: 160px;
+  }
+  .calc-controls-grid {
+    grid-template-columns: 1fr;
+  }
+  .scheme-benefits-grid,
+  .scheme-highlights-grid,
+  .calc-metrics-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .scheme-main-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .scheme-header-identity {
+    width: 100%;
+    min-width: 0;
+  }
+  .scheme-header-right-cluster {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .scheme-tabs-nav {
+    gap: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 480px) {
+  .scheme-title-main {
+    font-size: 20px;
+  }
+  .scheme-hero-content {
+    padding: 18px 16px;
+  }
+  .scheme-hero-headline {
+    font-size: 20px;
+  }
+  .scheme-benefits-grid,
+  .scheme-highlights-grid,
+  .calc-metrics-row {
+    grid-template-columns: 1fr;
+  }
+  .scheme-tab-panel {
+    padding: 16px 14px;
+  }
+  .interactive-test-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .application-modal-card {
+    padding: 18px 16px;
+    max-width: calc(100vw - 32px);
+  }
+  .subsidy-table th,
+  .subsidy-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .scheme-title-main {
+    font-size: 18px;
+  }
+  .scheme-hero-headline {
+    font-size: 18px;
+  }
+  .scheme-emblem-container {
+    width: 36px;
+    height: 42px;
+  }
+  .scheme-hero-content {
+    padding: 14px 12px;
+  }
 }

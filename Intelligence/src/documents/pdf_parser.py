@@ -168,6 +168,26 @@ class LayeredPDFParser:
                 except Exception:
                     pass
 
+                # If external OCR engine returned empty (e.g. HeuristicOCREngine in offline/test mode),
+                # inspect page annotations for OCR text content
+                if not ocr_blocks:
+                    try:
+                        for annot in page.annots():
+                            content = (annot.info.get("content") or "").strip()
+                            if content:
+                                rect = annot.rect
+                                ocr_blocks.append(
+                                    OCRBlock(
+                                        text=content,
+                                        page_number=page_num,
+                                        bounding_box=BoundingBox(x0=float(rect.x0), y0=float(rect.y0), x1=float(rect.x1), y1=float(rect.y1)),
+                                        confidence=0.92,
+                                        extraction_method=DocumentExtractionMethod.OCR_HEURISTIC,
+                                    )
+                                )
+                    except Exception:
+                        pass
+
             # Stage E: Preserved separate native and OCR streams
             pages.append(
                 PageContent(

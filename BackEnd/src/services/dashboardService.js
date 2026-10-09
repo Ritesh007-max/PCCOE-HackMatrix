@@ -1,18 +1,9 @@
+const fs = require('fs');
+const path = require('path');
 const { supabaseAdmin } = require('../config/supabaseConfig');
 const profileService = require('./profileService');
-
-const REQUIRED_DOC_TYPES = [
-    'aadhaar',
-    'pan',
-    'income_cert',
-    'caste_cert',
-    'land',
-    'disability_cert',
-    'bank_passbook',
-    'domicile',
-    'photo',
-    'address_proof'
-];
+const schemeService = require('./schemeService');
+const { interpretFinancialBenefit, BenefitCategories } = require('./financialBenefitService');
 
 const isTableMissingError = (err) => {
     return err && (
@@ -21,73 +12,153 @@ const isTableMissingError = (err) => {
     );
 };
 
+/**
+ * In-memory index of canonical scheme jurisdiction levels from the active snapshot.
+ * Resolves verified Central vs State schemes to provide an accurate, non-duplicated
+ * count of active welfare schemes applicable to a citizen's jurisdiction.
+ */
+let canonicalJurisdictionIndex = null;
+
+const getCanonicalJurisdictionIndex = () => {
+    if (canonicalJurisdictionIndex) return canonicalJurisdictionIndex;
+    canonicalJurisdictionIndex = {
+        centralIds: new Set(),
+        stateSchemeMap: new Map()
+    };
+    try {
+        const snapshotsRoot = path.resolve(__dirname, '../../../Intelligence/data/snapshots');
+        const activeJson = path.join(snapshotsRoot, 'active_version.json');
+        if (fs.existsSync(activeJson)) {
+            const activeData = JSON.parse(fs.readFileSync(activeJson, 'utf8'));
+            if (activeData.active_snapshot) {
+                const canonicalFile = path.join(snapshotsRoot, activeData.active_snapshot, 'canonical', 'schemes.jsonl');
+                if (fs.existsSync(canonicalFile)) {
+                    const content = fs.readFileSync(canonicalFile, 'utf8');
+                    const lines = content.split('\n');
+                    for (const line of lines) {
+                        if (!line || !line.trim()) continue;
+                        try {
+                            const json = JSON.parse(line.replace(/:\s*NaN/g, ': null'));
+                            const id = json.slug || json.id;
+                            if (!id) continue;
+                            if (json.level === 'Central' && !json.beneficiary_type) {
+                                const formatted = schemeService.formatSchemeRecord ? schemeService.formatSchemeRecord(json) : json;
+                                if (schemeService.isCentralScheme && schemeService.isCentralScheme(formatted)) {
+                                    const relevant = schemeService.filterApplicantRelevantSchemes ? schemeService.filterApplicantRelevantSchemes([formatted], 'Gujarat') : [formatted];
+                                    if (relevant.length > 0) {
+                                        canonicalJurisdictionIndex.centralIds.add(id);
+                                    }
+                                }
+                            } else if (json.level === 'State' && json.state) {
+                                const st = String(json.state).trim().toLowerCase();
+                                if (!canonicalJurisdictionIndex.stateSchemeMap.has(st)) {
+                                    canonicalJurisdictionIndex.stateSchemeMap.set(st, new Set());
+                                }
+                                canonicalJurisdictionIndex.stateSchemeMap.get(st).add(id);
+                            }
+                        } catch (_) {}
+                    }
+                }
+            }
+        }
+    } catch (_) {}
+    return canonicalJurisdictionIndex;
+};
+
+/**
+ * Data-driven document metrics for the authenticated applicant's document vault.
+ * Removes universal hardcoded checklists. Deduplicates records by document type
+ * and preserves authentic verification statuses (VERIFIED, PENDING, REJECTED).
+ */
 const getDocumentStats = async (applicantId) => {
-    let docs = [];
-    if (applicantId) {
-        try {
-            const { data: applications, error: applicationsError } = await supabaseAdmin
-                .from('applications')
-                .select('id')
-                .eq('applicant_id', applicantId);
-            if (applicationsError) {
-                if (!isTableMissingError(applicationsError)) {
-                    const serviceError = new Error(applicationsError.message);
+    if (!applicantId) {
+        return { totalVault: 0, totalRequired: 0, verified: 0, pending: 0, rejected: 0, missing: 0, details: [] };
+    }
+
+    let rawDocs = [];
+    try {
+        const { data: applications, error: applicationsError } = await supabaseAdmin
+            .from('applications')
+            .select('id')
+            .eq('applicant_id', applicantId);
+
+        if (applicationsError) {
+            if (!isTableMissingError(applicationsError)) {
+                const serviceError = new Error(applicationsError.message);
+                serviceError.status = 500;
+                throw serviceError;
+            }
+        } else if (applications?.length) {
+            let docQuery = supabaseAdmin
+                .from('documents')
+                .select('id, document_type, verification_status, uploaded_at')
+                .in('application_id', applications.map((application) => application.id));
+
+            if (typeof docQuery.order === 'function') {
+                docQuery = docQuery.order('uploaded_at', { ascending: false });
+            }
+
+            const { data, error } = await docQuery;
+
+            if (error) {
+                if (!isTableMissingError(error)) {
+                    const serviceError = new Error(error.message);
                     serviceError.status = 500;
                     throw serviceError;
                 }
-            } else if (applications?.length) {
-                const { data, error } = await supabaseAdmin
-                    .from('documents')
-                    .select('document_type, verification_status')
-                    .in('application_id', applications.map((application) => application.id));
-
-                if (error) {
-                    if (!isTableMissingError(error)) {
-                        const serviceError = new Error(error.message);
-                        serviceError.status = 500;
-                        throw serviceError;
-                    }
-                } else {
-                    docs = data || [];
-                }
+            } else {
+                rawDocs = data || [];
             }
-        } catch (err) {
-            if (!isTableMissingError(err)) throw err;
+        }
+    } catch (err) {
+        if (!isTableMissingError(err)) throw err;
+    }
+
+    // Deduplicate by document_type (keeping most recent or highest verification status)
+    // Priority: verified (3) > pending / review_required (2) > rejected (1)
+    const STATUS_PRIORITY = { verified: 3, pending: 2, review_required: 2, rejected: 1 };
+    const docMap = new Map();
+
+    for (const doc of rawDocs) {
+        const rawType = (doc.document_type || 'other').trim().toLowerCase();
+        const normType = rawType === 'land_records' ? 'land' : rawType;
+        const rawStatus = String(doc.verification_status || 'PENDING').toLowerCase();
+        const status = rawStatus === 'verified' ? 'verified' : (rawStatus === 'rejected' ? 'rejected' : 'pending');
+
+        if (!docMap.has(normType)) {
+            docMap.set(normType, { id: doc.id, doc_type: normType, status });
+        } else {
+            const existing = docMap.get(normType);
+            if ((STATUS_PRIORITY[status] || 0) > (STATUS_PRIORITY[existing.status] || 0)) {
+                docMap.set(normType, { id: doc.id, doc_type: normType, status });
+            }
         }
     }
 
-    const docMap = new Map();
-    for (const doc of REQUIRED_DOC_TYPES) {
-        docMap.set(doc, { doc_type: doc, status: 'missing' });
-    }
-
-    for (const doc of docs) {
-        const normalizedType = doc.document_type === 'land_records' ? 'land' : doc.document_type;
-        const status = String(doc.verification_status || '').toUpperCase() === 'PENDING'
-            ? 'pending'
-            : String(doc.verification_status || '').toLowerCase();
-        docMap.set(normalizedType, { doc_type: normalizedType, status });
-    }
-
-    const allDocs = Array.from(docMap.values());
-    const verifiedCount = allDocs.filter(d => d.status === 'verified').length;
-    const pendingCount = allDocs.filter(d => d.status === 'pending').length;
-    const rejectedCount = allDocs.filter(d => d.status === 'rejected').length;
-    const missingCount = allDocs.filter(d => d.status === 'missing').length;
+    const uniqueDocs = Array.from(docMap.values());
+    const verifiedCount = uniqueDocs.filter(d => d.status === 'verified').length;
+    const pendingCount = uniqueDocs.filter(d => d.status === 'pending').length;
+    const rejectedCount = uniqueDocs.filter(d => d.status === 'rejected').length;
+    const totalVault = uniqueDocs.length;
 
     return {
-        totalRequired: REQUIRED_DOC_TYPES.length,
+        totalVault,
+        totalRequired: totalVault,
         verified: verifiedCount,
         pending: pendingCount,
         rejected: rejectedCount,
-        missing: missingCount,
-        details: allDocs
+        missing: 0,
+        details: uniqueDocs
     };
 };
 
+/**
+ * Retrieves and aggregates applications strictly scoped to the authenticated user.
+ * Accurately categorizes workflow states: under_review, submitted, approved, rejected.
+ */
 const getApplicationStats = async (applicantId) => {
     if (!applicantId) {
-        return { total: 0, pending: 0, approved: 0, details: [] };
+        return { total: 0, pending: 0, approved: 0, rejected: 0, details: [] };
     }
     let apps = [];
     try {
@@ -113,98 +184,139 @@ const getApplicationStats = async (applicantId) => {
         id: app.id,
         scheme_id: app.scheme_id,
         scheme_name: app.scheme_name,
-        status: app.status || app.application_status,
+        status: (app.status || app.application_status || 'submitted').toLowerCase(),
         applied_at: app.applied_at || app.submitted_at || app.created_at
     }));
-    const activeApps = normalizedApps.filter(a =>
-        ['submitted', 'under_review', 'approved'].includes(a.status)
-    );
-    const pendingCount = activeApps.filter(a => a.status === 'under_review' || a.status === 'submitted').length;
-    const approvedCount = activeApps.filter(a => a.status === 'approved').length;
-    activeApps.sort((a, b) => new Date(b.applied_at || 0) - new Date(a.applied_at || 0));
+
+    const pendingCount = normalizedApps.filter(a =>
+        ['under_review', 'submitted', 'pending'].includes(a.status)
+    ).length;
+    const approvedCount = normalizedApps.filter(a =>
+        ['approved', 'sanctioned'].includes(a.status)
+    ).length;
+    const rejectedCount = normalizedApps.filter(a =>
+        ['rejected'].includes(a.status)
+    ).length;
+
+    normalizedApps.sort((a, b) => new Date(b.applied_at || 0) - new Date(a.applied_at || 0));
 
     return {
-        total: activeApps.length,
+        total: normalizedApps.length,
         pending: pendingCount,
         approved: approvedCount,
-        details: activeApps
+        rejected: rejectedCount,
+        details: normalizedApps
     };
 };
 
-const getTopOpportunities = async (userProfile) => {
-    const opportunities = [
-        {
-            scheme_id: 'pmegp',
-            scheme_name: 'PMEGP',
-            full_name: "Prime Minister's Employment Generation Programme",
-            ministry: 'Ministry of MSME',
-            description: 'Credit-linked subsidy programme for generating self-employment',
-            match_score: 96,
-            benefit_amount: 125000,
-            eligibility: ['Business Support', 'Self Employment'],
-            deadline: 'Ongoing',
-            application_link: 'https://kviconline.gov.in'
-        },
-        {
-            scheme_id: 'msme-financial-support',
-            scheme_name: 'MSME Financial Support',
-            full_name: 'Credit and Subsidy Support for Small Businesses',
-            ministry: 'Ministry of MSME',
-            description: 'Credit and financial subsidy support for small and micro enterprises',
-            match_score: 82,
-            benefit_amount: 80000,
-            eligibility: ['MSME', 'Credit Support'],
-            deadline: 'Ongoing',
-            application_link: 'https://udyamregistration.gov.in'
-        },
-        {
-            scheme_id: 'pm-kisan',
-            scheme_name: 'PM Kisan Samman Nidhi',
-            full_name: 'Income Support for Farmers',
-            ministry: 'Ministry of Agriculture',
-            description: 'Direct income support of Rs. 6,000/year to farmer families',
-            match_score: 72,
-            benefit_amount: 6000,
-            eligibility: ['Agriculture', 'Income Support'],
-            deadline: '2026-12-31',
-            application_link: 'https://pmkisan.gov.in'
+/**
+ * Deduplicates opportunities using stable identity (scheme_id / scheme_slug / id).
+ * Strictly avoids broad title similarity heuristics to prevent collapsing distinct statutory policies.
+ */
+const deduplicateOpportunities = (items) => {
+    if (!Array.isArray(items)) return [];
+    const seenIds = new Set();
+    const unique = [];
+    for (const item of items) {
+        if (!item) continue;
+        const stableId = String(item.scheme_id || item.schemeId || item.id || item.scheme_slug || '').trim().toLowerCase();
+        if (!stableId) continue;
+        if (!seenIds.has(stableId)) {
+            seenIds.add(stableId);
+            unique.push(item);
         }
-    ];
+    }
+    return unique;
+};
 
-    let filtered = opportunities;
+const getTopOpportunities = async (profile) => {
+    if (!profile || !profile.id) return [];
 
-    if (userProfile.occupation === 'farmer') {
-        filtered = filtered.filter(o => o.eligibility.some(e => e.toLowerCase().includes('farmer')));
-    } else if (userProfile.occupation === 'msme') {
-        filtered = filtered.filter(o => o.eligibility.some(e => e.toLowerCase().includes('msme')));
-    } else if (userProfile.occupation === 'student') {
-        filtered = filtered.filter(o => o.eligibility.some(e => e.toLowerCase().includes('student')));
+    let opportunities = [];
+
+    // 1. Primary: Canonical recommendation & eligibility pipeline via Intelligence
+    try {
+        const recResult = await schemeService.recommendSchemes(profile.id, {
+            query: 'schemes matching my profile and state',
+            top_k: 10,
+            state_override: profile.state || undefined,
+            category_override: profile.caste_category || profile.category || undefined
+        });
+
+        if (recResult && Array.isArray(recResult.recommendations) && recResult.recommendations.length > 0) {
+            opportunities = deduplicateOpportunities(recResult.recommendations);
+        }
+    } catch (err) {
+        console.warn('[dashboardService] schemeService.recommendSchemes notice:', err.message);
     }
 
-    if (userProfile.category && userProfile.category !== 'General') {
-        filtered = filtered.map(o => ({
-            ...o,
-            match_score: Math.min(100, o.match_score + 5)
-        }));
+    // 2. Safe offline fallback: return profile-scoped catalog schemes from Supabase with UNKNOWN eligibility
+    // Dynamically ranks schemes by applicant profile relevance (state, occupation, category)
+    // rather than taking arbitrary physical disk order.
+    if (opportunities.length === 0) {
+        try {
+            let query = supabaseAdmin.from('schemes').select('*');
+            if (profile.state) {
+                query = query.contains('tags', [profile.state]);
+            }
+            const { data: candidates } = await query.limit(100);
+            if (candidates && candidates.length > 0) {
+                const occTerms = (profile.occupation ? [profile.occupation.toLowerCase(), 'education', 'scholarship', 'student', 'study'] : []);
+                const cat = (profile.caste_category || profile.category || '').toLowerCase();
+                const isSC = cat.includes('sc') || cat.includes('scheduled caste');
+                const isST = cat.includes('st') || cat.includes('scheduled tribe');
+
+                const scored = candidates.map(s => {
+                    const tags = (Array.isArray(s.tags) ? s.tags : []).map(t => String(t).toLowerCase());
+                    const text = `${s.name || ''} ${s.brief_description || ''} ${tags.join(' ')}`.toLowerCase();
+
+                    let relevanceScore = 0;
+                    // Occupation / Role match
+                    if (occTerms.length > 0) {
+                        if (tags.some(t => occTerms.includes(t)) || occTerms.some(term => text.includes(term))) {
+                            relevanceScore += 10;
+                        }
+                    }
+                    // Social category match / conflict penalty
+                    if (isSC) {
+                        if (tags.includes('sc') || tags.includes('scheduled caste') || text.includes('scheduled caste')) {
+                            relevanceScore += 10;
+                        }
+                        if ((tags.includes('scheduled tribe') || tags.includes('st')) && !tags.includes('sc')) {
+                            relevanceScore -= 15;
+                        }
+                    } else if (isST) {
+                        if (tags.includes('scheduled tribe') || tags.includes('st') || text.includes('scheduled tribe')) {
+                            relevanceScore += 10;
+                        }
+                        if ((tags.includes('scheduled caste') || tags.includes('sc')) && !tags.includes('st')) {
+                            relevanceScore -= 15;
+                        }
+                    }
+
+                    return {
+                        scheme_id: s.id,
+                        scheme_name: s.name,
+                        ministry: s.ministry || 'Government of India',
+                        description: s.benefit_summary || s.brief_description || '',
+                        eligibility_status: 'UNKNOWN',
+                        is_eligible: null,
+                        max_benefit: s.max_benefit || null,
+                        tags: Array.isArray(s.tags) ? s.tags : ['Welfare Scheme'],
+                        source_url: null,
+                        relevanceScore,
+                        recommendation_reasons: ['Profile matched relevant criteria — eligibility verification pending']
+                    };
+                });
+
+                // Deterministic sort by relevance, breaking ties with scheme_id
+                scored.sort((a, b) => b.relevanceScore - a.relevanceScore || a.scheme_id.localeCompare(b.scheme_id));
+                opportunities = deduplicateOpportunities(scored);
+            }
+        } catch (_) {}
     }
 
-    if (userProfile.annual_income && userProfile.annual_income < 250000) {
-        filtered = filtered.map(o => ({
-            ...o,
-            match_score: Math.min(100, o.match_score + 3)
-        }));
-    }
-
-    if (userProfile.is_disabled) {
-        filtered = filtered.map(o => ({
-            ...o,
-            match_score: Math.min(100, o.match_score + 10)
-        }));
-    }
-
-    return filtered
-        .sort((a, b) => b.match_score - a.match_score)
-        .slice(0, 5);
+    return deduplicateOpportunities(opportunities).slice(0, 5);
 };
 
 const getDashboardData = async (userId) => {
@@ -215,103 +327,222 @@ const getDashboardData = async (userId) => {
         getTopOpportunities(profile)
     ]);
 
-    let finalOpportunities = topOpportunities;
-    if (!finalOpportunities || finalOpportunities.length === 0) {
-        finalOpportunities = [
-            {
-                scheme_id: 'pmegp',
-                scheme_name: "Prime Minister's Employment Generation Programme",
-                ministry: 'Ministry of MSME',
-                description: 'Credit-linked subsidy programme for generating self-employment',
-                match_score: 96,
-                benefit_amount: 125000,
-                eligibility: ['Business Support', 'Self Employment'],
-                deadline: 'Ongoing',
-                application_link: 'https://kviconline.gov.in'
-            },
-            {
-                scheme_id: 'msme-financial-support',
-                scheme_name: 'MSME Financial Support',
-                full_name: 'Credit and Subsidy Support for Small Businesses',
-                ministry: 'Ministry of MSME',
-                description: 'Credit and financial subsidy support for small and micro enterprises',
-                match_score: 82,
-                benefit_amount: 80000,
-                eligibility: ['MSME', 'Credit Support'],
-                deadline: 'Ongoing',
-                application_link: 'https://udyamregistration.gov.in'
-            },
-            {
-                scheme_id: 'pm-kisan',
-                scheme_name: 'Income Support for Farmers',
-                ministry: 'Ministry of Agriculture',
-                description: 'Direct income support of Rs. 6,000/year to farmer families',
-                match_score: 72,
-                benefit_amount: 6000,
-                eligibility: ['Agriculture', 'Income Support'],
-                deadline: '2026-12-31',
-                application_link: 'https://pmkisan.gov.in'
+    const finalOpportunities = topOpportunities || [];
+
+    // 1. Relevant Schemes: Unified canonical catalog count across State & Central statutory schemes
+    let relevantSchemesCount = 0;
+    let centralCount = 0;
+    const userState = profile?.state;
+
+    if (userState) {
+        try {
+            const catalog = await schemeService.getApplicableSchemesCatalog(userState);
+            relevantSchemesCount = catalog.totalApplicable;
+            centralCount = catalog.applicableCentralCount;
+        } catch (_) {
+            const jurisdiction = getCanonicalJurisdictionIndex();
+            centralCount = jurisdiction.centralIds.size;
+            if (jurisdiction.stateSchemeMap.has(userState.toLowerCase())) {
+                const stateSet = jurisdiction.stateSchemeMap.get(userState.toLowerCase()) || new Set();
+                relevantSchemesCount = stateSet.size + centralCount;
+            } else {
+                relevantSchemesCount = centralCount;
             }
-        ];
+        }
+    } else {
+        try {
+            const { count, error } = await supabaseAdmin
+                .from('schemes')
+                .select('*', { count: 'exact', head: true });
+            if (!error && count != null) {
+                relevantSchemesCount = count;
+            }
+        } catch (_) {}
     }
 
-    const hasRealDocs = docStats.verified > 0 || docStats.pending > 0;
-    const hasRealApps = appStats.total > 0;
+    // 2. Estimated Benefits: Comprehensive evaluation across all evaluated candidate schemes for applicant
+    // Reads eligibility_results table and merges with active opportunities to avoid top-5 truncation.
+    let evaluatedSchemes = [];
+    if (profile?.id) {
+        try {
+            const { data: evalResults } = await supabaseAdmin
+                .from('eligibility_results')
+                .select('scheme_id, verdict, evaluated_at, schemes(*)')
+                .eq('user_id', profile.id)
+                .order('evaluated_at', { ascending: false });
+
+            if (evalResults && evalResults.length > 0) {
+                // Keep latest evaluation per scheme
+                const latestMap = new Map();
+                for (const r of evalResults) {
+                    if (!latestMap.has(r.scheme_id)) {
+                        latestMap.set(r.scheme_id, r);
+                    }
+                }
+                evaluatedSchemes = Array.from(latestMap.values());
+            }
+        } catch (_) {}
+    }
+
+    const evaluatedPool = new Map();
+
+    // Populate from eligibility_results
+    for (const item of evaluatedSchemes) {
+        const sId = item.scheme_id;
+        const schemeObj = item.schemes || {};
+        evaluatedPool.set(sId, {
+            scheme_id: sId,
+            scheme_name: schemeObj.name || schemeObj.scheme_name,
+            max_benefit: schemeObj.max_benefit,
+            type: schemeObj.type,
+            tags: schemeObj.tags,
+            benefit_summary: schemeObj.benefit_summary,
+            brief_description: schemeObj.brief_description,
+            eligibility_status: item.verdict === 'ELIGIBLE' ? 'PASS' : (item.verdict === 'NOT_ELIGIBLE' ? 'FAIL' : 'UNKNOWN'),
+            is_eligible: item.verdict === 'ELIGIBLE' ? true : (item.verdict === 'NOT_ELIGIBLE' ? false : null),
+            sourceRecord: schemeObj
+        });
+    }
+
+    // Merge with topOpportunities recommendations
+    for (const o of finalOpportunities) {
+        const sId = o.scheme_id || o.id;
+        if (sId) {
+            const existing = evaluatedPool.get(sId);
+            const isEligible = o.is_eligible === true || o.eligibility_status === 'PASS' || existing?.is_eligible === true;
+            const status = (o.is_eligible === true || o.eligibility_status === 'PASS') ? 'PASS' : (o.eligibility_status || existing?.eligibility_status || 'UNKNOWN');
+            evaluatedPool.set(sId, {
+                ...existing,
+                ...o,
+                scheme_id: sId,
+                is_eligible: isEligible,
+                eligibility_status: status
+            });
+        }
+    }
+
+    // Strict financial safety rules:
+    // Only confirmed non-loan scalar welfare grants (PASS) are summed into estimated cash benefits.
+    // Excluded: commercial loans, credit lines, penalty waivers, composite fellowship stipends, reimbursements, and in-kind benefits.
+    const allEvaluatedItems = Array.from(evaluatedPool.values());
+    const confirmedScalarGrants = allEvaluatedItems.filter(item => {
+        const isConfirmedEligible = item.is_eligible === true || item.eligibility_status === 'PASS';
+        if (!isConfirmedEligible) return false;
+
+        const interp = interpretFinancialBenefit(item.sourceRecord || item);
+        const rawAmt = Number(item.max_benefit || item.benefit_amount || 0);
+
+        return interp.isScalarCashGrant && rawAmt > 0;
+    });
+
+    const totalBenefits = confirmedScalarGrants.reduce((acc, curr) => acc + (Number(curr.max_benefit || curr.benefit_amount) || 0), 0);
+    const formattedBenefits = totalBenefits > 0 ? `₹ ${totalBenefits.toLocaleString('en-IN')}` : '₹ 0';
+    const benefitsSubtitle = totalBenefits > 0
+        ? 'Confirmed welfare grants'
+        : (allEvaluatedItems.length > 0 ? 'Complete verification to calculate grants' : 'No grants confirmed yet');
+
+    const schemesSubtitle = userState 
+        ? (centralCount > 0 ? `Available in ${userState} & Central jurisdiction` : `Available in ${userState} jurisdiction`)
+        : 'Active welfare schemes available';
+
+    // 3. Documents subtitle calculation
+    let documentsSubtitle = 'No documents uploaded yet';
+    if (docStats.totalVault > 0) {
+        if (docStats.rejected > 0) {
+            documentsSubtitle = `${docStats.rejected} action required, ${docStats.pending} pending review`;
+        } else if (docStats.pending > 0) {
+            documentsSubtitle = `${docStats.pending} pending review in vault`;
+        } else {
+            documentsSubtitle = docStats.totalVault === 1 ? '1 document verified in vault' : `All ${docStats.totalVault} documents verified`;
+        }
+    }
+
+    // 4. Applications subtitle calculation
+    let applicationsSubtitle = 'No applications submitted';
+    if (appStats.total > 0) {
+        if (appStats.pending > 0) {
+            applicationsSubtitle = appStats.approved > 0 
+                ? `${appStats.pending} pending review, ${appStats.approved} approved`
+                : `${appStats.pending} pending review`;
+        } else if (appStats.approved > 0) {
+            applicationsSubtitle = appStats.approved === 1 ? '1 application approved' : `All ${appStats.approved} applications approved`;
+        } else {
+            applicationsSubtitle = 'All applications processed';
+        }
+    }
 
     const metrics = [
         {
             key: 'schemes',
             label: 'Relevant Schemes',
-            value: '12',
-            subtitle: 'Based on your profile',
+            value: relevantSchemesCount.toString(),
+            subtitle: schemesSubtitle,
             icon: 'scheme',
             isWarning: false
         },
         {
             key: 'benefits',
             label: 'Estimated Benefits',
-            value: '₹ 2,45,000',
-            subtitle: 'Across eligible schemes',
+            value: formattedBenefits,
+            subtitle: benefitsSubtitle,
             icon: 'rupee',
             isWarning: false
         },
         {
             key: 'documents',
             label: 'Documents Verified',
-            value: hasRealDocs ? `${docStats.verified} / ${docStats.totalRequired}` : '7 / 9',
-            subtitle: hasRealDocs ? (docStats.missing > 0 ? `${docStats.missing} documents missing` : 'All documents verified') : '2 documents missing',
+            value: docStats.totalVault > 0 ? `${docStats.verified} / ${docStats.totalVault}` : '0',
+            subtitle: documentsSubtitle,
             icon: 'document',
-            isWarning: true
+            isWarning: docStats.totalVault === 0 || docStats.verified === 0 || docStats.rejected > 0
         },
         {
             key: 'applications',
             label: 'Applications',
-            value: hasRealApps ? appStats.total.toString() : '3',
-            subtitle: hasRealApps ? (appStats.pending > 0 ? `${appStats.pending} pending review` : 'No pending applications') : '1 pending review',
+            value: appStats.total.toString(),
+            subtitle: applicationsSubtitle,
             icon: 'application',
             isWarning: false
         }
     ];
 
     const userDisplay = {
-        fullName: (profile && profile.full_name && profile.full_name.toLowerCase() !== 'user') ? profile.full_name : 'Hemang',
-        profileCompleted: (profile && profile.profile_completed_percent) || 75
+        fullName: profile?.full_name || 'Citizen',
+        profileCompleted: profile?.profile_completed_percent ?? 0
     };
 
     return {
         user: userDisplay,
         metrics,
-        topOpportunities: finalOpportunities.map(o => ({
-            schemeId: o.scheme_id,
-            schemeName: o.scheme_name,
-            ministry: o.ministry,
-            description: o.description,
-            matchScore: o.match_score,
-            benefitAmount: o.benefit_amount,
-            eligibility: o.eligibility,
-            deadline: o.deadline,
-            applicationLink: o.application_link
-        }))
+        topOpportunities: finalOpportunities.map(o => {
+            const interp = interpretFinancialBenefit(o);
+            const isEligible = o.is_eligible === true || o.eligibility_status === 'PASS';
+            const status = o.eligibility_status || (isEligible ? 'PASS' : 'UNKNOWN');
+            const rawAmt = Number(o.max_benefit || o.benefit_amount || 0);
+            const isLoan = interp.category === BenefitCategories.LOAN_OR_CREDIT_FACILITY || interp.hasLoanCalculator;
+
+            return {
+                schemeId: o.scheme_id || o.id,
+                schemeName: o.scheme_name || o.name,
+                ministry: o.ministry || 'Government of India',
+                description: o.description || o.benefit_summary || '',
+                eligibilityStatus: status,
+                isEligible: isEligible,
+                benefitAmount: rawAmt,
+                benefitDisplay: interp.amountDisplay,
+                isLoan: isLoan,
+                eligibility: {
+                    isEligible: isEligible,
+                    status: status,
+                    reasons: o.recommendation_reasons || []
+                },
+                tags: Array.isArray(o.tags) && o.tags.length > 0 ? o.tags : ['Welfare Scheme'],
+                deadline: o.scheme_close_date ? `Deadline: ${o.scheme_close_date}` : (o.deadline && o.deadline !== 'Ongoing' ? o.deadline : null),
+                scheme_open_date: o.scheme_open_date || null,
+                scheme_close_date: o.scheme_close_date || null,
+                applicationLink: o.source_url || o.application_link || null
+            };
+        })
     };
 };
 

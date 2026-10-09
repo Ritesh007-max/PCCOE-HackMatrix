@@ -4,32 +4,12 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import SessionTimeoutManager from '../common/SessionTimeoutManager';
 import FinAssistantModal from '../chat/FinAssistantModal';
-import { useUser } from '@clerk/react';
-import { storeAuthSession } from '../../services/authService';
+import Footer from './Footer';
 
 export default function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isChatMinimized, setIsChatMinimized] = useState(false);
-  const { user: clerkUser, isLoaded: isClerkLoaded, isSignedIn: isClerkSignedIn } = useUser();
-
-  // Sync Clerk profile data into app storage
-  useEffect(() => {
-    if (isClerkLoaded && isClerkSignedIn && clerkUser) {
-      const email = clerkUser.primaryEmailAddress?.emailAddress || '';
-      const fullName = clerkUser.fullName || clerkUser.firstName || 'Google Citizen';
-      storeAuthSession({
-        user: {
-          id: clerkUser.id,
-          email,
-          fullName,
-          avatarUrl: clerkUser.imageUrl,
-        },
-        accessToken: 'clerk-google-oauth-token',
-        fallbackName: fullName,
-      });
-    }
-  }, [isClerkLoaded, isClerkSignedIn, clerkUser]);
 
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
   const closeSidebar = () => setIsSidebarOpen(false);
@@ -44,7 +24,7 @@ export default function AppLayout() {
     setIsChatMinimized(false);
   };
 
-  const toggleMinimizeChat = () => {
+  const minimizeChat = () => {
     setIsChatMinimized((prev) => !prev);
   };
 
@@ -54,8 +34,13 @@ export default function AppLayout() {
       setIsChatOpen(true);
       setIsChatMinimized(false);
     };
+
     window.addEventListener('open_fin_chat', handleOpenChat);
-    return () => window.removeEventListener('open_fin_chat', handleOpenChat);
+    window.addEventListener('open-ai-assistant', handleOpenChat);
+    return () => {
+      window.removeEventListener('open_fin_chat', handleOpenChat);
+      window.removeEventListener('open-ai-assistant', handleOpenChat);
+    };
   }, []);
 
   return (
@@ -66,20 +51,21 @@ export default function AppLayout() {
         <Header
           onToggleSidebar={toggleSidebar}
           onToggleChat={toggleChat}
+          onOpenChat={toggleChat}
           isChatOpen={isChatOpen}
         />
         <Outlet />
+        <Footer />
       </div>
 
       {/* FIN Assistant (AI) Pop-up Modal */}
       <FinAssistantModal
         isOpen={isChatOpen}
-        onClose={closeChat}
         isMinimized={isChatMinimized}
-        onToggleMinimize={toggleMinimizeChat}
+        onClose={closeChat}
+        onMinimize={minimizeChat}
+        onToggleMinimize={minimizeChat}
       />
     </div>
   );
 }
-
-

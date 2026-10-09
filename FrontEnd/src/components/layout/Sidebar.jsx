@@ -1,26 +1,53 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Home,
   Search,
   FileText,
   Inbox,
-  User,
-  X
+  Sparkles,
+  X,
+  LayoutDashboard,
+  ClipboardCheck
 } from 'lucide-react';
 import { FinLogoClear } from '../common/BrandAssets';
-import sidebarBuildingClean from '../../assets/sidebar_building_clean.jpg';
 import tricolorRibbonOriginal from '../../assets/tricolor_ribbon_original.png';
+import ashokStambhSvg from '../../assets/ashok_stambh_vector.svg';
+import { getStoredRole } from '../../services/authService';
 
-const navItems = [
+const citizenNavItems = [
   { name: 'Dashboard', path: '/dashboard', icon: Home },
   { name: 'Discover Schemes', path: '/discover', icon: Search },
+  { name: 'Suggested Schemes', path: '/suggested-schemes', icon: Sparkles },
   { name: 'My Documents', path: '/documents', icon: FileText },
   { name: 'Applications', path: '/applications', icon: Inbox },
-  { name: 'Profile', path: '/profile', icon: User },
+];
+
+const reviewerNavItems = [
+  { name: 'Reviewer Dashboard', path: '/reviewer/dashboard', icon: LayoutDashboard },
+  { name: 'Discover Schemes', path: '/discover', icon: Search },
+  { name: 'Review Applications', path: '/reviewer/applications', icon: ClipboardCheck },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {
+  const [role, setRole] = useState(getStoredRole);
+
+  useEffect(() => {
+    const handleRoleUpdate = () => {
+      setRole(getStoredRole());
+    };
+    window.addEventListener('fin_user_updated', handleRoleUpdate);
+    window.addEventListener('storage', handleRoleUpdate);
+    return () => {
+      window.removeEventListener('fin_user_updated', handleRoleUpdate);
+      window.removeEventListener('storage', handleRoleUpdate);
+    };
+  }, []);
+
+  const isReviewer = role === 'reviewer';
+  const navItems = isReviewer ? reviewerNavItems : citizenNavItems;
+  const homePath = isReviewer ? '/reviewer/dashboard' : '/dashboard';
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -35,7 +62,7 @@ export default function Sidebar({ isOpen, onClose }) {
         <div className="sidebar-top-section">
           <div className="sidebar-brand-wrapper">
             <NavLink
-              to="/dashboard"
+              to={homePath}
               onClick={onClose}
               className="sidebar-brand-link"
               title="FIN - Financial Policy Intelligence"
@@ -97,16 +124,28 @@ export default function Sidebar({ isOpen, onClose }) {
           />
 
           {/* Bottom Bharat Building Photo with editorial overlay */}
-          <div className="sidebar-building-bottom-wrapper">
-            <img
-              src={sidebarBuildingClean}
-              alt="Bharat - Indian Government Architecture"
-              className="sidebar-building-img"
-            />
+          <div
+            className="sidebar-building-bottom-wrapper"
+            role="img"
+            aria-label="Bharat - Indian Government Architecture"
+          >
             <div className="sidebar-building-overlay">
               <span className="sidebar-bharat-title">Bharat</span>
               <span className="sidebar-bharat-subtitle">for a brighter tomorrow.</span>
               <div className="sidebar-bharat-tricolor-line" aria-hidden="true" />
+            </div>
+          </div>
+
+          {/* Bottom dark green bar segment matching footer bottom bar */}
+          <div className="sidebar-bottom-bar-segment">
+            <div className="sidebar-bottom-bar-content">
+              <img
+                src={ashokStambhSvg}
+                alt="State Emblem of India"
+                className="sidebar-bottom-bar-emblem"
+                aria-hidden="true"
+              />
+              <span className="sidebar-bottom-bar-motto">सत्यमेव जयते</span>
             </div>
           </div>
         </div>

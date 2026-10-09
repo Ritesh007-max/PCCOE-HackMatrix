@@ -123,7 +123,7 @@ class SecuritySettings:
         # CORS origins parsing
         raw_cors = os.getenv("AI_CORS_ORIGINS", "").strip()
         if raw_cors:
-            cors_origins = [o.strip() for o in raw_cors.split(",") if o.strip()]
+            cors_origins = [o.strip().rstrip("/") for o in raw_cors.split(",") if o.strip()]
         else:
             if env == Environment.PRODUCTION:
                 cors_origins = []  # Must be explicitly configured in production
@@ -209,6 +209,13 @@ class SecuritySettings:
             errors.append("Wildcard CORS origin ('*') is strictly forbidden in production.")
         if not self.cors_origins:
             errors.append("Production requires explicit AI_CORS_ORIGINS list.")
+        for o in self.cors_origins:
+            if "*" in o:
+                errors.append(f"Wildcard in CORS origin '{o}' is strictly forbidden in production.")
+            if "localhost" in o.lower() or "127.0.0.1" in o or "0.0.0.0" in o or "::1" in o:
+                errors.append(f"Localhost or loopback origin '{o}' is strictly prohibited in production AI_CORS_ORIGINS.")
+            if not o.startswith("https://"):
+                errors.append(f"Insecure non-HTTPS CORS origin '{o}' is strictly prohibited in production.")
 
         # 3. Debug mode must be disabled
         if self.debug_mode:

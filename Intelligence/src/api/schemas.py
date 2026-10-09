@@ -62,6 +62,9 @@ class ProcessedDocumentItem(BaseModel):
     extraction_method: str
     sha256: str
     error_message: Optional[str] = None
+    extracted_text: Optional[str] = None
+    extracted_fields: Dict[str, Any] = Field(default_factory=dict)
+    confidence_score: float = 0.95
 
 
 class DocumentProcessResponse(BaseModel):
@@ -134,8 +137,10 @@ class SchemeSearchResponse(BaseModel):
 
 class EligibilityCheckRequest(BaseModel):
     """Payload for POST /v1/eligibility/check (100% deterministic, zero LLM)."""
-    applicant_facts: Dict[str, Any] = Field(..., description="Normalized applicant facts dictionary")
+    applicant_facts: Dict[str, Any] = Field(default_factory=dict, description="Normalized applicant facts dictionary")
     scheme_ids: List[str] = Field(..., min_length=1, description="List of target scheme IDs or slugs")
+    applicant_id: Optional[str] = Field(None, description="Optional applicant ID to resolve facts from context")
+    rule_version: Optional[str] = Field(None, description="Optional rule version to pin evaluation to")
     evidence_references: Optional[Dict[str, Any]] = Field(None, description="Optional provenance citations")
 
 
@@ -157,11 +162,17 @@ class SchemeEligibilityItem(BaseModel):
     scheme_name: str
     status: str  # PASS, FAIL, UNKNOWN, REVIEW
     is_eligible: bool
+    rule_version: Optional[str] = None
+    decision_id: Optional[str] = None
+    rule_set_hash: Optional[str] = None
     rules_evaluated: List[RuleEvaluationItem] = []
     matched_rules: List[str] = []
     failed_rules: List[str] = []
     missing_fields: List[str] = []
     conflicted_fields: List[str] = []
+    disqualification_reasons: List[str] = []
+    review_reasons: List[str] = []
+    evidence: List[Dict[str, Any]] = []
 
 
 class EligibilityCheckResponse(BaseModel):
@@ -169,6 +180,7 @@ class EligibilityCheckResponse(BaseModel):
     request_id: str
     evaluated_schemes_count: int
     evaluations: List[SchemeEligibilityItem]
+
 
 
 # ---------------------------------------------------------------------------
@@ -179,8 +191,12 @@ class ChatRequest(BaseModel):
     """Payload for POST /v1/chat (grounded RAG query answering)."""
     query: str = Field(..., min_length=1, max_length=2000, description="Citizen query message")
     conversation_id: Optional[str] = Field(None, description="Optional client conversation ID")
+    applicant_id: Optional[str] = Field(None, description="Optional citizen identifier for personalized context")
     language: str = Field("en", description="Target response language")
     applicant_facts: Optional[Dict[str, Any]] = Field(None, description="Optional pre-extracted applicant facts")
+    documents: Optional[List[Dict[str, Any]]] = Field(None, description="Complete uploaded documents data including extracted fields and text")
+    applications: Optional[List[Dict[str, Any]]] = Field(None, description="Submitted welfare applications and support tickets")
+    conversation_history: Optional[List[Dict[str, str]]] = Field(None, description="Optional conversational message history")
 
 
 class ChatCitationItem(BaseModel):
@@ -197,6 +213,56 @@ class ChatResponse(BaseModel):
     conversation_id: Optional[str] = None
     answer: str
     intent: Optional[str] = None
+    detected_language: Optional[str] = "en"
     citations: List[ChatCitationItem] = []
     suggested_schemes: List[Dict[str, Any]] = []
+    query_understanding: Optional[Dict[str, Any]] = None
     provider_telemetry: Optional[Dict[str, Any]] = None
+
+
+# ---------------------------------------------------------------------------
+# Scheme Recommendation Endpoint Schemas (Phase 19)
+# ---------------------------------------------------------------------------
+
+from src.recommendation.models import (
+    SchemeRecommendationRequest,
+    SchemeRecommendationResponse,
+    SchemeRecommendationItemSchema,
+)
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 Policy Explanation Endpoint Schemas
+# ---------------------------------------------------------------------------
+
+class ExplanationRequest(BaseModel):
+    """Payload for POST /v1/explanation/generate."""
+    scheme_id: str = Field(..., min_length=1, description="Target scheme slug or ID")
+    applicant_id: Optional[str] = Field(None, description="Optional applicant ID to load facts from context")
+    applicant_facts: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional manual applicant facts")
+    decision_id: Optional[str] = Field(None, description="Optional historical decision ID to explain")
+    rule_version: Optional[str] = Field(None, description="Optional rule version to pin explanation to")
+    language: str = Field("en", description="Target language (en, hi, gu)")
+    query: Optional[str] = Field(None, description="Citizen query context")
+    use_llm: bool = Field(False, description="Whether to request LLM natural phrasing enhancement")
+
+
+class ExplanationResponse(BaseModel):
+    """Response payload for POST /v1/explanation/generate."""
+    request_id: str
+    explanation: Dict[str, Any]
+
+
+class SchemeComparisonRequest(BaseModel):
+    """Payload for POST /v1/explanation/compare."""
+    scheme_ids: List[str] = Field(..., min_length=2, max_length=10, description="List of scheme slugs/IDs to compare")
+    applicant_id: Optional[str] = Field(None, description="Optional citizen ID to contextualize comparison")
+    applicant_facts: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional manual facts")
+    language: str = Field("en", description="Target language (en, hi, gu)")
+
+
+class SchemeComparisonResponse(BaseModel):
+    """Response payload for POST /v1/explanation/compare."""
+    request_id: str
+    comparison: Dict[str, Any]
+

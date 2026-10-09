@@ -4,6 +4,7 @@ Coordinates production-oriented API infrastructure, middleware stack, exception 
 security headers, CORS policies, and route endpoints.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -20,23 +21,64 @@ from .middleware import (
     StructuredLoggingMiddleware,
 )
 from .routes.applications import router as applications_router
+from .routes.applicants import router as applicants_router
 from .routes.chat import router as chat_router
 from .routes.documents import router as documents_router
 from .routes.eligibility import router as eligibility_router
 from .routes.health import router as health_router
 from .routes.schemes import router as schemes_router
 from .routes.policy import router as policy_router
+from .routes.query import router as query_router
+from .routes.explanation import router as explanation_router
+from .routes.intelligence import router as intelligence_router
+from .routes.review import router as review_router
 
 logger = logging.getLogger("fin.api.app")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Manages application startup and shutdown lifecycle."""
+    """Manages application startup and shutdown lifecycle with safe component readiness."""
     logger.info("Initializing FIN AI Microservice (version %s)...", DEFAULT_SERVICE_CONFIG.api_version)
     logger.info("Environment: %s", DEFAULT_SERVICE_CONFIG.environment)
     logger.info("Rate limiting enabled: %s", DEFAULT_SERVICE_CONFIG.rate_limit_enabled)
     logger.info("Provider mode: %s", DEFAULT_SERVICE_CONFIG.default_provider_mode)
+
+    # 1. Warm canonical scheme index (fast, deterministic, zero-network, local parquet/rules)
+    try:
+        from src.rag.scheme_name_index import get_scheme_name_index
+        idx = get_scheme_name_index()
+        num_schemes = len(getattr(idx, "_canonical_records", {}))
+        logger.info("Canonical scheme index initialized successfully (%d schemes loaded)", num_schemes)
+    except Exception as e:
+        logger.warning("Could not pre-warm canonical scheme index during startup: %s", e)
+
+    # 2. Warm applicant context and query understanding services
+    try:
+        from .dependencies import get_applicant_context_service, get_query_understanding_service
+        get_applicant_context_service()
+        get_query_understanding_service()
+        logger.info("Applicant context and query understanding singletons initialized")
+    except Exception as e:
+        logger.warning("Could not pre-warm query understanding service: %s", e)
+
+    # 3. Non-blocking background warming for heavy RAG retriever & embedding models.
+    # Avoids blocking HTTP server boot indefinitely on slow networks or memory-constrained hosts.
+    async def _warmup_retriever_bg():
+        try:
+            logger.info("Initiating non-blocking background warm-up for HybridRetriever...")
+            from .dependencies import get_hybrid_retriever
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, get_hybrid_retriever)
+            logger.info("HybridRetriever background warm-up completed successfully")
+        except Exception as e:
+            logger.warning("HybridRetriever background warm-up deferred to first RAG request: %s", e)
+
+    try:
+        asyncio.create_task(_warmup_retriever_bg())
+    except Exception as task_err:
+        logger.warning("Could not schedule background retriever warm-up task: %s", task_err)
+
     yield
     logger.info("Shutting down FIN AI Microservice cleanly.")
 
@@ -63,9 +105,9 @@ def create_app(config: ServiceConfig = DEFAULT_SERVICE_CONFIG) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["*"],
+        allow_headers=["Content-Type", "Authorization", "X-AI-Service-Key", "X-Correlation-ID", "X-Requested-With"],
     )
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=config.max_request_bytes)
@@ -76,10 +118,15 @@ def create_app(config: ServiceConfig = DEFAULT_SERVICE_CONFIG) -> FastAPI:
     app.include_router(health_router)
     app.include_router(documents_router)
     app.include_router(applications_router)
+    app.include_router(applicants_router)
     app.include_router(schemes_router)
     app.include_router(eligibility_router)
     app.include_router(chat_router)
     app.include_router(policy_router)
+    app.include_router(query_router)
+    app.include_router(explanation_router)
+    app.include_router(intelligence_router)
+    app.include_router(review_router)
 
     return app
 

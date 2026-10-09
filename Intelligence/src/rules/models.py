@@ -177,6 +177,11 @@ class ApplicantProfile:
         if "_conflicts" in self._data and isinstance(self._data["_conflicts"], (list, set)):
             self._conflicts.update(self._data["_conflicts"])
 
+    @property
+    def conflicts(self) -> List[str]:
+        """Returns list of all fields marked conflicted."""
+        return sorted(list(self._conflicts))
+
     def get(self, key: str, default: Any = None) -> Any:
         return self._data.get(key, default)
 

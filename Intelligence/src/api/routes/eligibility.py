@@ -6,16 +6,22 @@ Zero Gemini/OpenRouter calls are involved in deciding PASS/FAIL/UNKNOWN/REVIEW.
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 
+from src.context.service import ApplicantContextService
 from src.eligibility.engine import EligibilityEngine
 from src.rules.models import ApplicantProfile, RuleStatus
 
 from ..auth import verify_api_key
 from ..config import ServiceConfig
-from ..dependencies import get_eligibility_engine, get_rate_limiter, get_service_config
+from ..dependencies import (
+    get_applicant_context_service,
+    get_eligibility_engine,
+    get_rate_limiter,
+    get_service_config,
+)
 from ..errors import APIError, RateLimitExceededError
 from ..middleware import InMemoryRateLimiter
 from ..schemas import (
@@ -47,6 +53,7 @@ async def check_eligibility(
     service_config: ServiceConfig = Depends(get_service_config),
     rate_limiter: InMemoryRateLimiter = Depends(get_rate_limiter),
     engine: EligibilityEngine = Depends(get_eligibility_engine),
+    context_service: ApplicantContextService = Depends(get_applicant_context_service),
 ) -> EligibilityCheckResponse:
     """Evaluates applicant profile deterministically without calling any LLM."""
     request_id = getattr(request.state, "request_id", "req_unknown")
@@ -63,60 +70,79 @@ async def check_eligibility(
             message="At least one scheme ID must be provided in 'scheme_ids'.",
         )
 
-    # Wrap raw facts dictionary into ApplicantProfile
-    profile = ApplicantProfile(data=body.applicant_facts)
+    # 1. Resolve applicant profile
+    profile: Optional[ApplicantProfile] = None
+
+    if body.applicant_id:
+        try:
+            ctx = await run_in_threadpool(context_service.get_context, body.applicant_id)
+            if ctx:
+                profile = ctx.to_applicant_profile()
+                # If explicit applicant_facts were also passed, overlay them
+                if body.applicant_facts:
+                    profile._data.update(body.applicant_facts)
+        except Exception as e:
+            logger.warning("Could not fetch applicant context for %s: %s", body.applicant_id, e)
+
+    if profile is None:
+        profile = ApplicantProfile(data=body.applicant_facts or {})
 
     evaluations: List[SchemeEligibilityItem] = []
 
     for sid in body.scheme_ids:
-        try:
-            # Deterministic AST evaluation
-            decision = await run_in_threadpool(engine.evaluate, sid, profile)
+        # Deterministic AST evaluation
+        decision = await run_in_threadpool(
+            engine.evaluate,
+            sid,
+            profile,
+            body.rule_version,
+            body.applicant_id,
+        )
 
-            rule_items = [
-                RuleEvaluationItem(
-                    rule_id=r.rule_id,
-                    field=r.field,
-                    operator=r.operator,
-                    status=r.status.value,
-                    applicant_value=r.applicant_value,
-                    expected_value=r.expected_value,
-                    hard_constraint=r.hard_constraint,
-                    reason=r.reason,
-                )
-                for r in decision.rule_results
-            ]
+        rule_items = [
+            RuleEvaluationItem(
+                rule_id=r.rule_id,
+                field=r.field,
+                operator=r.operator,
+                status=r.status.value,
+                applicant_value=r.applicant_value,
+                expected_value=r.expected_value,
+                hard_constraint=r.hard_constraint,
+                reason=r.reason,
+            )
+            for r in decision.rule_results
+        ]
 
-            evaluations.append(
-                SchemeEligibilityItem(
-                    scheme_id=decision.scheme_id or sid,
-                    scheme_name=decision.scheme_name or sid,
-                    status=decision.status.value,
-                    is_eligible=decision.status == RuleStatus.PASS,
-                    rules_evaluated=rule_items,
-                    matched_rules=decision.passed_rules,
-                    failed_rules=decision.failed_rules,
-                    missing_fields=decision.missing_fields,
-                    conflicted_fields=[
-                        r.field for r in decision.rule_results if r.status == RuleStatus.REVIEW
-                    ],
-                )
+        evaluations.append(
+            SchemeEligibilityItem(
+                scheme_id=decision.scheme_id or sid,
+                scheme_name=decision.scheme_name or sid,
+                status=decision.status.value,
+                is_eligible=decision.status == RuleStatus.PASS,
+                rule_version=decision.rule_version,
+                decision_id=decision.decision_id,
+                rule_set_hash=decision.rule_set_hash,
+                rules_evaluated=rule_items,
+                matched_rules=decision.passed_rules,
+                failed_rules=decision.failed_rules,
+                missing_fields=decision.missing_fields,
+                conflicted_fields=decision.conflicted_fields,
+                disqualification_reasons=decision.disqualification_reasons,
+                review_reasons=decision.review_reasons,
+                evidence=decision.evidence,
             )
-        except KeyError:
-            # Scheme not registered in the statutory engine
-            evaluations.append(
-                SchemeEligibilityItem(
-                    scheme_id=sid,
-                    scheme_name=sid,
-                    status=RuleStatus.UNKNOWN.value,
-                    is_eligible=False,
-                    rules_evaluated=[],
-                    matched_rules=[],
-                    failed_rules=[],
-                    missing_fields=[f"scheme_{sid}_not_registered"],
-                    conflicted_fields=[],
-                )
-            )
+        )
+
+        # PII-Safe logging: log only IDs and status, no raw personal facts
+        logger.info(
+            "Evaluated eligibility scheme=%s version=%s status=%s passed=%d failed=%d missing=%d",
+            sid,
+            decision.rule_version,
+            decision.status.value,
+            len(decision.passed_rules),
+            len(decision.failed_rules),
+            len(decision.missing_fields),
+        )
 
     return EligibilityCheckResponse(
         request_id=request_id,

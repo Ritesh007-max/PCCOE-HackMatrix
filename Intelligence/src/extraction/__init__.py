@@ -6,7 +6,9 @@ Exports canonical data models, verification statuses, and JSON schemas.
 from .models import (
     FactVerificationStatus,
     ExtractionMethod,
+    FactSourceType,
     ApplicantFact,
+    Evidence,
     CanonicalApplicantProfile,
     CANONICAL_PROFILE_FIELDS,
 )
@@ -22,7 +24,9 @@ from .schema import (
 __all__ = [
     "FactVerificationStatus",
     "ExtractionMethod",
+    "FactSourceType",
     "ApplicantFact",
+    "Evidence",
     "CanonicalApplicantProfile",
     "CANONICAL_PROFILE_FIELDS",
     "APPLICANT_FACT_SCHEMA",
