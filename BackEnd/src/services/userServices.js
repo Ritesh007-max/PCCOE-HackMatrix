@@ -100,10 +100,59 @@ const logoutUser = async (token) => {
     }
 };
 
+const changePassword = async (userId, userEmail, { currentPassword, newPassword }, isDevBypass = false) => {
+    if (!currentPassword || typeof currentPassword !== 'string' || !currentPassword.trim()) {
+        const error = new Error('Current password is required');
+        error.status = 400;
+        throw error;
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+        const error = new Error('New password must be at least 6 characters');
+        error.status = 400;
+        throw error;
+    }
+    if (currentPassword === newPassword) {
+        const error = new Error('New password must be different from current password');
+        error.status = 400;
+        throw error;
+    }
+
+    if (isDevBypass) {
+        return { success: true, message: 'Password changed successfully' };
+    }
+
+    // Authenticate current password against Supabase if email is known
+    if (userEmail) {
+        const { error: signInError } = await supabaseClient.auth.signInWithPassword({
+            email: userEmail,
+            password: currentPassword
+        });
+        if (signInError) {
+            const error = new Error('Current password is incorrect');
+            error.status = 400;
+            throw error;
+        }
+    }
+
+    // Update password with admin client
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: newPassword
+    });
+
+    if (updateError) {
+        const error = new Error(updateError.message || 'Failed to update password');
+        error.status = updateError.status || 500;
+        throw error;
+    }
+
+    return { success: true, message: 'Password changed successfully' };
+};
+
 module.exports = {
     registerUser,
     loginUser,
     refreshToken,
     getCurrentUser,
-    logoutUser
+    logoutUser,
+    changePassword
 };

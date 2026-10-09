@@ -102,6 +102,52 @@ class TestEligibilityEndpoints(unittest.TestCase):
         mock_llm_gen.assert_not_called()
         mock_llm_meta.assert_not_called()
 
+    def test_eligibility_api_exposes_version_and_diagnostics(self):
+        """Verifies that API response returns rule_version, decision_id, hash, and evidence."""
+        facts = {
+            "owns_cultivable_land": True,
+            "is_institutional_landholder": False,
+            "is_taxpayer": False,
+            "monthly_pension_amount": 0,
+        }
+        resp = self.client.post(
+            "/v1/eligibility/check",
+            headers=self.headers,
+            json={"applicant_facts": facts, "scheme_ids": ["pm-kisan"]}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        eval_item = data["evaluations"][0]
+        self.assertEqual(eval_item["rule_version"], "1.0.0")
+        self.assertIsNotNone(eval_item["decision_id"])
+        self.assertIsNotNone(eval_item["rule_set_hash"])
+        self.assertGreater(len(eval_item["evidence"]), 0)
+
+    def test_eligibility_api_unregistered_scheme_handled_safely(self):
+        """Unregistered scheme returns UNKNOWN with missing_fields diagnostic and does not crash."""
+        resp = self.client.post(
+            "/v1/eligibility/check",
+            headers=self.headers,
+            json={"applicant_facts": {"age": 25}, "scheme_ids": ["non_existent_scheme_abc"]}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        eval_item = data["evaluations"][0]
+        self.assertEqual(eval_item["status"], "UNKNOWN")
+        self.assertFalse(eval_item["is_eligible"])
+        self.assertIn("scheme_non_existent_scheme_abc_not_registered", eval_item["missing_fields"])
+
+    def test_eligibility_api_missing_scheme_ids_returns_400(self):
+        """Missing or empty scheme_ids returns 400 or 422 validation error."""
+        resp = self.client.post(
+            "/v1/eligibility/check",
+            headers=self.headers,
+            json={"applicant_facts": {"age": 25}, "scheme_ids": []}
+        )
+        self.assertIn(resp.status_code, [400, 422])
+
+
 
 if __name__ == "__main__":
     unittest.main()
+

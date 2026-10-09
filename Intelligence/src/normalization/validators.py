@@ -93,7 +93,7 @@ def validate_field_value(field: str, value: Any) -> Any:
 
     if field == "age":
         return validate_age(value)
-    elif field in ("annual_family_income", "family_income", "income"):
+    elif field in ("annual_family_income", "annual_income", "personal_income", "family_income", "income"):
         return validate_income(value)
     elif field in ("disability_percentage", "school_attendance_pct", "percentage"):
         return validate_percentage(value, field_name=field)

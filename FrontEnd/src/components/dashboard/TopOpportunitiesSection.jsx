@@ -4,17 +4,15 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
-  ShieldCheck,
   TrendingUp,
   Headphones
 } from 'lucide-react';
-import { topOpportunities } from '../../data/dashboardData';
 import { TricolorRibbon } from '../common/BrandAssets';
 import ashokStambhSvg from '../../assets/ashok_stambh_vector.svg';
 import msmeSvg from '../../assets/msme_logo_vector.svg';
 import kisanSvg from '../../assets/kisan_logo_vector.svg';
 
-export default function TopOpportunitiesSection({ opportunities = topOpportunities }) {
+export default function TopOpportunitiesSection({ opportunities = [] }) {
   const navigate = useNavigate();
 
   const renderEmblem = (type) => {
@@ -75,7 +73,18 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
       </div>
 
       <div className="opportunities-main-grid">
-        {/* 3 Scheme Cards */}
+        {opportunities.length === 0 && (
+          <div className="scheme-card-box" style={{ padding: '36px 20px', textAlign: 'center', gridColumn: 'span 2' }}>
+            <p style={{ color: '#475467', marginBottom: '12px', fontSize: '14px' }}>
+              No personalized scheme recommendations computed yet.
+            </p>
+            <Link to="/discover" className="btn btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <span>Browse All Schemes</span>
+              <ArrowRight size={14} />
+            </Link>
+          </div>
+        )}
+        {/* Scheme Cards */}
         {opportunities.map((scheme) => (
           <article
             key={scheme.id}
@@ -91,7 +100,7 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
             title={`View ${scheme.name} Details`}
             style={{ cursor: 'pointer' }}
           >
-            <div>
+            <div className="scheme-card-body">
               <div className="scheme-card-top">
                 <div className="scheme-logo-container">
                   {renderEmblem(scheme.emblemType)}
@@ -101,7 +110,7 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
                 </span>
               </div>
 
-              <h3 className="scheme-card-name">
+              <h3 className="scheme-card-name" title={scheme.name}>
                 <Link
                   to={`/schemes/${scheme.id}`}
                   onClick={(e) => e.stopPropagation()}
@@ -110,7 +119,7 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
                   {scheme.name}
                 </Link>
               </h3>
-              <p className="scheme-card-full-name">{scheme.fullName}</p>
+              <p className="scheme-card-full-name" title={scheme.fullName}>{scheme.fullName}</p>
 
               <div className="scheme-tags-row">
                 {scheme.tags.map((tag) => (
@@ -147,30 +156,32 @@ export default function TopOpportunitiesSection({ opportunities = topOpportuniti
             </div>
           </article>
         ))}
+      </div>
 
-        {/* Right Stacked Column */}
-        <div className="side-widgets-col">
-          {/* Top Quote Card */}
-          <div className="side-quote-card">
-            <TrendingUp size={24} className="side-quote-icon" />
-            <p className="side-quote-text">
-              “A more inclusive India grows with informed citizens.”
-            </p>
-            <TricolorRibbon width={44} height={4} />
-          </div>
+      {/* Quote card and Need Help card placed below the opportunities card */}
+      <div className="opportunities-bottom-widgets">
+        {/* Top Quote Card */}
+        <div className="side-quote-card">
+          <TrendingUp size={24} className="side-quote-icon" />
+          <p className="side-quote-text">
+            “A more inclusive India grows with informed citizens.”
+          </p>
+          <TricolorRibbon width={44} height={4} />
+        </div>
 
-          {/* Need Help? Card */}
-          <div className="side-help-card">
+        {/* Need Help? Card */}
+        <div className="side-help-card">
+          <div>
             <div className="side-help-icon-wrap" aria-hidden="true">
               <Headphones size={20} />
             </div>
             <h4 className="side-help-title">Need Help?</h4>
             <p className="side-help-desc">Read our guide or contact support.</p>
-            <Link to="/documents" className="btn-guidance">
-              <span>Get Guidance</span>
-              <ArrowRight size={14} />
-            </Link>
           </div>
+          <Link to="/documents" className="btn-guidance">
+            <span>Get Guidance</span>
+            <ArrowRight size={14} />
+          </Link>
         </div>
       </div>
     </section>

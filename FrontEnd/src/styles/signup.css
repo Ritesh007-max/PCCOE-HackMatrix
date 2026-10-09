@@ -1017,3 +1017,95 @@
     display: none;
   }
 }
+
+@media (max-width: 480px) {
+  .signup-navbar {
+    padding: 12px 16px;
+  }
+
+  .signup-main-content {
+    padding: 4px 14px 36px 14px;
+  }
+
+  .signup-card {
+    padding: 20px 16px;
+    border-radius: 12px;
+  }
+
+  .signup-hero-title {
+    font-size: 26px;
+  }
+
+  .signup-hero-subtitle {
+    font-size: 13.5px;
+  }
+
+  .signup-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .signup-modal-card {
+    width: calc(100vw - 24px);
+    max-height: 90vh;
+  }
+
+  .signup-modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .signup-modal-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 360px) {
+  .signup-hero-title {
+    font-size: 22px;
+  }
+  .signup-card {
+    padding: 16px 12px;
+  }
+  .signup-input {
+    font-size: 13px;
+  }
+}
+
+/* User / Reviewer Mode Selector */
+.login-mode-selector {
+  display: flex;
+  background-color: #F1F5F9;
+  border-radius: 8px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 16px;
+  border: 1px solid #E2E8F0;
+}
+
+.login-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748B;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.login-mode-btn:hover {
+  color: #0F172A;
+}
+
+.login-mode-btn.active {
+  background-color: #FFFFFF;
+  color: #0F172A;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}

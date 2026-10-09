@@ -76,7 +76,10 @@ def fuse_results(
         if not (0.0 <= fused <= 2.0):
             fused = 0.0
 
-        meta = metadata_map.get(cid, {})
+        meta = metadata_map.get(cid)
+        if not meta:
+            dense_match = next((item[2] for item in dense_results if item[0] == cid), None)
+            meta = dense_match if isinstance(dense_match, dict) else {}
         prov = meta.get("provenance", {})
 
         chunk = RetrievedChunk(

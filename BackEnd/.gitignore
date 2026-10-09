@@ -34,4 +34,8 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
-package.json
+# Runtime local storage and generated databases
+.data/
+data/*.json
+data/*.tmp*
+!data/.gitkeep

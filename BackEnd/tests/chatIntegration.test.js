@@ -90,7 +90,10 @@ describe('Chat Backend ↔ Intelligence Integration Tests', () => {
         assert.strictEqual(result.citations[0].schemeId, 'pmegp');
         assert.strictEqual(result.schemes.length, 1);
         assert.strictEqual(result.schemes[0].id, 'pmegp');
-        assert.strictEqual(result.schemes[0].matchScore, 95);
+        assert.strictEqual(result.schemes[0].relevanceScore, 95);
+        assert.strictEqual(result.schemes[0].matchScore, null);
+        assert.strictEqual(result.schemes[0].eligibilityStatus, 'UNKNOWN');
+        assert.strictEqual(result.schemes[0].matchType, 'neutral');
     });
 
     test('Falls back gracefully to local engine when Intelligence is unreachable or fails', async () => {

@@ -3,7 +3,8 @@ const {
     registerUser,
     loginUser,
     refreshToken,
-    getMe
+    getMe,
+    changePassword
 } = require('../controllers/userController');
 const authMiddleware = require('../middleware/authMiddleware');
 const userServices = require('../services/userServices');
@@ -28,5 +29,6 @@ router.post('/login', loginUser);
 router.post('/refresh', refreshToken);
 router.get('/me', authMiddleware, getMe);
 router.post('/logout', authMiddleware, logoutUser);
+router.post('/change-password', authMiddleware, changePassword);
 
 module.exports = router;

@@ -1,4 +1,11 @@
+const { supabaseAdmin } = require('../config/supabaseConfig');
 const profileService = require('../services/profileService');
+const {
+    isValidState,
+    normalizeStateName,
+    isValidStateDistrict,
+    normalizeDistrictName
+} = require('../utils/geoData');
 
 const parseBoolean = (value) => {
     if (typeof value === 'boolean') return value;
@@ -21,9 +28,31 @@ const getProfile = async (req, res, next) => {
         const userId = req.user.id;
         const profile = await profileService.getProfileById(userId);
 
+        const authUser = req.user || {};
+        const meta = authUser.user_metadata || {};
+        const appType = meta.applicant_type || meta.applicantType || 'Individual';
+        const augmentedData = profile ? {
+            ...profile,
+            email: authUser.email || profile.email,
+            applicant_type: appType,
+            applicantType: appType,
+            social_category: profile.social_category || profile.caste_category || null,
+            last_sign_in_at: authUser.last_sign_in_at || profile.last_sign_in_at || null,
+            email_confirmed_at: authUser.email_confirmed_at || authUser.confirmed_at || null,
+            login_method: authUser.app_metadata?.provider === 'google' ? 'Google Account' : 'Email & Password',
+        } : {
+            id: userId,
+            email: authUser.email || '',
+            applicant_type: appType,
+            applicantType: appType,
+            last_sign_in_at: authUser.last_sign_in_at || null,
+            email_confirmed_at: authUser.email_confirmed_at || authUser.confirmed_at || null,
+            login_method: authUser.app_metadata?.provider === 'google' ? 'Google Account' : 'Email & Password',
+        };
+
         return res.status(200).json({
             success: true,
-            data: profile
+            data: augmentedData
         });
     } catch (error) {
         next(error);
@@ -38,7 +67,7 @@ const updateProfile = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Profile updates must be a JSON object' });
         }
 
-        const allowedFields = profileService.ACCEPTED_FIELDS;
+        const allowedFields = [...new Set([...profileService.ACCEPTED_FIELDS, 'applicant_type', 'applicantType'])];
         const unsupportedFields = Object.keys(updates).filter((field) => !allowedFields.includes(field));
         if (unsupportedFields.length > 0) {
             return res.status(400).json({
@@ -47,14 +76,45 @@ const updateProfile = async (req, res, next) => {
             });
         }
 
+        let newApplicantType = updates.applicant_type !== undefined ? updates.applicant_type : updates.applicantType;
+        const newFullName = updates.full_name !== undefined ? updates.full_name : updates.fullName;
+        if ((newApplicantType !== undefined && newApplicantType !== null) || (newFullName && typeof newFullName === 'string' && newFullName.trim())) {
+            try {
+                const metaUpdates = {
+                    ...(req.user?.user_metadata || {})
+                };
+                if (newApplicantType !== undefined && newApplicantType !== null) {
+                    metaUpdates.applicant_type = newApplicantType;
+                    metaUpdates.applicantType = newApplicantType;
+                }
+                if (newFullName && typeof newFullName === 'string' && newFullName.trim()) {
+                    metaUpdates.full_name = newFullName.trim();
+                    metaUpdates.fullName = newFullName.trim();
+                }
+                await supabaseAdmin.auth.admin.updateUserById(userId, {
+                    user_metadata: metaUpdates
+                });
+            } catch (authMetaErr) {
+                console.debug('Could not persist to auth metadata:', authMetaErr.message);
+            }
+        }
+
         const filteredUpdates = {};
-        for (const field of allowedFields) {
+        for (const field of profileService.ACCEPTED_FIELDS) {
             if (updates[field] !== undefined) {
                 filteredUpdates[field] = updates[field];
             }
         }
 
         // Normalize schema names and legacy UI aliases before validating.
+        if (filteredUpdates.social_category !== undefined && filteredUpdates.category === undefined) {
+            filteredUpdates.category = filteredUpdates.social_category;
+        }
+        delete filteredUpdates.social_category;
+        if (filteredUpdates.mobile_number !== undefined && filteredUpdates.phone === undefined) {
+            filteredUpdates.phone = filteredUpdates.mobile_number;
+        }
+        delete filteredUpdates.mobile_number;
         if (filteredUpdates.date_of_birth !== undefined && filteredUpdates.dob === undefined) {
             filteredUpdates.dob = filteredUpdates.date_of_birth;
         }
@@ -105,6 +165,45 @@ const updateProfile = async (req, res, next) => {
             const validationMessage = validateText(field, max, { required });
             if (validationMessage) return res.status(400).json({ success: false, message: validationMessage });
         }
+
+        // Validate State and District geographic dependency
+        if (filteredUpdates.state !== undefined && filteredUpdates.state !== null && filteredUpdates.state !== '') {
+            if (!isValidState(filteredUpdates.state)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid state: "${filteredUpdates.state}". Please select a valid Indian State or Union Territory.`
+                });
+            }
+            filteredUpdates.state = normalizeStateName(filteredUpdates.state);
+        }
+
+        let targetState = filteredUpdates.state;
+        let existingProfile = null;
+        if (targetState === undefined) {
+            existingProfile = await profileService.getProfileById(userId);
+            targetState = existingProfile?.state;
+        }
+
+        if (filteredUpdates.district !== undefined && filteredUpdates.district !== null && filteredUpdates.district !== '') {
+            if (!targetState) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Cannot select district without a valid selected State.'
+                });
+            }
+            if (!isValidStateDistrict(targetState, filteredUpdates.district)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid district "${filteredUpdates.district}" for state "${targetState}". Please select a valid district for ${targetState}.`
+                });
+            }
+            filteredUpdates.district = normalizeDistrictName(targetState, filteredUpdates.district);
+        } else if (filteredUpdates.state !== undefined && filteredUpdates.district === undefined) {
+            if (!existingProfile) existingProfile = await profileService.getProfileById(userId);
+            if (existingProfile?.district && !isValidStateDistrict(filteredUpdates.state, existingProfile.district)) {
+                filteredUpdates.district = null;
+            }
+        }
         if (filteredUpdates.phone !== undefined &&
             (typeof filteredUpdates.phone !== 'string' || !/^\+?[0-9][0-9\s()-]{6,19}$/.test(filteredUpdates.phone.trim()))) {
             return res.status(400).json({ success: false, message: 'Phone must be a valid phone number' });
@@ -118,7 +217,7 @@ const updateProfile = async (req, res, next) => {
         if (filteredUpdates.income !== undefined && filteredUpdates.annual_income === undefined) {
             const incomeMap = {
                 'Below ₹1 Lakh': 80000,
-                '₹1 Lakh - ₹2.5 Lakhs': 180000,
+                '₹1 Lakh - ₹2.5 Lakhs': 200000,
                 '₹2.5 Lakhs - ₹5 Lakhs': 350000,
                 '₹5 Lakhs - ₹10 Lakhs': 750000,
                 'Above ₹10 Lakhs': 1200000,
@@ -192,12 +291,30 @@ const updateProfile = async (req, res, next) => {
             filteredUpdates.disability_percentage = percentage;
         }
 
-        const validCategories = ['General', 'OBC', 'SC', 'ST', 'EWS'];
-        if (filteredUpdates.category && !validCategories.includes(filteredUpdates.category)) {
-            return res.status(400).json({
-                success: false,
-                message: `Category must be one of: ${validCategories.join(', ')}`
-            });
+        if (filteredUpdates.category !== undefined && filteredUpdates.category !== null && filteredUpdates.category !== '') {
+            const categoryMap = {
+                'general': 'general',
+                'gen': 'general',
+                'obc': 'obc',
+                'other backward class': 'obc',
+                'sc': 'sc',
+                'scheduled caste': 'sc',
+                'st': 'st',
+                'scheduled tribe': 'st',
+                'ews': 'ews',
+                'economically weaker section': 'ews'
+            };
+            const lowerCat = String(filteredUpdates.category).trim().toLowerCase();
+            const normalizedCat = categoryMap[lowerCat];
+            if (!normalizedCat) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Category must be one of: General, OBC, SC, ST, EWS'
+                });
+            }
+            filteredUpdates.category = normalizedCat;
+        } else if (filteredUpdates.category === '') {
+            filteredUpdates.category = null;
         }
 
         // Normalize and validate occupation
@@ -271,7 +388,12 @@ const updateProfile = async (req, res, next) => {
         return res.status(200).json({
             success: true,
             message: 'Profile updated successfully',
-            data: profile
+            data: {
+                ...profile,
+                applicant_type: newApplicantType || req.user?.user_metadata?.applicant_type || 'Individual',
+                applicantType: newApplicantType || req.user?.user_metadata?.applicantType || 'Individual',
+                social_category: profile?.social_category || profile?.caste_category || null
+            }
         });
     } catch (error) {
         next(error);

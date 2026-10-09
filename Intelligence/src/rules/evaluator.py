@@ -113,14 +113,25 @@ class RuleEvaluator:
             rule_results.append(res)
             rule_map[rule.rule_id] = res
 
+        # Find which rules belong to an OR group (alternative criteria)
+        or_rule_ids: Set[str] = set()
+        if ruleset.logic_groups:
+            for lg in ruleset.logic_groups:
+                if lg.operator.upper() == "OR":
+                    or_rule_ids.update(lg.rule_ids)
+        for r in ruleset.rules:
+            if "OR" in (getattr(r, "logic_group", "") or "").upper():
+                or_rule_ids.add(r.rule_id)
+
         # 1. Critical Invariant: Hard constraint check
-        # If any hard constraint fails, the overall outcome must be FAIL
+        # If any mandatory (non-OR) hard constraint fails, the overall outcome must be FAIL
         hard_failures = [
             r for r in rule_results
-            if r.hard_constraint and r.status == RuleStatus.FAIL
+            if r.hard_constraint and r.status == RuleStatus.FAIL and r.rule_id not in or_rule_ids
         ]
         if hard_failures:
             return (RuleStatus.FAIL, rule_results)
+
 
         # 2. If composite logic groups are explicitly defined:
         if ruleset.logic_groups:

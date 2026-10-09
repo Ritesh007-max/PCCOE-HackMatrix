@@ -5,6 +5,7 @@ const profileService = require('./profileService');
 const { throwIfError } = require('../utils/supabaseErrors');
 const intelligenceClient = require('./intelligenceClient');
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DOCUMENTS_BUCKET = process.env.SUPABASE_DOCUMENTS_BUCKET || 'documents';
 const ALLOWED_TYPES = new Set([
     'aadhaar', 'pan', 'udyam', 'itr', 'land', 'income_cert',
@@ -13,15 +14,26 @@ const ALLOWED_TYPES = new Set([
 const TYPE_ALIASES = {
     aadhar: 'aadhaar',
     adhaar: 'aadhaar',
+    id: 'aadhaar',
+    identity: 'aadhaar',
+    identity_proof: 'aadhaar',
     'land records': 'land',
     land_records: 'land',
     landrecords: 'land',
     'income certificate': 'income_cert',
+    income_certificate: 'income_cert',
+    income: 'income_cert',
     'caste certificate': 'caste_cert',
+    caste_certificate: 'caste_cert',
+    caste: 'caste_cert',
     'domicile certificate': 'domicile',
     'bank passbook': 'bank_passbook',
+    bank: 'bank_passbook',
     'passport size photo': 'photo',
-    'address proof': 'address_proof'
+    'address proof': 'address_proof',
+    address: 'address_proof',
+    other: 'address_proof',
+    general: 'address_proof'
 };
 
 const httpError = (status, message) => {
@@ -31,13 +43,32 @@ const httpError = (status, message) => {
 };
 
 const normalizeDocumentType = (value = '') => {
-    const key = String(value).trim().toLowerCase();
+    const key = String(value || 'address_proof').trim().toLowerCase();
     const type = TYPE_ALIASES[key] || key;
-    if (!ALLOWED_TYPES.has(type)) throw httpError(400, 'Unsupported documentType');
+    if (!ALLOWED_TYPES.has(type)) {
+        return 'address_proof';
+    }
     return type;
 };
 
 const mapDocument = (row, signedUrl = null, { includeFileUrl = false } = {}) => {
+    let parsedRemarks = null;
+    if (row.reviewer_remarks) {
+        try {
+            parsedRemarks = JSON.parse(row.reviewer_remarks);
+        } catch (_) {
+            // legacy plain text string
+        }
+    }
+
+    const fields = parsedRemarks?.extractedFields || parsedRemarks?.fields || {};
+    const docNumber = fields.document_number || parsedRemarks?.docNumber || (
+        (!row.reviewer_remarks || row.reviewer_remarks.includes('AI OCR Parsed'))
+            ? `DOC-${String(row.id).slice(0, 8).toUpperCase()}`
+            : row.reviewer_remarks
+    );
+    const issuer = fields.issuing_authority || parsedRemarks?.issuer || 'State Competent Authority';
+
     const result = {
         id: row.id,
         applicationId: row.application_id,
@@ -45,6 +76,16 @@ const mapDocument = (row, signedUrl = null, { includeFileUrl = false } = {}) => 
         fileName: row.file_name,
         verificationStatus: row.verification_status,
         reviewerRemarks: row.reviewer_remarks,
+        docNumber,
+        issuer,
+        extractedData: fields,
+        extractedText: parsedRemarks?.extractedText || '',
+        ocrMetadata: {
+            method: parsedRemarks?.method || 'AI_OCR_ENGINE',
+            pages: parsedRemarks?.pages || 1,
+            sha256: parsedRemarks?.sha256 || '',
+            confidence: parsedRemarks?.confidence || 0.95
+        },
         uploadedAt: row.uploaded_at,
         updatedAt: row.updated_at
     };
@@ -130,12 +171,15 @@ const getOrCreateDefaultApplication = async (userId) => {
 };
 
 const getOwnedApplicationIds = async (userId) => {
-    const profile = await profileService.getProfileById(userId);
-    if (!profile) return [];
+    let applicantId = userId;
+    try {
+        applicantId = await getApplicantId(userId);
+    } catch (_) { }
+
     const { data, error } = await supabaseAdmin
         .from('applications')
         .select('id')
-        .eq('applicant_id', profile.id);
+        .eq('applicant_id', applicantId);
     throwIfError(error);
     return (data || []).map((application) => application.id);
 };
@@ -150,10 +194,12 @@ const getSignedFileUrl = async (storagePath) => {
 };
 
 const fetchDocumentRow = async (id, userId) => {
+    const cleanId = String(id || '').trim();
+    if (!cleanId || !UUID_REGEX.test(cleanId)) throw httpError(404, 'Document not found');
     const { data, error } = await supabaseAdmin
         .from('documents')
         .select('*')
-        .eq('id', id)
+        .eq('id', cleanId)
         .maybeSingle();
     throwIfError(error);
     if (!data) throw httpError(404, 'Document not found');
@@ -171,6 +217,19 @@ const uploadDocument = async ({ file, documentType, applicationId, userId }) => 
     if (!file) throw httpError(400, 'Document file is required');
     if (!userId) throw httpError(400, 'User ID is required');
 
+    // Buffer verification: check actual PDF signature (%PDF-)
+    const ext = path.extname(path.basename(file.originalname || '')).toLowerCase();
+    const buffer = file.buffer || Buffer.alloc(0);
+    const headerSnippet = buffer.subarray(0, Math.min(1024, buffer.length));
+    const isPdfSig = headerSnippet.indexOf(Buffer.from("%PDF-")) !== -1;
+
+    if (ext === '.pdf' || file.mimetype === 'application/pdf') {
+        if (!isPdfSig) {
+            throw httpError(400, 'Invalid PDF file: Missing %PDF- signature');
+        }
+        file.mimetype = 'application/pdf';
+    }
+
     let application = null;
     if (applicationId) {
         application = await getOwnedApplication(applicationId, userId);
@@ -180,13 +239,13 @@ const uploadDocument = async ({ file, documentType, applicationId, userId }) => 
 
     const type = normalizeDocumentType(documentType);
     const id = crypto.randomUUID();
-    const extension = path.extname(path.basename(file.originalname || '')).slice(0, 16);
+    const extension = ext.slice(0, 16);
     const storagePath = `${application.id}/${id}${extension}`;
 
     const { error: storageError } = await supabaseAdmin.storage
         .from(DOCUMENTS_BUCKET)
         .upload(storagePath, file.buffer, {
-            contentType: file.mimetype,
+            contentType: file.mimetype || 'application/pdf',
             upsert: false
         });
     throwIfError(storageError);
@@ -240,12 +299,21 @@ const extractDocument = async ({ documentId, userId }) => {
     // 3. Build multipart form data for Intelligence /v1/documents/process
     const formData = new FormData();
     const fileName = docRow.file_name || 'document.pdf';
-    const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+    const ext = path.extname(fileName).toLowerCase();
+    let docMime = 'application/pdf';
+    if (ext === '.png') docMime = 'image/png';
+    else if (ext === '.jpg' || ext === '.jpeg') docMime = 'image/jpeg';
+    else if (ext === '.webp') docMime = 'image/webp';
+
+    const blob = new Blob([fileBuffer], { type: docMime });
     formData.append('files', blob, fileName);
 
     let aiResponse;
     try {
-        aiResponse = await intelligenceClient.postMultipart('/v1/documents/process', formData, {
+        aiResponse = await intelligenceClient.postMultipart(`/v1/documents/process?applicant_id=${encodeURIComponent(userId)}`, formData, {
+            headers: {
+                'X-Applicant-ID': userId
+            },
             timeoutMs: 30000
         });
     } catch (err) {
@@ -258,13 +326,27 @@ const extractDocument = async ({ documentId, userId }) => {
 
     const processedItem = aiResponse?.documents?.[0] || null;
 
-    // 4. Update document verification status and remarks in Supabase
+    // 4. OCR/extraction is not statutory verification.  The deployed enum has
+    // PENDING/VERIFIED/REJECTED/REVIEW_REQUIRED only, so retain PENDING until
+    // an authorised verification workflow marks the document VERIFIED.
     const isSuccess = processedItem && (processedItem.status === 'VALID' || processedItem.status === 'valid');
+    const fields = processedItem?.extracted_fields || {};
+    const ocrSummary = {
+        status: isSuccess ? 'OCR_EXTRACTED' : 'REJECTED',
+        statutoryVerificationStatus: isSuccess ? 'PENDING' : 'REJECTED',
+        method: processedItem?.extraction_method || 'NATIVE_PDF',
+        pages: processedItem?.page_count || 1,
+        sha256: (processedItem?.sha256 || '').slice(0, 16),
+        confidence: processedItem?.confidence_score || 0.95,
+        extractedFields: fields,
+        extractedText: processedItem?.extracted_text || '',
+        docNumber: fields.document_number || `DOC-${String(documentId).slice(0, 8).toUpperCase()}`,
+        issuer: fields.issuing_authority || 'State Authority / Revenue Dept'
+    };
+
     const updatePayload = {
-        verification_status: isSuccess ? 'VERIFIED' : 'REJECTED',
-        reviewer_remarks: processedItem
-            ? `AI OCR Parsed (${processedItem.extraction_method || 'text_extraction'}) | Pages: ${processedItem.page_count} | SHA: ${(processedItem.sha256 || '').slice(0, 12)}`
-            : 'Rejected by security/parsing pipeline',
+        verification_status: isSuccess ? 'PENDING' : 'REJECTED',
+        reviewer_remarks: JSON.stringify(ocrSummary),
         updated_at: new Date().toISOString()
     };
 
@@ -279,6 +361,10 @@ const extractDocument = async ({ documentId, userId }) => {
         console.warn(`[documentServices] Could not update document row: ${updateError.message}`);
     }
 
+    // Do not copy OCR values into the profile.  That loses document provenance
+    // and can silently overwrite a self-reported fact. Consumers receive these
+    // facts with their document id and extraction status instead.
+
     const signedUrl = await getSignedFileUrl(docRow.file_url);
 
     return {
@@ -292,17 +378,26 @@ const listDocuments = async (userId) => {
     if (!userId) throw httpError(400, 'User ID is required');
     const applicationIds = await getOwnedApplicationIds(userId);
     
-    // Fetch docs attached to applications or general vault docs
-    let query = supabaseAdmin.from('documents').select('*');
-    if (applicationIds.length > 0) {
-        query = query.or(`application_id.in.(${applicationIds.join(',')}),application_id.is.null`);
-    } else {
-        query = query.is('application_id', null);
+    if (!applicationIds || applicationIds.length === 0) {
+        return [];
     }
 
-    const { data, error } = await query.order('uploaded_at', { ascending: false });
+    const { data, error } = await supabaseAdmin
+        .from('documents')
+        .select('*')
+        .in('application_id', applicationIds)
+        .order('uploaded_at', { ascending: false });
     throwIfError(error);
-    return (data || []).map((row) => mapDocument(row));
+    const docs = await Promise.all((data || []).map(async (row) => {
+        let signedUrl = null;
+        if (row.file_url) {
+            try {
+                signedUrl = await getSignedFileUrl(row.file_url);
+            } catch (_) { }
+        }
+        return mapDocument(row, signedUrl, { includeFileUrl: true });
+    }));
+    return docs;
 };
 
 const getDocumentById = async (id, userId) => {
@@ -328,6 +423,14 @@ const deleteDocument = async (id, userId) => {
             .remove([row.file_url]);
         throwIfError(storageError);
     }
+
+    // Prune document from Intelligence context repository
+    try {
+        await intelligenceClient.del(`/v1/documents/${id}`, {
+            headers: { 'X-Applicant-ID': userId }
+        });
+    } catch (_) { }
+
     return { id };
 };
 
@@ -336,5 +439,6 @@ module.exports = {
     extractDocument,
     listDocuments,
     getDocumentById,
-    deleteDocument
+    deleteDocument,
+    normalizeDocumentType
 };

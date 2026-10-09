@@ -75,6 +75,20 @@ def get_readiness(
         checks["rag"] = "missing_rag_data"
         is_ready = False
 
+    # 5. Canonical scheme index readiness check
+    try:
+        from src.rag.scheme_name_index import get_scheme_name_index
+        idx = get_scheme_name_index()
+        records = getattr(idx, "_canonical_records", {})
+        if idx and len(records) > 0:
+            checks["canonical_scheme_index"] = "ok"
+        else:
+            checks["canonical_scheme_index"] = "empty_index"
+            is_ready = False
+    except Exception as idx_err:
+        checks["canonical_scheme_index"] = f"error: {idx_err}"
+        is_ready = False
+
     if not is_ready:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

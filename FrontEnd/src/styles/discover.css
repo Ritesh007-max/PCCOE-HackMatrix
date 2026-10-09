@@ -18,40 +18,44 @@
    -------------------------------------------------------------------------- */
 .discover-hero-banner {
   background-color: #FFFFFF;
-  border: 1px solid #EAECF0;
+  border: 1px solid #e4e7ec;
   border-radius: 12px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   position: relative;
   overflow: hidden;
-  min-height: 140px;
-  padding: 24px 32px;
-  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+  min-height: 152px;
+  padding: 24px 28px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
 }
 
 .discover-banner-left {
   position: relative;
   z-index: 2;
-  max-width: 540px;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .discover-banner-title {
   font-family: var(--font-serif);
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 700;
-  color: #10243A;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  margin-bottom: 6px;
+  color: #101828;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 0;
 }
 
 .discover-banner-subtitle {
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 400;
   color: #475467;
-  line-height: 1.45;
+  line-height: 1.5;
+  margin: 0;
 }
 
 /* Right side India Gate visual integration */
@@ -60,7 +64,7 @@
   right: 0;
   top: 0;
   bottom: 0;
-  width: 60%;
+  width: 58%;
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
@@ -73,6 +77,8 @@
   inset: 0;
   width: 100%;
   height: 100%;
+  mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.20) 15%, rgba(0, 0, 0, 0.85) 45%, rgba(0, 0, 0, 1) 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.20) 15%, rgba(0, 0, 0, 0.85) 45%, rgba(0, 0, 0, 1) 100%);
 }
 
 .discover-india-gate-img {
@@ -80,20 +86,18 @@
   height: 100%;
   object-fit: cover;
   object-position: center 36%;
-  opacity: 0.88;
+  opacity: 0.95;
 }
 
 /* Seamless soft gradient fade to the left */
 .discover-banner-fade-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, #FFFFFF 0%, rgba(255, 255, 255, 0.94) 22%, rgba(255, 255, 255, 0.45) 58%, rgba(255, 255, 255, 0.05) 100%);
+  display: none;
 }
 
 .discover-banner-editorial {
   position: relative;
   z-index: 3;
-  padding: 22px 32px 0 0;
+  padding: 24px 28px 0 0;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -104,7 +108,8 @@
   font-style: italic;
   font-size: 15px;
   font-weight: 500;
-  color: #344054;
+  color: #1d2939;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.85);
   max-width: 175px;
   text-align: right;
   line-height: 1.35;
@@ -349,6 +354,62 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Canonical Scheme Metadata Grid (Section 2) */
+.scheme-card-meta-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 6px 0 10px 0;
+  padding: 8px 12px;
+  background-color: #F8FAFC;
+  border: 1px solid #EAECF0;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.scheme-card-meta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+.scheme-card-meta-key {
+  color: #475467;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 135px;
+}
+
+.scheme-card-meta-val {
+  color: #10243A;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scheme-card-meta-link {
+  color: #005B50;
+  font-weight: 600;
+  text-decoration: underline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+
+.scheme-card-meta-link:hover {
+  color: #052F26;
+}
+
+.scheme-card-meta-unverified {
+  color: #667085;
+  font-style: italic;
 }
 
 .scheme-card-tags-row {
@@ -1006,5 +1067,77 @@
   }
   .discover-banner-editorial {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .discover-hero-banner {
+    padding: 16px 14px;
+    min-height: auto;
+  }
+  .discover-banner-title {
+    font-size: 21px;
+  }
+  .discover-banner-subtitle {
+    font-size: 13px;
+  }
+  .discover-results-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .discover-sort-container {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .scheme-card-item {
+    padding: 14px;
+  }
+  .scheme-card-meta-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .scheme-card-meta-key {
+    min-width: unset;
+  }
+  .scheme-card-actions-col {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .scheme-card-actions-col .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .eligibility-modal-card {
+    padding: 0;
+    max-height: 90vh;
+  }
+  .eligibility-modal-header,
+  .eligibility-modal-body,
+  .eligibility-modal-footer {
+    padding: 14px 16px;
+  }
+  .eligibility-modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .eligibility-modal-footer .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 360px) {
+  .discover-banner-title {
+    font-size: 19px;
+  }
+  .scheme-card-title {
+    font-size: 16px;
+  }
+  .category-pill-btn {
+    padding: 5px 10px;
+    font-size: 12px;
   }
 }

@@ -725,104 +725,125 @@ The goal is not simply to maximize the number of "eligible" predictions.
 
 ---
 
-# 📁 Project Structure
+# 📁 Repository Structure
+
+The repository root contains only the core functional modules:
 
 ```text
 PCCOE-HackMatrix/
-│
-├── BackEnd/
-│   │
-│   ├── controllers/
-│   │
-│   ├── routes/
-│   │
-│   ├── middleware/
-│   │
-│   ├── services/
-│   │   ├── documentService.js
-│   │   ├── extractionService.js
-│   │   ├── schemeService.js
-│   │   └── eligibilityService.js
-│   │
-│   ├── utils/
-│   │
-│   ├── config/
-│   │
-│   ├── tests/
-│   │
-│   ├── app.js
-│   ├── server.js
-│   ├── package.json
-│   └── .env.example
-│
-└── README.md
+├── BackEnd/         # Express.js REST API gateway, RBAC, and Supabase integration (Port 5000)
+├── FrontEnd/        # React 19 + Vite citizen portal and reviewer dashboard (Port 5173)
+├── docs/            # Product requirements (PRD/MVP), design specs, and Postman collections
+├── Intelligence/    # FastAPI microservice: hybrid RAG, document OCR, and deterministic rule engine (Port 8000)
+├── .gitignore       # Git tracking configuration excluding secrets, caches, and bulk models
+└── README.md        # Primary project documentation & onboarding guide
 ```
 
 ---
 
-# ⚙️ Installation
+# ⚙️ Prerequisites & Setup Guide
 
-### 1. Clone Repository
+### System Prerequisites
+- **Node.js**: v18.0.0 or higher
+- **npm**: v9.0.0 or higher
+- **Python**: v3.10 or v3.11
+- **Git**: Installed and configured
+
+---
+
+### 1️⃣ BackEnd Setup (Express Gateway)
+
+The Express backend connects to Supabase, enforces citizen/reviewer RBAC, orchestrates notifications, and routes AI requests to the Intelligence microservice.
 
 ```bash
-git clone <repository-url>
-cd PCCOE-HackMatrix/BackEnd
-```
+cd BackEnd
 
-### 2. Install Dependencies
-
-```bash
+# 1. Install dependencies
 npm install
-```
 
-### 3. Configure Environment
-
-```bash
+# 2. Configure environment
 cp .env.example .env
-```
+# Edit .env with your Supabase credentials (SUPABASE_URL, SUPABASE_ANON_ROLE_KEY, etc.)
 
-Configure:
-
-```env
-PORT=3000
-
-SUPABASE_URL=<your-supabase-url>
-SUPABASE_KEY=<your-supabase-key>
-
-JWT_SECRET=<your-jwt-secret>
-```
-
-### 4. Start Development Server
-
-```bash
+# 3. Start development server (Port 5000)
 npm run dev
 ```
 
-Server:
+---
 
-```text
-http://localhost:3000
+### 2️⃣ FrontEnd Setup (React + Vite)
+
+The frontend provides the responsive citizen portal, AI assistant interface, document readiness viewer, and reviewer decision dashboard.
+
+```bash
+cd FrontEnd
+
+# 1. Install dependencies
+npm install
+
+# 2. Configure environment
+cp .env.example .env
+# Default points to VITE_API_URL=http://localhost:5000
+
+# 3. Start development server (Port 5173)
+npm run dev
+
+# 4. Production build verification
+npm run build
 ```
 
 ---
 
-# 🧪 Run Tests
+### 3️⃣ Intelligence Microservice Setup (FastAPI + Python)
+
+The Intelligence microservice powers document intelligence, hybrid vector/lexical scheme retrieval across 4,752 schemes, and deterministic eligibility evaluation.
 
 ```bash
+cd Intelligence
+
+# 1. Create and activate a Python virtual environment
+python -m venv .venv
+
+# On Windows:
+.venv\Scripts\activate
+# On Linux / macOS:
+# source .venv/bin/activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Configure environment
+cp .env.example .env
+# Configure your LLM API keys (e.g. GEMINI_API_KEY, OPENROUTER_API_KEY)
+
+# 4. Start the FastAPI microservice (Port 8000)
+uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+---
+
+# 🧪 Running Automated Tests
+
+All three layers of the FIN architecture have automated test suites:
+
+### FrontEnd Tests
+```bash
+cd FrontEnd
 npm test
 ```
 
-The test suite should cover:
+### BackEnd Tests
+```bash
+cd BackEnd
+npm test
+```
 
-* Authentication
-* Protected routes
-* Document upload
-* Document extraction
-* Scheme retrieval
-* Eligibility evaluation
-* Missing documents
-* Borderline cases
-* Error handling
+### Intelligence Tests
+```bash
+cd Intelligence
+# Activate virtual environment first
+pytest tests/security/ tests/rules/ tests/api/test_health.py tests/nlp/test_language.py -q
+```
 
 ---
 

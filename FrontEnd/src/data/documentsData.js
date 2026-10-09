@@ -1,258 +1,175 @@
 /**
  * Documents Data Model
  * Enhanced for PCCOE HackMatrix Citizen Portal
+ * Clean state: zero dummy/mock documents or tickets.
  */
 
-export const INITIAL_DOCUMENTS = [
-  {
-    id: 'aadhaar',
-    name: 'Aadhaar Card',
-    category: 'Identity Verification',
-    purpose: 'Identity Proof',
-    requiredForSchemes: 8,
-    schemesList: ['PMEGP', 'PM-Kisan', 'MSME Support', 'PM Awas', 'Ayushman Bharat'],
-    status: 'verified',
-    statusLabel: 'Verified',
-    source: 'UIDAI Official',
-    validity: 'Lifetime',
-    uploadedOn: '12 Sep 2026',
-    fileType: 'PDF',
-    fileSize: '1.4 MB',
-    docNumber: 'XXXX-XXXX-4921',
-    issuer: 'Unique Identification Authority of India (UIDAI)',
-    iconType: 'id-card',
-    iconColor: 'blue',
-  },
-  {
-    id: 'pan',
-    name: 'PAN Card',
-    category: 'Tax Identification',
-    purpose: 'Financial Transactions',
-    requiredForSchemes: 6,
-    schemesList: ['PMEGP', 'MSME Support', 'Mudra Loan', 'Stand-Up India'],
-    status: 'verified',
-    statusLabel: 'Verified',
-    source: 'Income Tax Dept',
-    validity: 'Lifetime',
-    uploadedOn: '12 Sep 2026',
-    fileType: 'PDF',
-    fileSize: '820 KB',
-    docNumber: 'ABCDE1234F',
-    issuer: 'Income Tax Department, Govt of India',
-    iconType: 'credit-card',
-    iconColor: 'purple',
-  },
-  {
-    id: 'income',
-    name: 'Income Certificate',
-    category: 'Issued by State Government',
-    purpose: 'Income Proof',
-    requiredForSchemes: 5,
-    schemesList: ['PM Awas', 'National Scholarship', 'RTE Scheme', 'EWS Housing'],
-    status: 'verified',
-    statusLabel: 'Verified',
-    source: 'Revenue Dept (Digital)',
-    validity: 'Valid till 31 Mar 2027',
-    uploadedOn: '10 Sep 2026',
-    fileType: 'PDF',
-    fileSize: '2.1 MB',
-    docNumber: 'INC/2026/98214',
-    issuer: 'Revenue Department, Government of Gujarat',
-    iconType: 'certificate',
-    iconColor: 'green',
-  },
-  {
-    id: 'caste',
-    name: 'Caste Certificate',
-    category: 'Issued by Competent Authority',
-    purpose: 'Category Benefit',
-    requiredForSchemes: 4,
-    schemesList: ['PMEGP Subsidy Boost', 'OBC Fellowship', 'Post-Matric Aid'],
-    status: 'under_review',
-    statusLabel: 'Under Review',
-    source: 'Self Uploaded',
-    validity: 'Permanent',
-    uploadedOn: '09 Sep 2026',
-    fileType: 'PDF',
-    fileSize: '1.8 MB',
-    docNumber: 'CST/2026/04112',
-    issuer: 'Sub-Divisional Magistrate (SDM)',
-    iconType: 'scroll',
-    iconColor: 'amber',
-  },
-  {
-    id: 'domicile',
-    name: 'Domicile Certificate',
-    category: 'State of Residence Proof',
-    purpose: 'State Eligibility',
-    requiredForSchemes: 7,
-    schemesList: ['Gujarat Startup Grant', 'State Quota Aid', 'Kisan Solar Subsidy'],
-    status: 'verified',
-    statusLabel: 'Verified',
-    source: 'e-District Portal',
-    validity: 'Lifetime',
-    uploadedOn: '09 Sep 2026',
-    fileType: 'PDF',
-    fileSize: '1.5 MB',
-    docNumber: 'DOM/GJ/2026/7190',
-    issuer: 'Tehsildar Office, Ahmedabad',
-    iconType: 'home',
-    iconColor: 'rose',
-  },
-  {
-    id: 'bank',
-    name: 'Bank Account Details',
-    category: 'Cancelled Cheque / Passbook',
-    purpose: 'Direct Benefit Transfer',
-    requiredForSchemes: 12,
-    schemesList: ['PM-Kisan DBT', 'PMEGP Subsidy', 'LPG Subsidy', 'Scholarship DBT'],
-    status: 'verified',
-    statusLabel: 'Verified',
-    source: 'NPCI Aadhaar-Seeded',
-    validity: 'Active (DBT Enabled)',
-    uploadedOn: '08 Sep 2026',
-    fileType: 'JPG',
-    fileSize: '950 KB',
-    docNumber: 'SBIN0001234 - A/C 98765432101',
-    issuer: 'State Bank of India',
-    iconType: 'bank',
-    iconColor: 'blue',
-  },
-  {
-    id: 'photo',
-    name: 'Passport Size Photo',
-    category: 'Recent Photograph',
-    purpose: 'Application Form',
-    requiredForSchemes: 10,
-    schemesList: ['All Application Portals'],
-    status: 'verified',
-    statusLabel: 'Verified',
-    source: 'Self Uploaded',
-    validity: 'Valid (Taken Aug 2026)',
-    uploadedOn: '08 Sep 2026',
-    fileType: 'JPG',
-    fileSize: '420 KB',
-    docNumber: 'PHOTO-2026-0908',
-    issuer: 'Applicant Self-Upload',
-    iconType: 'image',
-    iconColor: 'purple',
-  },
-  {
-    id: 'address',
-    name: 'Address Proof',
-    category: 'Electricity Bill / Rent Agreement',
-    purpose: 'Address Verification',
-    requiredForSchemes: 3,
-    schemesList: ['PMEGP Project Site', 'MSME Enterprise Proof'],
-    status: 'action_required',
-    statusLabel: 'Action Required',
-    source: 'Pending Verification',
-    validity: 'Pending Upload',
-    uploadedOn: '-',
-    fileType: '-',
-    fileSize: '-',
-    docNumber: '-',
-    issuer: 'State Electricity Board / Landlord Agreement',
-    iconType: 'map-pin',
-    iconColor: 'red',
-  },
+export const INITIAL_DOCUMENTS = [];
+
+export const SUPPORTED_DOC_TYPES = [
+  { id: 'aadhaar', name: 'Aadhaar Card', category: 'Identity Verification', purpose: 'Identity Proof', iconType: 'id-card', iconColor: 'blue' },
+  { id: 'pan', name: 'PAN Card', category: 'Tax Identification', purpose: 'Financial Transactions', iconType: 'credit-card', iconColor: 'purple' },
+  { id: 'income_cert', name: 'Income Certificate', category: 'Issued by State Government', purpose: 'Income Proof', iconType: 'certificate', iconColor: 'green' },
+  { id: 'caste_cert', name: 'Caste Certificate', category: 'Issued by Competent Authority', purpose: 'Category Benefit', iconType: 'scroll', iconColor: 'amber' },
+  { id: 'domicile', name: 'Domicile Certificate', category: 'State of Residence Proof', purpose: 'State Eligibility', iconType: 'home', iconColor: 'rose' },
+  { id: 'bank_passbook', name: 'Bank Passbook / Details', category: 'Cancelled Cheque / Passbook', purpose: 'Direct Benefit Transfer', iconType: 'bank', iconColor: 'blue' },
+  { id: 'address_proof', name: 'Address Proof', category: 'Residency Verification', purpose: 'Address Proof', iconType: 'map-pin', iconColor: 'cyan' },
+  { id: 'udyam', name: 'Udyam Registration', category: 'MSME Verification', purpose: 'Business Eligibility', iconType: 'award', iconColor: 'purple' },
+  { id: 'itr', name: 'Income Tax Return (ITR)', category: 'Financial Verification', purpose: 'Income Verification', iconType: 'file-text', iconColor: 'green' },
+  { id: 'land', name: 'Land Records (7/12 Extract)', category: 'Revenue Department', purpose: 'Agriculture Proof', iconType: 'home', iconColor: 'amber' },
+  { id: 'photo', name: 'Passport Size Photo', category: 'Visual Verification', purpose: 'Identity Verification', iconType: 'image', iconColor: 'rose' },
+  { id: 'disability_cert', name: 'Disability Certificate', category: 'Medical Board', purpose: 'Affirmative Action', iconType: 'scroll', iconColor: 'blue' }
 ];
+
+export const DOC_TYPE_LOOKUP = Object.fromEntries(SUPPORTED_DOC_TYPES.map(d => [d.id, d]));
 
 export const SCHEMES_CHECKLIST = [
   {
     id: 'pmegp',
     name: 'PMEGP (Prime Minister Employment Generation)',
-    benefit: '₹ 1,25,000 Subsidy',
-    requiredDocIds: ['aadhaar', 'pan', 'caste', 'address'],
+    benefit: 'Credit-Linked Margin Money Subsidy',
+    requiredDocIds: ['aadhaar', 'pan', 'caste_cert', 'address_proof'],
   },
   {
     id: 'pm-kisan',
     name: 'PM Kisan Samman Nidhi',
-    benefit: '₹ 6,000 / year',
-    requiredDocIds: ['aadhaar', 'bank', 'domicile'],
+    benefit: '₹ 6,000 / year (Direct Income Support)',
+    requiredDocIds: ['aadhaar', 'bank_passbook', 'land', 'domicile'],
   },
   {
     id: 'msme',
     name: 'MSME Credit & Financial Support',
-    benefit: '₹ 80,000 Support',
-    requiredDocIds: ['aadhaar', 'pan', 'bank', 'address'],
+    benefit: 'Credit Guarantee & Term Support',
+    requiredDocIds: ['aadhaar', 'pan', 'bank_passbook', 'address_proof'],
   },
   {
     id: 'scholarship',
     name: 'National Higher Education Scholarship',
-    benefit: '₹ 50,000 / year',
-    requiredDocIds: ['aadhaar', 'income', 'domicile', 'photo'],
+    benefit: 'Direct Financial Assistance',
+    requiredDocIds: ['aadhaar', 'income_cert', 'domicile', 'photo'],
   },
 ];
 
 export const STORAGE_DOCUMENTS_KEY = 'fin_documents_data';
 export const STORAGE_TICKETS_KEY = 'fin_support_tickets_data';
+export const STORAGE_APPLICATIONS_KEY = 'fin_associated_applications_data';
 
-export const INITIAL_TICKETS = [
-  {
-    id: 'TKT-2026-1042',
-    category: 'Document Verification Delay',
-    docId: 'caste',
-    docName: 'Caste Certificate',
-    subject: 'Caste Certificate verification pending over 5 days',
-    description: 'Submitted OBC certificate issued by SDM Ahmedabad. Status is still showing Under Review.',
-    priority: 'High',
-    status: 'Under Review',
-    createdAt: '22 Sep 2026, 03:30 PM',
-  },
-];
+export const INITIAL_TICKETS = [];
 
-export function loadTicketsFromStorage() {
+/**
+ * Normalizes statutory requirement identifiers to standard vault document types:
+ * caste -> caste_cert
+ * address -> address_proof
+ * bank -> bank_passbook
+ * income -> income_cert
+ */
+export function normalizeDocRequirementId(rawId) {
+  if (!rawId) return 'address_proof';
+  const clean = String(rawId).toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+  if (clean === 'caste' || clean.includes('caste') || clean.includes('jati')) return 'caste_cert';
+  if (clean === 'address' || clean.includes('address') || clean.includes('residence') || clean.includes('domicile')) return clean.includes('domicile') ? 'domicile' : 'address_proof';
+  if (clean === 'bank' || clean.includes('bank') || clean.includes('passbook')) return 'bank_passbook';
+  if (clean === 'income' || clean.includes('income') || clean.includes('salary') || clean.includes('aavak')) return 'income_cert';
+  if (clean === 'photo' || clean.includes('photo') || clean.includes('picture')) return 'photo';
+  if (clean === 'aadhaar' || clean.includes('aadhaar') || clean.includes('aadhar') || clean.includes('uidai')) return 'aadhaar';
+  if (clean === 'pan' || clean.includes('pan')) return 'pan';
+  if (clean === 'land' || clean.includes('land') || clean.includes('712') || clean.includes('ror')) return 'land';
+  if (clean === 'domicile') return 'domicile';
+  if (clean === 'udyam' || clean.includes('udyam') || clean.includes('msme')) return 'udyam';
+  if (clean === 'itr' || clean.includes('tax') || clean.includes('itr')) return 'itr';
+  if (clean.includes('disability') || clean.includes('handicap')) return 'disability_cert';
+  return clean;
+}
+
+/**
+ * Dynamically builds scheme checklist from canonical scheme records
+ */
+export function buildDynamicSchemeChecklist(schemesList = []) {
+  if (!Array.isArray(schemesList) || schemesList.length === 0) {
+    return SCHEMES_CHECKLIST;
+  }
+  return schemesList.map(s => {
+    const rawDocs = s.documents_required || s.required_documents || s.documents || [];
+    let parsedDocs = [];
+    if (Array.isArray(rawDocs)) {
+      parsedDocs = rawDocs;
+    } else if (typeof rawDocs === 'string') {
+      parsedDocs = rawDocs.split(/[;\n|]+/).map(t => t.trim()).filter(Boolean);
+    }
+
+    let requiredDocIds = [];
+    if (parsedDocs.length > 0) {
+      requiredDocIds = parsedDocs.map(d => ({
+        id: normalizeDocRequirementId(d),
+        label: d
+      }));
+    } else {
+      requiredDocIds = [];
+    }
+
+    return {
+      id: s.id || s.scheme_id,
+      slug: s.slug || s.scheme_slug || null,
+      name: s.name || s.scheme_name || s.title || 'Government Scheme',
+      state: s.state || null,
+      benefit: s.benefit_display || s.benefit_summary || (s.max_benefit ? `Up to ₹${Number(s.max_benefit).toLocaleString('en-IN')}` : 'Statutory Guidelines'),
+      requiredDocIds
+    };
+  });
+}
+
+function getStorageKey(baseKey, userId) {
+  return userId ? `${baseKey}_${userId}` : baseKey;
+}
+
+export function loadTicketsFromStorage(userId = null) {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
   try {
-    const raw = localStorage.getItem(STORAGE_TICKETS_KEY);
+    const key = getStorageKey(STORAGE_APPLICATIONS_KEY, userId);
+    let raw = localStorage.getItem(key);
+    if (!raw && !userId) raw = localStorage.getItem(STORAGE_TICKETS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
-    console.error('Failed to load tickets from storage', e);
+    console.error('Failed to load applications from storage', e);
   }
-  return INITIAL_TICKETS;
+  return [];
 }
 
-export function saveTicketsToStorage(tickets) {
+export function saveTicketsToStorage(tickets, userId = null) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    localStorage.setItem(STORAGE_TICKETS_KEY, JSON.stringify(tickets));
+    const key = getStorageKey(STORAGE_APPLICATIONS_KEY, userId);
+    localStorage.setItem(key, JSON.stringify(tickets));
   } catch (e) {
-    console.error('Failed to save tickets to storage', e);
+    console.error('Failed to save applications to storage', e);
   }
 }
 
-export function loadDocumentsFromStorage() {
+export function loadDocumentsFromStorage(userId = null) {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
   try {
-    const raw = localStorage.getItem(STORAGE_DOCUMENTS_KEY);
+    const key = getStorageKey(STORAGE_DOCUMENTS_KEY, userId);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Sanitize any legacy DigiLocker references
-        return parsed.map((doc) => {
-          if (doc.source && doc.source.includes('DigiLocker')) {
-            let sanitizedSource = 'Verified Authority';
-            if (doc.id === 'aadhaar') sanitizedSource = 'UIDAI Official';
-            if (doc.id === 'pan') sanitizedSource = 'Income Tax Dept';
-            if (doc.id === 'domicile') sanitizedSource = 'e-District Portal';
-            if (doc.id === 'address') sanitizedSource = 'Utility Board';
-            return { ...doc, source: sanitizedSource };
-          }
-          return doc;
-        });
-      }
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.error('Failed to load documents from storage', e);
   }
-  return INITIAL_DOCUMENTS;
+  return [];
 }
 
-export function saveDocumentsToStorage(docs) {
+export function saveDocumentsToStorage(docs, userId = null) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    localStorage.setItem(STORAGE_DOCUMENTS_KEY, JSON.stringify(docs));
+    const key = getStorageKey(STORAGE_DOCUMENTS_KEY, userId);
+    localStorage.setItem(key, JSON.stringify(docs));
   } catch (e) {
     console.error('Failed to save documents to storage', e);
   }
 }
+

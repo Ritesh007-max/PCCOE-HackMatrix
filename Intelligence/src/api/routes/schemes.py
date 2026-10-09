@@ -15,10 +15,22 @@ from src.rag.models import RetrievalQuery
 
 from ..auth import verify_api_key
 from ..config import ServiceConfig
-from ..dependencies import get_hybrid_retriever, get_rate_limiter, get_service_config
+from ..dependencies import (
+    get_hybrid_retriever,
+    get_rate_limiter,
+    get_service_config,
+    get_scheme_recommendation_service,
+)
 from ..errors import RateLimitExceededError
 from ..middleware import InMemoryRateLimiter
-from ..schemas import SchemeSearchRequest, SchemeSearchResponse, SchemeSearchResultItem
+from ..schemas import (
+    SchemeSearchRequest,
+    SchemeSearchResponse,
+    SchemeSearchResultItem,
+    SchemeRecommendationRequest,
+    SchemeRecommendationResponse,
+    SchemeRecommendationItemSchema,
+)
 
 logger = logging.getLogger("fin.api.routes.schemes")
 
@@ -117,4 +129,82 @@ async def search_schemes(
         query=body.query,
         total_results=len(items),
         results=items,
+    )
+
+
+@router.post(
+    "/recommend",
+    response_model=SchemeRecommendationResponse,
+    summary="Personalized scheme recommendation based on canonical applicant context",
+    description=(
+        "Personalized scheme discovery orchestrator: bridges canonical ApplicantContext facts "
+        "and QueryUnderstanding signals to HybridRetriever, computes deterministic compatibility scores, "
+        "identifies missing statutory fields, and optionally evaluates deterministic eligibility."
+    ),
+)
+async def recommend_schemes(
+    request: Request,
+    body: SchemeRecommendationRequest = Body(...),
+    api_key: str = Depends(verify_api_key),
+    service_config: ServiceConfig = Depends(get_service_config),
+    rate_limiter: InMemoryRateLimiter = Depends(get_rate_limiter),
+    recommendation_service = Depends(get_scheme_recommendation_service),
+) -> SchemeRecommendationResponse:
+    """Produces personalized, evidence-grounded scheme recommendations."""
+    request_id = getattr(request.state, "request_id", "req_unknown")
+
+    # Rate limiting
+    allowed, retry_after = rate_limiter.check_rate_limit(api_key, service_config)
+    if not allowed:
+        raise RateLimitExceededError(retry_after=retry_after)
+
+    rec_result = await run_in_threadpool(
+        recommendation_service.recommend_schemes,
+        applicant_id=body.applicant_id,
+        query=body.query,
+        top_k=body.top_k,
+        language=body.language,
+        include_eligibility=body.include_eligibility,
+        include_missing_fields=body.include_missing_fields,
+        state_override=body.state_override,
+        category_override=body.category_override,
+        applicant_facts=body.applicant_facts,
+        document_facts=body.document_facts,
+    )
+
+    items: List[SchemeRecommendationItemSchema] = []
+    for r in rec_result.recommendations:
+        ev_dict = _clean_dict(r.evidence.to_dict()) if r.evidence else None
+        items.append(
+            SchemeRecommendationItemSchema(
+                scheme_id=r.scheme_id,
+                scheme_slug=r.scheme_slug,
+                scheme_name=r.scheme_name,
+                relevance_score=r.relevance_score,
+                compatibility_score=r.compatibility_score,
+                overall_match_score=r.overall_match_score,
+                matched_facts=r.matched_facts,
+                unmatched_facts=r.unmatched_facts,
+                missing_fields=r.missing_fields,
+                missing_fields_status=r.missing_fields_status,
+                conflict_fields=r.conflict_fields,
+                eligibility_status=r.eligibility_status,
+                is_eligible=r.is_eligible,
+                evidence=ev_dict,
+                source_metadata=_clean_dict(r.source_metadata),
+                recommendation_reasons=r.recommendation_reasons,
+            )
+        )
+
+    return SchemeRecommendationResponse(
+        request_id=request_id,
+        applicant_id=rec_result.applicant_id,
+        query=rec_result.query,
+        total_candidates_retrieved=rec_result.total_candidates_retrieved,
+        recommendations=items,
+        applied_filters=_clean_dict(rec_result.applied_filters),
+        active_facts_summary=_clean_dict(rec_result.active_facts_summary),
+        conflicts_detected=rec_result.conflicts_detected,
+        metadata=_clean_dict(rec_result.metadata),
+        created_at=rec_result.created_at or "",
     )

@@ -186,11 +186,25 @@ const get = async (path, options = {}) => {
     });
 };
 
+/**
+ * DELETE helper.
+ */
+const del = async (path, options = {}) => {
+    return executeRequest(path, {
+        method: 'DELETE',
+        headers: options.headers || {},
+        timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
+        correlationId: options.correlationId
+    });
+};
+
 module.exports = {
     IntelligenceClientError,
     postJson,
     postMultipart,
     get,
+    del,
+    delete: del,
     getBaseUrl,
     getApiKey,
     HEADER_NAME

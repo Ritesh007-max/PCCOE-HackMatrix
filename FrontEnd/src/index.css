@@ -8,6 +8,7 @@
 @import './styles/schemeDetails.css';
 @import './styles/applications.css';
 @import './styles/chatbot.css';
+@import './styles/footer.css';
 
 /* ==========================================================================
    RESET & BASELINE STYLES
@@ -32,6 +33,17 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* Hide main browser scrollbar globally while maintaining full scrollability */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* Chrome, Edge, Safari, Opera: Hide main browser scrollbar */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 #root {

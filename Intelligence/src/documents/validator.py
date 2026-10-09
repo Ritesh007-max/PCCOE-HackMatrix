@@ -71,10 +71,12 @@ class DocumentValidator:
         max_file_size_bytes: int = DEFAULT_MAX_FILE_SIZE_BYTES,
         max_image_pixels: int = MAX_IMAGE_PIXELS,
         max_pdf_pages: int = MAX_PDF_PAGES,
+        allow_duplicates: bool = False,
     ):
         self.max_file_size_bytes = max_file_size_bytes
         self.max_image_pixels = max_image_pixels
         self.max_pdf_pages = max_pdf_pages
+        self.allow_duplicates = allow_duplicates
         self._seen_hashes: Set[str] = set()
 
     def sanitize_filename(self, filename: str) -> str:
@@ -116,7 +118,7 @@ class DocumentValidator:
         sha256_hash = hashlib.sha256(data).hexdigest()
 
         # 3. Duplicate hash detection
-        if sha256_hash in self._seen_hashes:
+        if not self.allow_duplicates and sha256_hash in self._seen_hashes:
             return ValidationResult(
                 is_valid=False,
                 status=DocumentProcessingStatus.DUPLICATE,
@@ -204,22 +206,31 @@ class DocumentValidator:
         """Validates magic bytes against declared extension with zip bomb and macro protection."""
         ext = Path(filename).suffix.lower()
 
-        # PDF validation
-        if data.startswith(b"%PDF-"):
-            if ext and ext != ".pdf":
+        # PDF validation: ISO 32000-1 allows %PDF- anywhere in first 1024 bytes
+        pdf_sig_pos = data[:1024].find(b"%PDF-")
+        if pdf_sig_pos != -1:
+            if ext and ext not in (".pdf", ""):
                 return "application/pdf", False, f"Extension mismatch: file has .pdf content but '{ext}' extension."
-            # Check for basic PDF structure
-            if len(data) < 32 or (b"%%EOF" not in data[-1024:] and b"/Root" not in data):
-                return "application/pdf", False, "Malformed PDF: missing document catalog or end-of-file trailer."
-            # Page count check if PyMuPDF is available
+            if len(data) < 32:
+                return "application/pdf", False, "Malformed PDF: file size too small to be a valid PDF."
+            # Verify structure and page count using PyMuPDF if available
             try:
                 import pymupdf
                 with pymupdf.open(stream=data, filetype="pdf") as pdf_doc:
                     if len(pdf_doc) > self.max_pdf_pages:
                         return "application/pdf", False, f"PDF page count ({len(pdf_doc)}) exceeds safety ceiling of {self.max_pdf_pages} pages."
-            except Exception:
-                pass
+            except Exception as exc:
+                if b"%%EOF" not in data[-4096:] and b"/Root" not in data and b"stream" not in data:
+                    return "application/pdf", False, f"Malformed PDF: unable to parse PDF structure: {exc}"
             return "application/pdf", True, None
+
+        # Rejection of non-PDF files claiming .pdf extension
+        if ext == ".pdf":
+            if data.startswith(b"\x89PNG\r\n\x1a\n"):
+                return "image/png", False, "Extension mismatch: PNG image has '.pdf' extension."
+            if data.startswith(b"\xff\xd8\xff"):
+                return "image/jpeg", False, "Extension mismatch: JPEG image has '.pdf' extension."
+            return "application/octet-stream", False, "Invalid PDF: Missing %PDF- file signature."
 
         # DOCX validation (ZIP archive containing word/document.xml)
         if any(data.startswith(sig) for sig in MAGIC_BYTES["zip_docx"]):

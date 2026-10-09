@@ -169,24 +169,45 @@ def build_metadata_filter(query: RetrievalQuery) -> Optional[Callable[[Dict[str,
     if query.state_filter:
         req_state = query.state_filter.strip().lower()
         # State match allows state-specific matches OR national/central (All India) schemes
-        filters.append(lambda m: (
-            m.get("state") is None or
-            str(m.get("state")).strip().lower() in (req_state, "all india", "central", "all")
-        ))
+        # Schemes with no explicit state are allowed ONLY if they are not explicitly marked as State-level
+        def _matches_state(m):
+            st = m.get("state")
+            if st is not None and str(st).strip().lower() not in ("none", "nan", ""):
+                return str(st).strip().lower() in (req_state, "all india", "central", "all", "pan india")
+            lvl = str(m.get("level") or (m.get("metadata") or {}).get("level") or "").strip().lower()
+            return lvl not in ("state", "state government")
+        filters.append(_matches_state)
+
 
     if query.category_filter:
         req_cat = query.category_filter.strip().lower()
-        filters.append(lambda m: (
-            m.get("category") is None or
-            req_cat in str(m.get("category")).strip().lower() or
-            "all" in str(m.get("category")).strip().lower()
-        ))
+        is_social_cat = req_cat in ("sc", "st", "obc", "ews", "general", "all")
+
+        def _matches_category(m: Dict[str, Any]) -> bool:
+            cat_val = str(m.get("category") or "").strip().lower()
+            soc_val = str(m.get("social_category") or (m.get("metadata") or {}).get("social_category") or "").strip().lower()
+            target_val = str(m.get("target_beneficiaries") or "").strip().lower()
+            desc_val = str(m.get("description") or "").strip().lower()
+
+            if is_social_cat:
+                # If social category filter (e.g. SC, OBC):
+                # Matches if scheme category/soc is open/all, or explicitly includes applicant's category
+                if not soc_val or soc_val in ("all", "all categories", "any", "general", "none", "", "nan"):
+                    return True
+                return req_cat in soc_val or req_cat in cat_val or req_cat in target_val or req_cat in desc_val
+            else:
+                return not cat_val or cat_val in ("all", "none", "", "nan") or req_cat in cat_val
+
+        filters.append(_matches_category)
 
     if query.beneficiary_filter:
         req_ben = query.beneficiary_filter.strip().lower()
+        # An individual citizen/student matches schemes for Individual, Family, All, or matching target_beneficiaries
         filters.append(lambda m: (
             m.get("beneficiary_type") is None or
-            req_ben in str(m.get("beneficiary_type")).strip().lower()
+            str(m.get("beneficiary_type")).strip().lower() in ("individual", "family", "all", "citizens", "citizen", "none", "nan") or
+            req_ben in str(m.get("beneficiary_type")).strip().lower() or
+            req_ben in str(m.get("target_beneficiaries", "")).strip().lower()
         ))
 
     if query.content_type_filter:

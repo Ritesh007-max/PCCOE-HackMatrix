@@ -16,55 +16,44 @@ import {
   Shield,
   ArrowRight,
 } from 'lucide-react';
-import { resolveDisplayName, logoutUser } from '../../services/authService';
-import { SCHEMES } from '../../data/schemesData';
-import { useUser, useClerk } from '@clerk/react';
+import { resolveDisplayName, logoutUser, getStoredRole } from '../../services/authService';
+import { searchSchemes } from '../../services/schemeService';
+import { fetchUserApplications } from '../../services/applicationService';
+import {
+  fetchNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead
+} from '../../services/notificationService';
 
-const DEFAULT_NOTIFICATIONS = [
-  {
-    id: 'notif-1',
-    title: 'Application Status Updated',
-    message: "Your application #APP-2026-8842 for PM Kisan Samman Nidhi is now 'Under Review'.",
-    time: '10m ago',
-    unread: true,
-    type: 'status',
-    link: '/applications',
-  },
-  {
-    id: 'notif-2',
-    title: 'New Scheme Matched',
-    message: 'You qualify for National Apprenticeship Promotion Scheme (NAPS) based on your profile.',
-    time: '2h ago',
-    unread: true,
-    type: 'scheme',
-    link: '/discover',
-  },
-  {
-    id: 'notif-3',
-    title: 'Document Verified',
-    message: 'Income Certificate (2025-26) was successfully verified with DBT portal.',
-    time: '1d ago',
-    unread: false,
-    type: 'doc',
-    link: '/documents',
-  },
-  {
-    id: 'notif-4',
-    title: 'Deadline Approaching',
-    message: 'Digital India Internship application submission closes in 3 days.',
-    time: '2d ago',
-    unread: false,
-    type: 'alert',
-    link: '/discover',
-  },
-];
+function calculateProfileStrength(data) {
+  if (!data) return 0;
+  const fields = [
+    data.fullName || data.name,
+    data.email,
+    data.phone,
+    data.state,
+    data.district || data.city,
+    data.occupation,
+    data.income || data.annual_income,
+    data.applicantType,
+    data.dob || data.date_of_birth,
+    data.gender,
+  ];
+  const filledCount = fields.filter((val) => val && String(val).trim() !== '' && String(val).trim() !== 'Not added').length;
+  return Math.round((filledCount / fields.length) * 100);
+}
 
-export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
+export default function Header({ onToggleSidebar, onToggleChat, onOpenChat, isChatOpen }) {
   const navigate = useNavigate();
-  const { user: clerkUser, isLoaded: isClerkLoaded, isSignedIn: isClerkSignedIn } = useUser();
-  const clerk = useClerk();
-  const clerkSignOut = clerk?.signOut;
-
+  const handleChatClick = (e) => {
+    if (typeof onToggleChat === 'function') {
+      onToggleChat(e);
+    } else if (typeof onOpenChat === 'function') {
+      onOpenChat(e);
+    } else {
+      window.dispatchEvent(new CustomEvent('open_fin_chat'));
+    }
+  };
   // User State
   const [userInfo, setUserInfo] = useState(() => {
     try {
@@ -72,58 +61,48 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
       if (stored) {
         const parsed = JSON.parse(stored);
         const resolved = resolveDisplayName(parsed, parsed?.email);
-        const fullName = (resolved || parsed?.fullName || parsed?.name || 'Hemang Singh').trim();
+        const fullName = (resolved || parsed?.fullName || parsed?.name || 'Citizen').trim();
         const parts = fullName.split(' ').filter(Boolean);
-        const initials = fullName.length >= 2 ? fullName.substring(0, 2).toUpperCase() : fullName.toUpperCase();
+        const initials = fullName.length >= 2 ? fullName.substring(0, 2).toUpperCase() : (fullName ? fullName.toUpperCase() : 'CI');
         const name = parts[0] || fullName;
         const avatarUrl = parsed?.avatarUrl || parsed?.avatar_url || '';
         const role = parsed?.applicantType ? `${parsed.applicantType} Applicant` : 'Individual Applicant';
-        const email = parsed?.email || 'hemang@example.com';
-        const state = parsed?.state || 'Gujarat';
-        return { name, fullName, initials, avatarUrl, role, email, state };
+        const email = parsed?.email || '';
+        const state = parsed?.state || '';
+        const strength = calculateProfileStrength(parsed);
+        return { name, fullName, initials, avatarUrl, role, email, state, strength };
       }
-    } catch (e) {}
+    } catch (_) {}
     return {
-      name: 'Hemang',
-      fullName: 'Hemang Singh',
-      initials: 'HE',
+      name: 'Citizen',
+      fullName: 'Citizen',
+      initials: 'CI',
       avatarUrl: '',
       role: 'Individual Applicant',
-      email: 'hemang@example.com',
-      state: 'Gujarat',
+      email: '',
+      state: '',
+      strength: 0,
     };
   });
 
-  // Sync user info if Clerk session exists
-  useEffect(() => {
-    if (isClerkLoaded && isClerkSignedIn && clerkUser) {
-      const fullName = clerkUser.fullName || clerkUser.firstName || 'Clerk User';
-      const parts = fullName.split(' ').filter(Boolean);
-      const name = parts[0] || fullName;
-      const initials = fullName.length >= 2 ? fullName.substring(0, 2).toUpperCase() : fullName.toUpperCase();
-      const email = clerkUser.primaryEmailAddress?.emailAddress || '';
-      const avatarUrl = clerkUser.imageUrl || '';
-      setUserInfo((prev) => ({
-        ...prev,
-        name,
-        fullName,
-        initials,
-        avatarUrl,
-        email: email || prev.email,
-      }));
-    }
-  }, [isClerkLoaded, isClerkSignedIn, clerkUser]);
-
-  // Derived effective values prioritizing live Google/Clerk details
-  const displayAvatar = (isClerkSignedIn && clerkUser?.imageUrl) || userInfo.avatarUrl;
-  const displayEmail = (isClerkSignedIn && clerkUser?.primaryEmailAddress?.emailAddress) || userInfo.email;
-  const displayFullName = (isClerkSignedIn && (clerkUser?.fullName || clerkUser?.firstName)) || userInfo.fullName;
-  const displayName = (isClerkSignedIn && (clerkUser?.firstName || clerkUser?.fullName?.split(' ')[0])) || userInfo.name;
+  const displayAvatar = userInfo.avatarUrl;
+  const displayEmail = userInfo.email;
+  const displayFullName = userInfo.fullName;
+  const displayName = userInfo.name;
 
   // Dropdown States
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const stored = localStorage.getItem('fin_notifications');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (_) {}
+    return [];
+  });
 
   // Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -140,21 +119,63 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
     return notifications.filter((n) => n.unread).length;
   }, [notifications]);
 
+  // Synchronize notifications with real backend notification API
+  useEffect(() => {
+    let isMounted = true;
+    const loadUserNotifications = () => {
+      fetchNotifications()
+        .then((res) => {
+          if (isMounted && res && Array.isArray(res.notifications)) {
+            setNotifications(res.notifications);
+          }
+        })
+        .catch(() => {
+          // Graceful fallback to application records if notifications endpoint is pending
+          fetchUserApplications()
+            .then((apps) => {
+              if (isMounted && Array.isArray(apps) && apps.length > 0) {
+                const appNotifs = apps.slice(0, 5).map((app, idx) => ({
+                  id: `notif-app-${app.id || idx}`,
+                  applicationId: app.id,
+                  title: `Application ${app.status === 'approved' ? 'Approved' : app.status === 'action_required' ? 'Action Required' : app.status === 'rejected' ? 'Rejected' : 'Status Updated'}`,
+                  message: `Your application for ${app.scheme_name || (app.scheme && app.scheme.name) || 'Scheme'} is currently ${app.status ? app.status.replace(/_/g, ' ') : 'Under Review'}.${app.remarks ? ` Note: "${app.remarks}"` : ''}`,
+                  time: app.submitted_at || app.created_at ? new Date(app.submitted_at || app.created_at).toLocaleDateString('en-GB') : 'Recent',
+                  unread: app.status === 'action_required' || idx === 0,
+                  read: !(app.status === 'action_required' || idx === 0),
+                  type: app.status === 'approved' ? 'doc' : 'status',
+                  link: `/applications?open=${app.id}`
+                }));
+                setNotifications(appNotifs);
+              }
+            })
+            .catch(() => {});
+        });
+    };
+
+    loadUserNotifications();
+    const interval = setInterval(loadUserNotifications, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   // Synchronize user updates
   useEffect(() => {
     const handleUserUpdate = (e) => {
       try {
         const user = e?.detail || JSON.parse(localStorage.getItem('fin_user') || '{}');
         const resolved = resolveDisplayName(user, user?.email);
-        const fullName = (resolved || user?.fullName || user?.name || 'Hemang Singh').trim();
+        const fullName = (resolved || user?.fullName || user?.name || 'Citizen').trim();
         const parts = fullName.split(' ').filter(Boolean);
-        const initials = fullName.length >= 2 ? fullName.substring(0, 2).toUpperCase() : fullName.toUpperCase();
+        const initials = fullName.length >= 2 ? fullName.substring(0, 2).toUpperCase() : (fullName ? fullName.toUpperCase() : 'CI');
         const name = parts[0] || fullName;
         const avatarUrl = user?.avatarUrl || user?.avatar_url || '';
         const role = user?.applicantType ? `${user.applicantType} Applicant` : 'Individual Applicant';
-        const email = user?.email || 'hemang@example.com';
-        const state = user?.state || 'Gujarat';
-        setUserInfo({ name, fullName, initials, avatarUrl, role, email, state });
+        const email = user?.email || '';
+        const state = user?.state || '';
+        const strength = calculateProfileStrength(user);
+        setUserInfo({ name, fullName, initials, avatarUrl, role, email, state, strength });
       } catch (err) {}
     };
 
@@ -202,19 +223,32 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Matching schemes based on query
-  const matchingSchemes = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return SCHEMES.filter((scheme) => {
-      return (
-        scheme.title?.toLowerCase().includes(q) ||
-        scheme.subtitle?.toLowerCase().includes(q) ||
-        scheme.description?.toLowerCase().includes(q) ||
-        scheme.tags?.some((t) => t.toLowerCase().includes(q)) ||
-        scheme.categories?.some((c) => c.toLowerCase().includes(q))
-      );
-    }).slice(0, 5);
+  // Dynamic matching schemes based on query
+  const [matchingSchemes, setMatchingSchemes] = useState([]);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setMatchingSchemes([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchSchemes({ query: q, limit: 5 });
+        const adapted = (res.schemes || []).map((s) => ({
+          id: s.id,
+          title: s.name || s.title,
+          subtitle: s.ministry || s.subtitle || 'Government Scheme',
+          description: s.benefit_summary || s.description || '',
+          tags: s.tags || []
+        }));
+        setMatchingSchemes(adapted);
+      } catch (_) {
+        setMatchingSchemes([]);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
   }, [searchQuery]);
 
   // Handle Search Submit (Enter)
@@ -240,20 +274,35 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
   };
 
   const handleMarkAllAsRead = () => {
-    setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })));
+    markAllNotificationsAsRead().catch(() => {});
+    setNotifications((prev) => prev.map((item) => ({ ...item, unread: false, read: true })));
   };
 
   const handleClearAllNotifications = () => {
+    markAllNotificationsAsRead().catch(() => {});
     setNotifications([]);
   };
 
   const handleNotificationClick = (item) => {
+    if (item.id && !item.id.startsWith('notif-app-')) {
+      markNotificationAsRead(item.id).catch(() => {});
+    }
     setNotifications((prev) =>
-      prev.map((n) => (n.id === item.id ? { ...n, unread: false } : n))
+      prev.map((n) => (n.id === item.id ? { ...n, unread: false, read: true } : n))
     );
     setIsNotificationOpen(false);
-    if (item.link) {
+
+    const currentRole = getStoredRole();
+    if (item.applicationId) {
+      if (currentRole === 'reviewer') {
+        navigate(`/reviewer/applications?open=${item.applicationId}`);
+      } else {
+        navigate(`/applications?open=${item.applicationId}`);
+      }
+    } else if (item.link) {
       navigate(item.link);
+    } else {
+      navigate(currentRole === 'reviewer' ? '/reviewer/applications' : '/applications');
     }
   };
 
@@ -267,16 +316,9 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
   const handleLogout = async () => {
     setIsProfileOpen(false);
     try {
-      if (isClerkSignedIn) {
-        await clerkSignOut();
-      }
-    } catch (e) {
-      console.error('Clerk signOut error:', e);
-    }
-    try {
       await logoutUser();
       navigate('/login');
-    } catch (e) {
+    } catch (_) {
       navigate('/login');
     }
   };
@@ -415,7 +457,7 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
         <button
           type="button"
           className={`navbar-ai-assistant-btn ${isChatOpen ? 'active' : ''}`}
-          onClick={onToggleChat}
+          onClick={handleChatClick}
           aria-label="Open FIN AI Assistant"
           title="Open FIN Assistant (AI)"
         >
@@ -570,7 +612,7 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
                   <h3 className="profile-popover-user-name">{displayFullName}</h3>
                   <span className="profile-popover-user-role">{userInfo.role}</span>
                   <span className="profile-popover-user-email">{displayEmail}</span>
-                  <span className="profile-popover-user-loc">{userInfo.state}, India</span>
+                  <span className="profile-popover-user-loc">{userInfo.state ? `${userInfo.state}, India` : 'India'}</span>
                 </div>
               </div>
 
@@ -578,10 +620,10 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
               <div className="profile-popover-meter-box">
                 <div className="popover-meter-labels">
                   <span className="popover-meter-title">Profile Strength</span>
-                  <span className="popover-meter-val">75% Complete</span>
+                  <span className="popover-meter-val">{userInfo.strength}% Complete</span>
                 </div>
                 <div className="popover-meter-track">
-                  <div className="popover-meter-fill" style={{ width: '75%' }} />
+                  <div className="popover-meter-fill" style={{ width: `${userInfo.strength}%` }} />
                 </div>
               </div>
 
@@ -631,23 +673,6 @@ export default function Header({ onToggleSidebar, onToggleChat, isChatOpen }) {
                   <Shield size={16} />
                   <span>Security & Password</span>
                 </button>
-                {isClerkSignedIn && (
-                  <button
-                    type="button"
-                    className="profile-popover-nav-btn"
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      if (clerk?.openUserProfile) {
-                        clerk.openUserProfile();
-                      } else {
-                        navigate('/profile');
-                      }
-                    }}
-                  >
-                    <User size={16} />
-                    <span>Manage Google Account</span>
-                  </button>
-                )}
               </div>
 
               {/* Divider & Sign Out */}

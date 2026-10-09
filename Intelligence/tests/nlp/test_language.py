@@ -58,6 +58,40 @@ class TestLanguageDetector(unittest.TestCase):
             self.assertEqual(res.script, "Latin")
             self.assertGreater(res.confidence, 0.6)
 
+    def test_gujarati_detection(self):
+        queries = [
+            "ગુજરાતમાં વિદ્યાર્થીઓ માટે કઈ યોજનાઓ છે?",
+            "PMEGP માટે કયા દસ્તાવેજો જરૂરી છે?",
+            "મને ખેડૂત સબસિડી વિશે માહિતી આપો"
+        ]
+        for q in queries:
+            res = self.detector.detect(q)
+            self.assertEqual(res.language, "gu", f"Failed for query: {q}")
+            self.assertEqual(res.script, "Gujarati")
+            self.assertGreater(res.confidence, 0.7)
+
+    def test_tamil_detection(self):
+        queries = [
+            "தமிழ்நாட்டில் மாணவர்களுக்கான திட்டங்கள் என்ன?",
+            "விவசாயிகளுக்கு என்ன மானியம் கிடைக்கும்?"
+        ]
+        for q in queries:
+            res = self.detector.detect(q)
+            self.assertEqual(res.language, "ta", f"Failed for query: {q}")
+            self.assertEqual(res.script, "Tamil")
+            self.assertGreater(res.confidence, 0.7)
+
+    def test_bengali_detection(self):
+        queries = [
+            "পশ্চিমবঙ্গে কৃষকদের জন্য কী কী প্রকল্প আছে?",
+            "আমার জন্য কোন স্কলারশিপ পাওয়া যাবে?"
+        ]
+        for q in queries:
+            res = self.detector.detect(q)
+            self.assertEqual(res.language, "bn", f"Failed for query: {q}")
+            self.assertEqual(res.script, "Bengali")
+            self.assertGreater(res.confidence, 0.7)
+
     def test_empty_and_whitespace(self):
         res_empty = self.detector.detect("")
         self.assertEqual(res_empty.language, "unknown")

@@ -50,6 +50,7 @@ from src.llm.prompts import SYSTEM_PROMPT_QUERY_UNDERSTANDING
 from src.documents.evidence import EvidenceRegistry
 from src.extraction.models import FactVerificationStatus, ApplicantFact, CANONICAL_PROFILE_FIELDS
 from src.normalization.normalizer import normalize_field_value
+from src.context.service import ApplicantContextService
 
 # Rules & Deterministic Eligibility
 from src.rules.evaluator import RuleEvaluator
@@ -110,6 +111,7 @@ class ApplicationPipeline:
         doc_pipeline: Optional[DocumentPipeline] = None,
         benefit_calculator: Optional[BenefitCalculator] = None,
         rule_evaluator: Optional[RuleEvaluator] = None,
+        context_service: Optional[ApplicantContextService] = None,
     ):
         self.llm_config = llm_config or LLMConfig.from_env()
         self.llm_client = llm_client or LLMClient(config=self.llm_config)
@@ -120,6 +122,7 @@ class ApplicationPipeline:
         self.fact_extractor = ApplicantFactExtractor(llm_client=self.llm_client)
         self.explanation_generator = GroundedExplanationGenerator(llm_client=self.llm_client)
         self.ast_analyzer = RuleASTMissingFieldAnalyzer()
+        self.context_service = context_service or ApplicantContextService()
 
     def process_application(
         self,
@@ -220,6 +223,12 @@ class ApplicationPipeline:
         # STEP 11: Evidence Registration & Provenance Ledger Update
         # -------------------------------------------------------------
         step = 11
+        for doc in parsed_documents:
+            try:
+                self.context_service.process_and_store_document(doc, applicant_id=app_id)
+            except Exception as e:
+                logger.warning("Could not persist document %s to context service: %s", doc.file_name, e)
+
         for cand in all_candidates:
             # Map verification status: document extract vs self-reported
             status = FactVerificationStatus.EXTRACTED

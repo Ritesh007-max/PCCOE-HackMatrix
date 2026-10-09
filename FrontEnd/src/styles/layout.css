@@ -3,6 +3,22 @@
    Spacious, elegant, editorial, and matching Image 2 perfectly
    ========================================================================== */
 
+:root {
+  --fin-panorama-height: 240px;
+}
+
+@media (min-height: 950px) {
+  :root {
+    --fin-panorama-height: 260px;
+  }
+}
+
+@media (max-height: 740px) {
+  :root {
+    --fin-panorama-height: 220px;
+  }
+}
+
 .app-shell {
   display: flex;
   min-height: 100vh;
@@ -17,7 +33,7 @@
   width: 250px;
   min-width: 250px;
   background-color: #FAF8F5;
-  border-right: 1px solid #E8E5DF;
+  border-right: none;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -28,6 +44,20 @@
   z-index: 100;
   overflow: hidden;
   box-sizing: border-box;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Vertical boundary on upper sidebar; leaves the lower panorama seamlessly integrated */
+.app-sidebar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: calc(100% - var(--fin-panorama-height) - 50px);
+  background-color: #E8E5DF;
+  pointer-events: none;
+  z-index: 10;
 }
 
 /* Custom subtle scrollbar if ever needed */
@@ -41,7 +71,7 @@
 
 /* Top Branding - Designed FIN Brand Lockup (Balanced Size, Zero Mid-Gap) */
 .sidebar-top-section {
-  padding: 12px 18px 10px 18px;
+  padding: 10px 18px 6px 18px;
   flex-shrink: 0;
 }
 
@@ -117,10 +147,10 @@
 
 /* Navigation Links */
 .sidebar-nav {
-  padding: 6px 12px;
+  padding: 4px 12px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
   flex-shrink: 0;
 }
 
@@ -128,11 +158,11 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 44px;
-  padding: 9px 14px;
+  min-height: 40px;
+  padding: 7px 12px;
   border-radius: 8px;
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 500;
   color: #10243A;
   position: relative;
@@ -183,46 +213,47 @@
   line-height: 1.2;
 }
 
-/* Lower Section: Quote + Ribbon + Visual with balanced gap from navigation */
+/* Lower Section: Quote + Ribbon + Visual pinned cleanly at bottom */
 .sidebar-bottom-section {
-  margin-top: 20px; /* Reduced, elegant gap between Profile and Quote */
+  margin-top: auto;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 /* Middle Editorial Quote */
 .sidebar-quote-container {
-  padding: 0 18px 4px 18px;
+  padding: 0 16px 2px 16px;
   flex-shrink: 0;
 }
 
 .sidebar-quote-text {
   font-family: var(--font-serif);
-  font-size: 13.5px;
+  font-size: 16.5px;
   font-style: italic;
-  font-weight: 500;
-  line-height: 1.45;
-  color: #10243A;
+  font-weight: 600;
+  line-height: 1.38;
+  color: #0E1F30;
+  letter-spacing: -0.015em;
   margin-bottom: 4px;
 }
 
 .sidebar-quote-author {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 400;
   color: #667085;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .sidebar-quote-ribbon-img {
   width: 100%;
-  height: 14px;
+  height: 12px;
   display: block;
-  margin-top: 2px;
-  margin-bottom: 6px;
+  margin-top: 1px;
+  margin-bottom: 8px;
   object-fit: fill;
   flex-shrink: 0;
 }
@@ -230,50 +261,117 @@
 /* Bottom Bharat Building Photo - FULL SIDEBAR WIDTH COVER (edge-to-edge) */
 .sidebar-building-bottom-wrapper {
   width: 100%;
-  flex: 1;
-  min-height: 200px;
+  height: var(--fin-panorama-height);
+  min-height: var(--fin-panorama-height);
+  max-height: var(--fin-panorama-height);
   padding: 0;
   margin: 0;
   line-height: 0;
   overflow: hidden;
-  flex-shrink: 1;
+  flex-shrink: 0;
   position: relative;
   background-color: #FAF8F5;
+  background-image: url('../assets/master_continuous_panorama_32x9.png');
+  background-repeat: no-repeat;
+  background-position: left 38%;
+  background-size: 100vw auto;
+  border-right: 1px solid rgba(255, 255, 255, 0.08); /* Extremely subtle boundary only where it crosses the panorama */
+  filter: contrast(0.8);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.04) 4%,
+    rgba(0, 0, 0, 0.15) 8%,
+    rgba(0, 0, 0, 0.35) 13%,
+    rgba(0, 0, 0, 0.65) 18%,
+    rgba(0, 0, 0, 0.88) 23%,
+    rgba(0, 0, 0, 1) 28%,
+    rgba(0, 0, 0, 1) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.04) 4%,
+    rgba(0, 0, 0, 0.15) 8%,
+    rgba(0, 0, 0, 0.35) 13%,
+    rgba(0, 0, 0, 0.65) 18%,
+    rgba(0, 0, 0, 0.88) 23%,
+    rgba(0, 0, 0, 1) 28%,
+    rgba(0, 0, 0, 1) 100%
+  );
 }
 
-/* Soft fade gradient at the top edge into sidebar background */
 .sidebar-building-bottom-wrapper::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 48px;
-  background: linear-gradient(to bottom, #FAF8F5 0%, rgba(250, 248, 245, 0.75) 45%, transparent 100%);
+  height: 52px;
+  background: linear-gradient(
+    to bottom,
+    #FAF8F5 0%,
+    rgba(250, 248, 245, 0.6) 35%,
+    rgba(250, 248, 245, 0.15) 70%,
+    transparent 100%
+  );
   pointer-events: none;
   z-index: 2;
 }
 
-.sidebar-building-img {
+.sidebar-bottom-bar-segment {
   width: 100%;
-  height: 100%;
-  display: block;
-  border-radius: 0;
-  box-shadow: none;
-  object-fit: cover;
-  object-position: top center;
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.25) 15%, rgba(0, 0, 0, 0.85) 35%, rgba(0, 0, 0, 1) 55%, rgba(0, 0, 0, 1) 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.25) 15%, rgba(0, 0, 0, 0.85) 35%, rgba(0, 0, 0, 1) 55%, rgba(0, 0, 0, 1) 100%);
+  height: 50px;
+  min-height: 50px;
+  background-color: #002B24;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-right: none;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
 }
 
-/* Elegant editorial text overlay on bottom of building photo */
+.sidebar-bottom-bar-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+}
+
+.sidebar-bottom-bar-emblem {
+  height: 20px;
+  width: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.sidebar-bottom-bar-motto {
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #E6ECE9;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Editorial text overlay on bottom of building photo - clean, transparent with crisp contrast */
 .sidebar-building-overlay {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24px 18px 14px 18px;
-  background: linear-gradient(to top, rgba(12, 28, 42, 0.82) 0%, rgba(12, 28, 42, 0.45) 60%, transparent 100%);
+  padding: 16px 16px 10px 16px;
+  background: transparent;
   display: flex;
   flex-direction: column;
   line-height: 1.2;
@@ -283,22 +381,22 @@
 
 .sidebar-bharat-title {
   font-family: var(--font-serif);
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 700;
   color: #FFFFFF;
   letter-spacing: -0.01em;
   margin-bottom: 2px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.7);
 }
 
 .sidebar-bharat-subtitle {
   font-family: var(--font-sans);
   font-size: 11px;
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.94);
+  font-weight: 500;
+  color: #FFFFFF;
   line-height: 1.3;
   margin-bottom: 4px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.7);
 }
 
 .sidebar-bharat-tricolor-line {
@@ -325,8 +423,8 @@
     padding: 0 12px 2px 12px;
   }
   .sidebar-quote-text {
-    font-size: 11px;
-    line-height: 1.25;
+    font-size: 14.5px;
+    line-height: 1.32;
   }
   .sidebar-quote-ribbon-img {
     height: 12px;
@@ -1224,10 +1322,13 @@
 @media (max-width: 768px) {
   .app-sidebar {
     transform: translateX(-100%);
+    max-width: 85vw;
+    box-shadow: none;
   }
 
   .app-sidebar.open {
     transform: translateX(0);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
   }
 
   .mobile-close-btn {
@@ -1250,6 +1351,10 @@
     padding: 0 16px;
   }
 
+  .search-shortcut-badge {
+    display: none;
+  }
+
   .page-container {
     padding: 16px;
   }
@@ -1257,5 +1362,96 @@
   .user-info,
   .user-chevron {
     display: none;
+  }
+}
+
+@media (max-width: 580px) {
+  .app-header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .header-left {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .header-right {
+    gap: 8px;
+  }
+
+  .navbar-ai-assistant-btn {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    justify-content: center;
+    border-radius: var(--radius-md, 8px);
+  }
+
+  .navbar-ai-btn-text,
+  .navbar-ai-badge {
+    display: none;
+  }
+
+  .global-search-container {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 430px) {
+  .page-container {
+    padding: 12px;
+  }
+
+  .notification-popover {
+    width: min(340px, calc(100vw - 20px));
+    right: -52px;
+  }
+
+  .profile-popover {
+    width: min(310px, calc(100vw - 20px));
+    right: -4px;
+  }
+
+  .global-search-dropdown {
+    width: calc(100vw - 24px);
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 360px) {
+  .app-header {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .header-left {
+    gap: 6px;
+  }
+
+  .header-right {
+    gap: 6px;
+  }
+
+  .page-container {
+    padding: 10px 8px;
+  }
+
+  .notification-btn,
+  .user-profile-badge,
+  .menu-toggle-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .user-profile-badge {
+    padding: 0;
+  }
+
+  .user-avatar-hs {
+    width: 32px;
+    height: 32px;
   }
 }

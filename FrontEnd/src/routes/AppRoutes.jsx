@@ -6,29 +6,19 @@ import SchemeDetailsPage from '../pages/SchemeDetailsPage';
 import SchemeBenefitsPage from '../pages/SchemeBenefitsPage';
 import DocumentsPage from '../pages/DocumentsPage';
 import ApplicationsPage from '../pages/ApplicationsPage';
+import SuggestedSchemesPage from '../pages/SuggestedSchemesPage';
 import ProfilePage from '../pages/ProfilePage';
+import ReviewerDashboardPage from '../pages/ReviewerDashboardPage';
+import ReviewApplicationsPage from '../pages/ReviewApplicationsPage';
 import NotFoundPage from '../pages/NotFoundPage';
 
 import SignupPage from '../pages/SignupPage';
 import ProtectedRoute from '../components/common/ProtectedRoute';
-import { AuthenticateWithRedirectCallback } from '@clerk/react';
 
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Clerk SSO Redirect Callback Route */}
-      <Route
-        path="/sso-callback"
-        element={
-          <AuthenticateWithRedirectCallback
-            signInForceRedirectUrl="/dashboard"
-            signUpForceRedirectUrl="/dashboard"
-            continueSignUpUrl="/dashboard"
-          />
-        }
-      />
-
-      {/* Default route redirects to /signup when starting npm run dev */}
+      {/* Default route redirects to /signup when starting */}
       <Route path="/" element={<Navigate to="/signup" replace />} />
 
       {/* Standalone Authentication Pages */}
@@ -37,7 +27,7 @@ export default function AppRoutes() {
       <Route path="/login" element={<SignupPage initialMode="signin" />} />
       <Route path="/signin" element={<SignupPage initialMode="signin" />} />
 
-      {/* Main Authenticated Dashboard Pages */}
+      {/* Main Authenticated Layout Container */}
       <Route
         element={
           <ProtectedRoute>
@@ -45,14 +35,64 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route path="/dashboard" element={<DashboardPage />} />
+        {/* Citizen Exclusive Pages */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['user']}>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/suggested-schemes"
+          element={
+            <ProtectedRoute allowedRoles={['user']}>
+              <SuggestedSchemesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/documents"
+          element={
+            <ProtectedRoute allowedRoles={['user']}>
+              <DocumentsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/applications"
+          element={
+            <ProtectedRoute allowedRoles={['user']}>
+              <ApplicationsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Reviewer Exclusive Pages */}
+        <Route
+          path="/reviewer/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['reviewer']}>
+              <ReviewerDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reviewer/applications"
+          element={
+            <ProtectedRoute allowedRoles={['reviewer']}>
+              <ReviewApplicationsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Shared Authenticated Pages (Citizens & Reviewers) */}
         <Route path="/discover" element={<DiscoverPage />} />
         <Route path="/schemes/:schemeId" element={<SchemeDetailsPage />} />
         <Route path="/scheme/:schemeId" element={<SchemeDetailsPage />} />
         <Route path="/schemes/:schemeId/benefits" element={<SchemeBenefitsPage />} />
         <Route path="/scheme/:schemeId/benefits" element={<SchemeBenefitsPage />} />
-        <Route path="/documents" element={<DocumentsPage />} />
-        <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

@@ -1,8 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, Coins, FileText, Clock, ChevronRight } from 'lucide-react';
-import { dashboardMetrics } from '../../data/dashboardData';
-
 const iconMap = {
   schemes: BookOpen,
   benefits: Coins,
@@ -10,7 +8,17 @@ const iconMap = {
   applications: Clock,
 };
 
-export default function MetricCardsRow({ metrics = dashboardMetrics }) {
+export default function MetricCardsRow({ metrics = [] }) {
+  if (!metrics || metrics.length === 0) {
+    return (
+      <div className="metrics-grid-row" role="region" aria-label="Key Profile Metrics">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="metric-card-item skeleton-box" style={{ minHeight: '84px', opacity: 0.6 }} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="metrics-grid-row" role="region" aria-label="Key Profile Metrics">
       {metrics.map((metric) => {

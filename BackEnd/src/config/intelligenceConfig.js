@@ -4,7 +4,7 @@ require('dotenv').config({
     path: path.join(__dirname, '../../.env')
 });
 
-const getBaseUrl = () => (process.env.AI_SERVER_URL || 'http://localhost:8000').trim().replace(/\/+$/, '');
+const getBaseUrl = () => (process.env.AI_SERVER_URL || 'http://127.0.0.1:8000').trim().replace('localhost', '127.0.0.1').replace(/\/+$/, '');
 const getApiKey = () => (process.env.AI_SERVICE_API_KEY || '').trim();
 
 module.exports = {

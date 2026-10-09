@@ -332,6 +332,75 @@ def normalize_occupation(value: Any) -> Optional[str]:
     return " ".join(word.capitalize() for word in raw.split())
 
 
+MONTH_NAMES = {
+    "january": 1, "jan": 1,
+    "february": 2, "feb": 2,
+    "march": 3, "mar": 3,
+    "april": 4, "apr": 4,
+    "may": 5,
+    "june": 6, "jun": 6,
+    "july": 7, "jul": 7,
+    "august": 8, "aug": 8,
+    "september": 9, "sep": 9, "sept": 9,
+    "october": 10, "oct": 10,
+    "november": 11, "nov": 11,
+    "december": 12, "dec": 12
+}
+
+
+def normalize_date(value: Any) -> Optional[str]:
+    """
+    Normalizes dates into canonical 'YYYY-MM-DD'.
+    Handles 'YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY', '12 August 2004', etc.
+    """
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw or raw.lower() in ("null", "none", "na", "n/a"):
+        return None
+
+    m_iso = re.match(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$", raw)
+    if m_iso:
+        y, m, d = int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3))
+        return f"{y:04d}-{m:02d}-{d:02d}"
+
+    m_dmy = re.match(r"^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$", raw)
+    if m_dmy:
+        d, m, y = int(m_dmy.group(1)), int(m_dmy.group(2)), int(m_dmy.group(3))
+        return f"{y:04d}-{m:02d}-{d:02d}"
+
+    m_text = re.search(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", raw)
+    if m_text:
+        d = int(m_text.group(1))
+        m_str = m_text.group(2).lower()
+        y = int(m_text.group(3))
+        if m_str in MONTH_NAMES:
+            return f"{y:04d}-{MONTH_NAMES[m_str]:02d}-{d:02d}"
+
+    m_text2 = re.search(r"([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})", raw)
+    if m_text2:
+        m_str = m_text2.group(1).lower()
+        d = int(m_text2.group(2))
+        y = int(m_text2.group(3))
+        if m_str in MONTH_NAMES:
+            return f"{y:04d}-{MONTH_NAMES[m_str]:02d}-{d:02d}"
+
+    return raw
+
+
+def normalize_district(value: Any) -> Optional[str]:
+    """
+    Normalizes district names by stripping administrative suffixes.
+    """
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw or raw.lower() in ("null", "none", "na", "n/a"):
+        return None
+    cleaned = re.sub(r"\b(?:district|dist\.?|city)\b", "", raw, flags=re.IGNORECASE).strip()
+    return " ".join(word.capitalize() for word in cleaned.split()) if cleaned else raw.title()
+
+
 def normalize_field_value(field: str, value: Any, validate: bool = True) -> Any:
     """
     Master normalization dispatcher.
@@ -344,12 +413,19 @@ def normalize_field_value(field: str, value: Any, validate: bool = True) -> Any:
 
     if field == "age":
         normalized = normalize_age(value)
-    elif field in ("annual_family_income", "income", "family_income"):
+    elif field in (
+        "annual_family_income", "annual_income", "personal_income", "income", "family_income",
+        "father_income", "mother_income", "other_income"
+    ):
         normalized = normalize_inr(value)
     elif field == "gender":
         normalized = normalize_gender(value)
     elif field == "state":
         normalized = normalize_state(value)
+    elif field in ("district", "city"):
+        normalized = normalize_district(value)
+    elif field in ("date_of_birth", "dob"):
+        normalized = normalize_date(value)
     elif field == "social_category":
         normalized = normalize_social_category(value)
     elif field in (

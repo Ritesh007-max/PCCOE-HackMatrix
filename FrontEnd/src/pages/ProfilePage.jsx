@@ -12,13 +12,17 @@ import {
   Info,
   Target,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  Check,
   Lock,
   Edit3,
   Sprout,
   X,
-  Check,
   Camera,
   Trash2,
+  ArrowLeft,
 } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
 import tricolorRibbon from '../assets/tricolor_ribbon_original.png';
@@ -30,94 +34,101 @@ import {
   getRegisteredUserByEmail,
   updateBackendProfile,
   fetchBackendProfile,
+  changeAccountPassword,
 } from '../services/authService';
-import { useUser } from '@clerk/react';
+import {
+  sanitizeIndianPhone,
+  formatAnnualIncome,
+  formatGender,
+  mapIncomeToRange,
+  formatLastLogin,
+  calculateProfileCompletion,
+  calculateCompletion,
+  getProfileInitials,
+  CANONICAL_INCOME_RANGES,
+  getCanonicalAmountForRange,
+  isLocationAndIncomeComplete,
+  isValidNumericIncome,
+  normalizeSocialCategory,
+  formatSocialCategory
+} from '../utils/profileHelpers';
+import {
+  CANONICAL_STATES,
+  getDistrictsForState,
+  isValidStateDistrict,
+  normalizeDistrictName
+} from '../data/geoData';
 import '../styles/profile.css';
 
-/**
- * Normalizes Indian phone numbers and completely prevents duplicate '+91 91' prefixes
- */
-export function sanitizeIndianPhone(raw) {
-  if (!raw || typeof raw !== 'string') return '+91 98765 43210';
-  let cleaned = raw.trim().replace(/^\+?91[\s\-_]*\+?91[\s\-_]*/, '+91 ').replace(/^\+?91[\s\-_]*/, '+91 ');
-  const digits = cleaned.replace(/\D/g, '');
-  if (digits.length === 12 && digits.startsWith('91')) {
-    const m = digits.slice(2);
-    return `+91 ${m.slice(0, 5)} ${m.slice(5)}`;
-  } else if (digits.length === 10) {
-    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
-  }
-  if (cleaned.startsWith('+91')) {
-    const rest = cleaned.slice(3).replace(/^\s*91\s*/, '').trim();
-    return `+91 ${rest}`;
-  }
-  return cleaned;
-}
+export {
+  sanitizeIndianPhone,
+  formatAnnualIncome,
+  mapIncomeToRange,
+  formatLastLogin,
+  calculateProfileCompletion,
+  calculateCompletion,
+  getProfileInitials,
+  CANONICAL_INCOME_RANGES,
+  getCanonicalAmountForRange,
+  isLocationAndIncomeComplete,
+  isValidNumericIncome
+};
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user: clerkUser, isLoaded: isClerkLoaded, isSignedIn: isClerkSignedIn } = useUser();
 
-  // Load and initialize profile data with fallback matching reference screenshot
+  // Load and initialize profile data dynamically
   const [profileData, setProfileData] = useState(() => {
     try {
       const stored = getStoredUser();
-      const email = stored?.email || 'hemang@example.com';
-      const reg = getRegisteredUserByEmail(email);
-      const name = resolveDisplayName(stored, email) || reg?.fullName || 'Hemang Singh';
+      const email = stored?.email || '';
+      const reg = email ? getRegisteredUserByEmail(email) : null;
+      const name = resolveDisplayName(stored, email) || reg?.fullName || '';
 
       return {
         fullName: name,
         email: email,
-        phone: sanitizeIndianPhone(stored?.phone || reg?.phone || '+91 98765 43210'),
-        state: stored?.state || reg?.state || 'Gujarat',
+        phone: (stored?.phone || reg?.phone) ? sanitizeIndianPhone(stored?.phone || reg?.phone) : '',
+        state: stored?.state || reg?.state || '',
         district: stored?.district || reg?.district || '',
-        occupation: stored?.occupation || reg?.occupation || 'Student',
-        income: stored?.income || reg?.income || '',
+        occupation: stored?.occupation || reg?.occupation || '',
+        income: stored?.annual_income ?? stored?.income ?? reg?.annual_income ?? reg?.income ?? '',
+        annual_income: stored?.annual_income ?? reg?.annual_income ?? (typeof stored?.income === 'number' ? stored.income : null),
         applicantType: stored?.applicantType || reg?.applicantType || 'Individual',
         dob: stored?.dob || reg?.dob || '',
         gender: stored?.gender || reg?.gender || '',
+        category: stored?.category || stored?.social_category || reg?.category || reg?.social_category || '',
+        social_category: stored?.social_category || stored?.category || reg?.social_category || reg?.category || '',
         avatarUrl: stored?.avatarUrl || stored?.avatar_url || reg?.avatarUrl || '',
+        lastSignInAt: stored?.lastSignInAt || stored?.last_sign_in_at || null,
+        emailConfirmedAt: stored?.emailConfirmedAt || stored?.email_confirmed_at || null,
+        loginMethod: stored?.loginMethod || stored?.login_method || 'Email & Password',
       };
     } catch (e) {
       return {
-        fullName: 'Hemang Singh',
-        email: 'hemang@example.com',
-        phone: '+91 98765 43210',
-        state: 'Gujarat',
+        fullName: '',
+        email: '',
+        phone: '',
+        state: '',
         district: '',
-        occupation: 'Student',
+        occupation: '',
         income: '',
+        annual_income: null,
         applicantType: 'Individual',
         dob: '',
         gender: '',
+        category: '',
+        social_category: '',
         avatarUrl: '',
+        lastSignInAt: null,
+        emailConfirmedAt: null,
+        loginMethod: 'Email & Password',
       };
     }
   });
 
-  // Calculate dynamic completion percentage
-  const calculateCompletion = (data) => {
-    const fields = [
-      data.fullName,
-      data.email,
-      data.phone,
-      data.state,
-      data.district,
-      data.occupation,
-      data.income,
-      data.applicantType,
-      data.dob,
-      data.gender,
-    ];
-    const filledCount = fields.filter((val) => val && val.trim() !== '' && val !== 'Not added').length;
-    // Base 6 filled fields = 75%, matching the exact reference screenshot
-    const pct = Math.round((filledCount / fields.length) * 100);
-    return Math.max(pct, 75);
-  };
-
   const [completionPercentage, setCompletionPercentage] = useState(() =>
-    calculateCompletion(profileData)
+    calculateProfileCompletion(profileData)
   );
 
   // Modal State
@@ -128,8 +139,52 @@ export default function ProfilePage() {
     newPassword: '',
     confirmPassword: '',
   });
+  const [passwordError, setPasswordError] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // District Combobox state & refs
+  const [isDistrictDropdownOpen, setIsDistrictDropdownOpen] = useState(false);
+  const [districtSearchQuery, setDistrictSearchQuery] = useState('');
+  const districtDropdownRef = React.useRef(null);
+  const districtSearchInputRef = React.useRef(null);
+
+  const availableDistricts = React.useMemo(() => {
+    return getDistrictsForState(editFormData.state);
+  }, [editFormData.state]);
+
+  const filteredDistricts = React.useMemo(() => {
+    if (!districtSearchQuery.trim()) return availableDistricts;
+    const q = districtSearchQuery.toLowerCase().trim();
+    return availableDistricts.filter((d) => d.toLowerCase().includes(q));
+  }, [availableDistricts, districtSearchQuery]);
+
+  useEffect(() => {
+    if (!isDistrictDropdownOpen) return;
+    const handleOutsideClick = (e) => {
+      if (districtDropdownRef.current && !districtDropdownRef.current.contains(e.target)) {
+        setIsDistrictDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsDistrictDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDistrictDropdownOpen]);
+
+  useEffect(() => {
+    if (isDistrictDropdownOpen && districtSearchInputRef.current) {
+      districtSearchInputRef.current.focus();
+    }
+  }, [isDistrictDropdownOpen]);
 
   // Sync on mount with registered user registry and backend if available
   useEffect(() => {
@@ -146,10 +201,13 @@ export default function ProfilePage() {
             state: stored?.state || reg.state || prev.state,
             district: stored?.district || reg.district || prev.district,
             occupation: stored?.occupation || reg.occupation || prev.occupation,
-            income: stored?.income || reg.income || prev.income,
-            applicantType: stored?.applicantType || reg.applicantType || prev.applicantType,
+            income: stored?.annual_income ?? stored?.income ?? reg.annual_income ?? reg.income ?? prev.income,
+            annual_income: stored?.annual_income ?? reg.annual_income ?? (typeof stored?.income === 'number' ? stored.income : prev.annual_income) ?? null,
+            applicantType: stored?.applicantType || stored?.applicant_type || reg.applicantType || reg.applicant_type || prev.applicantType,
             dob: stored?.dob || reg.dob || prev.dob,
             gender: stored?.gender || reg.gender || prev.gender,
+            category: normalizeSocialCategory(stored?.category || stored?.social_category || reg.category || reg.social_category || prev.category),
+            social_category: normalizeSocialCategory(stored?.social_category || stored?.category || reg.social_category || reg.category || prev.social_category),
             avatarUrl: stored?.avatarUrl || stored?.avatar_url || reg?.avatarUrl || prev.avatarUrl,
           };
           // Ensure stored user in localStorage is also populated with all registry fields
@@ -170,12 +228,19 @@ export default function ProfilePage() {
               fullName: b.full_name || prev.fullName,
               phone: sanitizeIndianPhone(b.phone || prev.phone),
               state: b.state || prev.state,
-              district: b.district || prev.district,
+              district: b.district || b.city || prev.district,
               occupation: b.occupation || prev.occupation,
-              income: b.income || b.annual_income ? String(b.income || b.annual_income) : prev.income,
-              dob: b.dob || prev.dob,
+              income: b.annual_income ?? b.income ?? prev.income,
+              annual_income: b.annual_income ?? (typeof b.income === 'number' ? b.income : prev.annual_income) ?? null,
+              applicantType: b.applicant_type || b.applicantType || prev.applicantType,
+              dob: b.dob || b.date_of_birth || prev.dob,
               gender: b.gender || prev.gender,
+              category: normalizeSocialCategory(b.category || b.social_category || b.caste_category || prev.category),
+              social_category: normalizeSocialCategory(b.social_category || b.category || b.caste_category || prev.social_category),
               avatarUrl: b.avatar_url || b.avatarUrl || prev.avatarUrl,
+              lastSignInAt: b.last_sign_in_at || prev.lastSignInAt,
+              emailConfirmedAt: b.email_confirmed_at || prev.emailConfirmedAt,
+              loginMethod: b.login_method || prev.loginMethod,
             };
             const currentStored = getStoredUser() || {};
             const fullObj = { ...currentStored, ...updatedFromBackend };
@@ -203,12 +268,15 @@ export default function ProfilePage() {
             email: email || prev.email,
             phone: sanitizeIndianPhone(user.phone || reg?.phone || prev.phone),
             state: user.state || reg?.state || prev.state,
-            district: user.district || reg?.district || prev.district,
+            district: user.district || user.city || reg?.district || prev.district,
             occupation: user.occupation || reg?.occupation || prev.occupation,
-            income: user.income || reg?.income || prev.income,
-            applicantType: user.applicantType || reg?.applicantType || prev.applicantType,
-            dob: user.dob || reg?.dob || prev.dob,
+            income: user.annual_income ?? user.income ?? reg?.annual_income ?? reg?.income ?? prev.income,
+            annual_income: user.annual_income ?? (typeof user.income === 'number' ? user.income : reg?.annual_income) ?? prev.annual_income ?? null,
+            applicantType: user.applicantType || user.applicant_type || reg?.applicantType || reg?.applicant_type || prev.applicantType,
+            dob: user.dob || user.date_of_birth || reg?.dob || prev.dob,
             gender: user.gender || reg?.gender || prev.gender,
+            category: user.category || user.social_category || user.caste_category || reg?.category || prev.category,
+            social_category: user.social_category || user.category || user.caste_category || reg?.social_category || prev.social_category,
             avatarUrl: user.avatarUrl || user.avatar_url || prev.avatarUrl,
           }));
         }
@@ -225,7 +293,7 @@ export default function ProfilePage() {
 
   // Update completion percentage when profileData changes
   useEffect(() => {
-    setCompletionPercentage(calculateCompletion(profileData));
+    setCompletionPercentage(calculateProfileCompletion(profileData));
   }, [profileData]);
 
   // Avatar upload and remove handlers
@@ -299,21 +367,61 @@ export default function ProfilePage() {
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  // Derive initials matching screenshot (HE for Hemang / Hemang Singh)
+  // Derive initials dynamically from applicant full name
   const getInitials = (name) => {
-    if (!name) return 'HE';
+    if (!name) return 'CI';
     const clean = name.trim();
-    if (clean.length <= 2) return clean.toUpperCase();
-    return clean.substring(0, 2).toUpperCase();
+    if (!clean) return 'CI';
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return clean.slice(0, 2).toUpperCase();
   };
 
   // Open modal with current state
   const handleOpenEditModal = () => {
+    const currentState = profileData.state || 'Gujarat';
+    const currentDistrict = profileData.district || '';
+    // Requirement 4 & 6:
+    // If persisted District belongs to that State, automatically select it.
+    // If invalid combination (e.g. State=Gujarat, District=Jaipur), require correction.
+    const isDistrictValid = isValidStateDistrict(currentState, currentDistrict);
+
     setEditFormData({
       ...profileData,
+      state: currentState,
+      district: isDistrictValid ? currentDistrict : '',
       phone: sanitizeIndianPhone(profileData.phone),
+      income: profileData.income ?? '',
+      gender: profileData.gender ? profileData.gender.toLowerCase() : '',
+      category: normalizeSocialCategory(profileData.category || profileData.social_category || ''),
+      social_category: normalizeSocialCategory(profileData.social_category || profileData.category || ''),
+      applicantType: profileData.applicantType || profileData.applicant_type || 'Individual',
     });
+    setDistrictSearchQuery('');
+    setIsDistrictDropdownOpen(false);
     setActiveModal('edit');
+  };
+
+  const handleStateChange = (e) => {
+    const newState = e.target.value;
+    setEditFormData((prev) => ({
+      ...prev,
+      state: newState,
+      district: '', // Requirement 5: clear selected district on state change
+    }));
+    setDistrictSearchQuery('');
+    setIsDistrictDropdownOpen(false);
+  };
+
+  const handleSelectDistrict = (district) => {
+    setEditFormData((prev) => ({
+      ...prev,
+      district,
+    }));
+    setIsDistrictDropdownOpen(false);
+    setDistrictSearchQuery('');
   };
 
   const handleOpenSecurityModal = () => {
@@ -327,23 +435,112 @@ export default function ProfilePage() {
 
   const handleCloseModal = () => {
     setActiveModal(null);
+    setIsDistrictDropdownOpen(false);
+  };
+
+  // Handle annual income range bracket selection
+  const handleIncomeRangeChange = (e) => {
+    const selectedRange = e.target.value;
+    if (!selectedRange) {
+      setEditFormData((prev) => ({ ...prev, income: '' }));
+      return;
+    }
+    // If the selected range matches current numeric income classification, preserve exact numeric income!
+    const currentRange = mapIncomeToRange(editFormData.income);
+    if (selectedRange === currentRange && (typeof editFormData.income === 'number' || /^\d+$/.test(String(editFormData.income).trim()))) {
+      return;
+    }
+    // Otherwise, assign the canonical representative amount for the new range
+    const canonicalAmount = getCanonicalAmountForRange(selectedRange);
+    setEditFormData((prev) => ({
+      ...prev,
+      income: canonicalAmount !== null ? canonicalAmount : selectedRange,
+    }));
   };
 
   // Handle edit form field change
   const handleEditChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'income') {
+      handleIncomeRangeChange(e);
+      return;
+    }
     setEditFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   // Handle save changes
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+
+    const trimmedName = (editFormData.fullName || '').trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      showToast('Please enter a valid full name (at least 2 characters).');
+      return;
+    }
+    if (trimmedName.length > 120) {
+      showToast('Full name must be at most 120 characters.');
+      return;
+    }
+
+    if (!editFormData.state) {
+      showToast('Please select a valid State.');
+      return;
+    }
+
+    if (!editFormData.district) {
+      showToast(`Please select a district for ${editFormData.state}.`);
+      return;
+    }
+
+    if (!isValidStateDistrict(editFormData.state, editFormData.district)) {
+      showToast(`Please select a valid district for ${editFormData.state}.`);
+      return;
+    }
+
+    if (editFormData.dob) {
+      const dobDate = new Date(editFormData.dob);
+      if (dobDate > new Date()) {
+        showToast('Date of birth cannot be in the future.');
+        return;
+      }
+    }
+
     let backendProfileResult = { success: false };
     const cleanedPhone = sanitizeIndianPhone(editFormData.phone);
+
+    // Canonical personal income resolution:
+    // If exact numeric income is provided (or unchanged), preserve it!
+    // If a range string is explicitly selected, map to representative canonical amount.
+    let canonicalPersonalIncome = editFormData.income;
+    if (typeof canonicalPersonalIncome === 'string' && CANONICAL_INCOME_RANGES.includes(canonicalPersonalIncome)) {
+      canonicalPersonalIncome = getCanonicalAmountForRange(canonicalPersonalIncome);
+    } else if (canonicalPersonalIncome !== '' && canonicalPersonalIncome !== null && canonicalPersonalIncome !== undefined && canonicalPersonalIncome !== 'Not added') {
+      const numOnly = Number(String(canonicalPersonalIncome).replace(/[^0-9.]/g, ''));
+      if (!isNaN(numOnly)) {
+        canonicalPersonalIncome = numOnly;
+      }
+    } else if (canonicalPersonalIncome === '' || canonicalPersonalIncome === 'Not added' || canonicalPersonalIncome === null || canonicalPersonalIncome === undefined) {
+      canonicalPersonalIncome = null;
+    }
+
+    const normalizedGender = editFormData.gender ? editFormData.gender.toLowerCase() : '';
+    const categoryVal = normalizeSocialCategory(editFormData.category || editFormData.social_category || '');
+    const applicantTypeVal = editFormData.applicantType || editFormData.applicant_type || 'Individual';
+
     const updated = {
       ...profileData,
       ...editFormData,
+      fullName: trimmedName,
+      name: trimmedName,
       phone: cleanedPhone,
+      mobile_number: cleanedPhone,
+      income: canonicalPersonalIncome !== null ? canonicalPersonalIncome : '',
+      annual_income: canonicalPersonalIncome,
+      gender: normalizedGender,
+      category: categoryVal,
+      social_category: categoryVal,
+      applicantType: applicantTypeVal,
+      applicant_type: applicantTypeVal,
     };
 
     setProfileData(updated);
@@ -351,20 +548,26 @@ export default function ProfilePage() {
     // Persist in localStorage and persistent registry (survives logout!)
     try {
       const stored = getStoredUser() || {};
-      const fullUserObject = {
+      let fullUserObject = {
         ...stored,
         ...updated,
-        fullName: updated.fullName,
-        name: updated.fullName,
+        fullName: trimmedName,
+        name: trimmedName,
         email: updated.email,
         phone: cleanedPhone,
+        mobile_number: cleanedPhone,
         state: updated.state,
         district: updated.district,
         occupation: updated.occupation,
-        income: updated.income,
-        applicantType: updated.applicantType,
+        income: canonicalPersonalIncome !== null ? canonicalPersonalIncome : '',
+        annual_income: canonicalPersonalIncome,
+        applicantType: applicantTypeVal,
+        applicant_type: applicantTypeVal,
         dob: updated.dob,
-        gender: updated.gender,
+        date_of_birth: updated.dob,
+        gender: normalizedGender,
+        category: categoryVal,
+        social_category: categoryVal,
       };
 
       localStorage.setItem('fin_user', JSON.stringify(fullUserObject));
@@ -374,17 +577,47 @@ export default function ProfilePage() {
 
       // Also persist to backend API if active
       backendProfileResult = await updateBackendProfile({
-        full_name: updated.fullName,
-        phone: updated.phone,
+        full_name: trimmedName,
+        phone: cleanedPhone,
+        mobile_number: cleanedPhone,
         state: updated.state,
         district: updated.district,
         occupation: updated.occupation,
-        income: updated.income,
+        annual_income: canonicalPersonalIncome,
+        income: canonicalPersonalIncome,
         dob: updated.dob,
-        gender: updated.gender,
+        date_of_birth: updated.dob,
+        gender: normalizedGender,
+        category: categoryVal,
+        social_category: categoryVal,
+        applicant_type: applicantTypeVal,
+        applicantType: applicantTypeVal,
       });
 
-      // Dispatch reactive events for Header, HeroBanner, etc.
+      if (backendProfileResult?.success && backendProfileResult?.data) {
+        const bd = backendProfileResult.data.data || backendProfileResult.data;
+        fullUserObject = {
+          ...fullUserObject,
+          id: bd.id || fullUserObject.id,
+          fullName: bd.full_name || fullUserObject.fullName,
+          phone: sanitizeIndianPhone(bd.phone || fullUserObject.phone),
+          state: bd.state || fullUserObject.state,
+          district: bd.district || bd.city || fullUserObject.district,
+          occupation: bd.occupation || fullUserObject.occupation,
+          income: bd.annual_income ?? bd.income ?? fullUserObject.income,
+          annual_income: bd.annual_income ?? fullUserObject.annual_income,
+          applicantType: bd.applicant_type || bd.applicantType || fullUserObject.applicantType,
+          dob: bd.dob || bd.date_of_birth || fullUserObject.dob,
+          gender: bd.gender || fullUserObject.gender,
+          category: normalizeSocialCategory(bd.category || bd.social_category || bd.caste_category || categoryVal),
+          social_category: normalizeSocialCategory(bd.social_category || bd.category || bd.caste_category || categoryVal),
+        };
+        localStorage.setItem('fin_user', JSON.stringify(fullUserObject));
+        saveRegisteredUser(fullUserObject);
+        setProfileData(fullUserObject);
+      }
+
+      // Dispatch reactive events for Header, HeroBanner, SuggestedSchemes, etc.
       window.dispatchEvent(new CustomEvent('fin_user_updated', { detail: fullUserObject }));
       window.dispatchEvent(new Event('storage'));
     } catch (err) {
@@ -398,19 +631,46 @@ export default function ProfilePage() {
   };
 
   // Handle password change submit
-  const handleSavePassword = (e) => {
+  const handleSavePassword = async (e) => {
     e.preventDefault();
+    setPasswordError('');
+
+    if (!passwordFormData.currentPassword || !passwordFormData.currentPassword.trim()) {
+      setPasswordError('Current password is required.');
+      return;
+    }
     if (!passwordFormData.newPassword || passwordFormData.newPassword.length < 6) {
-      alert('Password must be at least 6 characters.');
+      setPasswordError('New password must be at least 6 characters.');
       return;
     }
     if (passwordFormData.newPassword !== passwordFormData.confirmPassword) {
-      alert('New password and confirm password do not match.');
+      setPasswordError('New password and confirm password do not match.');
+      return;
+    }
+    if (passwordFormData.currentPassword === passwordFormData.newPassword) {
+      setPasswordError('New password must be different from current password.');
       return;
     }
 
-    setActiveModal(null);
-    showToast('Password changed successfully!');
+    try {
+      setIsChangingPassword(true);
+      const res = await changeAccountPassword({
+        currentPassword: passwordFormData.currentPassword,
+        newPassword: passwordFormData.newPassword,
+      });
+
+      if (res.success) {
+        setActiveModal(null);
+        setPasswordFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        showToast('Password changed successfully!');
+      } else {
+        setPasswordError(res.message || 'Failed to change password.');
+      }
+    } catch (err) {
+      setPasswordError(err.message || 'An error occurred while changing password.');
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   // Show temporary toast message
@@ -444,6 +704,19 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* Back to Dashboard navigation bar */}
+        <div className="profile-back-bar">
+          <button
+            type="button"
+            className="profile-back-btn"
+            onClick={() => navigate('/dashboard')}
+            aria-label="Back to Dashboard"
+          >
+            <ArrowLeft size={16} />
+            <span>Back to Dashboard</span>
+          </button>
+        </div>
+
         {/* Top Hero Profile Row */}
         <section className="profile-hero-row" aria-label="Applicant Overview">
           {/* Main Profile Info Card */}
@@ -451,9 +724,9 @@ export default function ProfilePage() {
             <div className="profile-identity-section">
               <div className="profile-avatar-wrapper">
                 <div className="profile-avatar-circle" aria-hidden="true">
-                  {profileData.avatarUrl || (isClerkSignedIn ? clerkUser?.imageUrl : '') ? (
+                  {profileData.avatarUrl ? (
                     <img
-                      src={profileData.avatarUrl || clerkUser?.imageUrl}
+                      src={profileData.avatarUrl}
                       alt={profileData.fullName}
                       className="profile-avatar-img"
                     />
@@ -502,12 +775,14 @@ export default function ProfilePage() {
                   </span>
                   <span className="profile-meta-item">
                     <MapPin size={14} aria-hidden="true" />
-                    <span>{profileData.state ? `${profileData.state}, India` : 'Gujarat, India'}</span>
+                    <span>{profileData.state ? `${profileData.state}, India` : 'India'}</span>
                   </span>
                 </div>
 
                 <div className="profile-pill-tags">
-                  <span className="profile-pill">{profileData.occupation || 'Student'}</span>
+                  {profileData.occupation && (
+                    <span className="profile-pill">{profileData.occupation}</span>
+                  )}
                   <span className="profile-pill">{profileData.applicantType || 'Individual'}</span>
                   <span className="profile-pill">Profile {completionPercentage}% Complete</span>
                 </div>
@@ -613,7 +888,7 @@ export default function ProfilePage() {
                 <span
                   className={`profile-detail-value ${!profileData.gender || profileData.gender === 'Not added' ? 'text-not-added' : ''}`}
                 >
-                  {profileData.gender || 'Not added'}
+                  {profileData.gender ? formatGender(profileData.gender) : 'Not added'}
                 </span>
               </div>
             </div>
@@ -643,7 +918,11 @@ export default function ProfilePage() {
             <div className="profile-details-table">
               <div className="profile-detail-row">
                 <span className="profile-detail-label">State</span>
-                <span className="profile-detail-value">{profileData.state || 'Gujarat'}</span>
+                <span
+                  className={`profile-detail-value ${!profileData.state || profileData.state === 'Not added' ? 'text-not-added' : ''}`}
+                >
+                  {profileData.state || 'Not added'}
+                </span>
               </div>
               <div className="profile-detail-row">
                 <span className="profile-detail-label">District</span>
@@ -655,14 +934,31 @@ export default function ProfilePage() {
               </div>
               <div className="profile-detail-row">
                 <span className="profile-detail-label">Occupation</span>
-                <span className="profile-detail-value">{profileData.occupation || 'Student'}</span>
+                <span
+                  className={`profile-detail-value ${!profileData.occupation || profileData.occupation === 'Not added' ? 'text-not-added' : ''}`}
+                >
+                  {profileData.occupation || 'Not added'}
+                </span>
               </div>
               <div className="profile-detail-row">
                 <span className="profile-detail-label">Annual Income</span>
                 <span
-                  className={`profile-detail-value ${!profileData.income || profileData.income === 'Not added' ? 'text-not-added' : ''}`}
+                  className={`profile-detail-value ${
+                    (profileData.annual_income === null || profileData.annual_income === undefined || profileData.annual_income === '') &&
+                    (!profileData.income || profileData.income === 'Not added')
+                      ? 'text-not-added'
+                      : ''
+                  }`}
                 >
-                  {profileData.income || 'Not added'}
+                  {formatAnnualIncome(profileData.annual_income ?? profileData.income)}
+                </span>
+              </div>
+              <div className="profile-detail-row">
+                <span className="profile-detail-label">Social Category</span>
+                <span
+                  className={`profile-detail-value ${!profileData.category && !profileData.social_category ? 'text-not-added' : ''}`}
+                >
+                  {formatSocialCategory(profileData.category || profileData.social_category)}
                 </span>
               </div>
               <div className="profile-detail-row">
@@ -671,23 +967,26 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Recommendation Callout Banner */}
-            <div
-              className="profile-recommendation-callout"
-              onClick={handleOpenEditModal}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && handleOpenEditModal()}
-              aria-label="Complete location and income details"
-            >
-              <div className="callout-left">
-                <Target size={17} className="callout-target-icon" aria-hidden="true" />
-                <span className="callout-text">
-                  Complete your location and income details to receive more relevant scheme recommendations.
-                </span>
+            {/* Recommendation Callout Banner - shown ONLY when location or income is incomplete */}
+            {!isLocationAndIncomeComplete(profileData) && (
+              <div
+                className="profile-recommendation-callout"
+                onClick={handleOpenEditModal}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleOpenEditModal()}
+                aria-label="Complete location and income details"
+                id="locationIncomeCallout"
+              >
+                <div className="callout-left">
+                  <Target size={17} className="callout-target-icon" aria-hidden="true" />
+                  <span className="callout-text">
+                    Complete your location and income details to receive more relevant scheme recommendations.
+                  </span>
+                </div>
+                <ChevronRight size={16} className="callout-arrow" aria-hidden="true" />
               </div>
-              <ChevronRight size={16} className="callout-arrow" aria-hidden="true" />
-            </div>
+            )}
           </div>
         </section>
 
@@ -719,7 +1018,7 @@ export default function ProfilePage() {
                 <span className="profile-detail-label">Email verification</span>
                 <span className="profile-verified-badge">
                   <CheckCircle2 size={16} className="verified-icon" aria-hidden="true" />
-                  <span>Verified</span>
+                  <span>{profileData.emailConfirmedAt || profileData.email ? 'Verified' : 'Pending'}</span>
                 </span>
               </div>
               <div className="profile-detail-row">
@@ -740,11 +1039,11 @@ export default function ProfilePage() {
               </div>
               <div className="profile-detail-row">
                 <span className="profile-detail-label">Login method</span>
-                <span className="profile-detail-value">Email & Password</span>
+                <span className="profile-detail-value">{profileData.loginMethod || 'Email & Password'}</span>
               </div>
               <div className="profile-detail-row">
                 <span className="profile-detail-label">Last login</span>
-                <span className="profile-detail-value">23 Sep 2026, 10:24 AM</span>
+                <span className="profile-detail-value">{formatLastLogin(profileData.lastSignInAt)}</span>
               </div>
             </div>
           </div>
@@ -894,33 +1193,100 @@ export default function ProfilePage() {
                         name="state"
                         className="modal-form-select"
                         value={editFormData.state}
-                        onChange={handleEditChange}
+                        onChange={handleStateChange}
                       >
-                        <option value="Gujarat">Gujarat</option>
-                        <option value="Maharashtra">Maharashtra</option>
-                        <option value="Delhi">Delhi</option>
-                        <option value="Karnataka">Karnataka</option>
-                        <option value="Tamil Nadu">Tamil Nadu</option>
-                        <option value="Uttar Pradesh">Uttar Pradesh</option>
-                        <option value="Rajasthan">Rajasthan</option>
-                        <option value="Madhya Pradesh">Madhya Pradesh</option>
-                        <option value="Other">Other</option>
+                        <option value="">-- Select State --</option>
+                        {CANONICAL_STATES.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
                     <div className="modal-form-field">
-                      <label className="modal-form-label" htmlFor="inputDistrict">
+                      <label className="modal-form-label" htmlFor="districtTrigger">
                         District
                       </label>
-                      <input
-                        id="inputDistrict"
-                        type="text"
-                        name="district"
-                        placeholder="e.g. Ahmedabad, Pune"
-                        className="modal-form-input"
-                        value={editFormData.district}
-                        onChange={handleEditChange}
-                      />
+                      <div className="district-combobox-wrapper" ref={districtDropdownRef}>
+                        <button
+                          type="button"
+                          id="districtTrigger"
+                          className={`district-combobox-trigger ${isDistrictDropdownOpen ? 'open' : ''}`}
+                          onClick={() => {
+                            if (editFormData.state) {
+                              setIsDistrictDropdownOpen((prev) => !prev);
+                            }
+                          }}
+                          aria-haspopup="listbox"
+                          aria-expanded={isDistrictDropdownOpen}
+                          disabled={!editFormData.state}
+                        >
+                          <span className={editFormData.district ? 'district-selected-text' : 'district-placeholder-text'}>
+                            {editFormData.district || (editFormData.state ? `Select a district for ${editFormData.state}` : 'Select a State first')}
+                          </span>
+                          {isDistrictDropdownOpen ? (
+                            <ChevronUp size={16} className="district-chevron-icon" />
+                          ) : (
+                            <ChevronDown size={16} className="district-chevron-icon" />
+                          )}
+                        </button>
+
+                        {isDistrictDropdownOpen && (
+                          <div className="district-combobox-dropdown" role="listbox">
+                            <div className="district-search-bar">
+                              <Search size={14} className="district-search-icon" />
+                              <input
+                                ref={districtSearchInputRef}
+                                type="text"
+                                placeholder={`Search in ${availableDistricts.length} districts...`}
+                                value={districtSearchQuery}
+                                onChange={(e) => setDistrictSearchQuery(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              {districtSearchQuery && (
+                                <button
+                                  type="button"
+                                  className="district-search-clear-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDistrictSearchQuery('');
+                                    districtSearchInputRef.current?.focus();
+                                  }}
+                                  aria-label="Clear search"
+                                >
+                                  <X size={13} />
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="district-options-list">
+                              {filteredDistricts.length > 0 ? (
+                                filteredDistricts.map((d) => {
+                                  const isSelected = editFormData.district === d;
+                                  return (
+                                    <button
+                                      key={d}
+                                      type="button"
+                                      className={`district-option-item ${isSelected ? 'selected' : ''}`}
+                                      onClick={() => handleSelectDistrict(d)}
+                                      role="option"
+                                      aria-selected={isSelected}
+                                    >
+                                      <span>{d}</span>
+                                      {isSelected && <Check size={14} className="district-check-icon" />}
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                <div className="district-empty-message">
+                                  No districts found matching "{districtSearchQuery}"
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="modal-form-field">
@@ -931,15 +1297,13 @@ export default function ProfilePage() {
                         id="selectIncome"
                         name="income"
                         className="modal-form-select"
-                        value={editFormData.income}
-                        onChange={handleEditChange}
+                        value={mapIncomeToRange(editFormData.income)}
+                        onChange={handleIncomeRangeChange}
                       >
                         <option value="">Select income range</option>
-                        <option value="Below ₹1 Lakh">Below ₹1 Lakh</option>
-                        <option value="₹1 Lakh - ₹2.5 Lakhs">₹1 Lakh - ₹2.5 Lakhs</option>
-                        <option value="₹2.5 Lakhs - ₹5 Lakhs">₹2.5 Lakhs - ₹5 Lakhs</option>
-                        <option value="₹5 Lakhs - ₹10 Lakhs">₹5 Lakhs - ₹10 Lakhs</option>
-                        <option value="Above ₹10 Lakhs">Above ₹10 Lakhs</option>
+                        {CANONICAL_INCOME_RANGES.map((rng) => (
+                          <option key={rng} value={rng}>{rng}</option>
+                        ))}
                       </select>
                     </div>
 
@@ -983,14 +1347,41 @@ export default function ProfilePage() {
                         id="selectGender"
                         name="gender"
                         className="modal-form-select"
-                        value={editFormData.gender}
+                        value={editFormData.gender ? editFormData.gender.toLowerCase() : ''}
                         onChange={handleEditChange}
                       >
                         <option value="">Select gender</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Transgender">Transgender</option>
-                        <option value="Prefer not to say">Prefer not to say</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                        <option value="prefer_not_to_say">Prefer not to say</option>
+                      </select>
+                    </div>
+
+                    <div className="modal-form-field">
+                      <label className="modal-form-label" htmlFor="selectSocialCategory">
+                        Social Category
+                      </label>
+                      <select
+                        id="selectSocialCategory"
+                        name="category"
+                        className="modal-form-select"
+                        value={normalizeSocialCategory(editFormData.category || editFormData.social_category || '')}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditFormData((prev) => ({
+                            ...prev,
+                            category: val,
+                            social_category: val,
+                          }));
+                        }}
+                      >
+                        <option value="">Select social category</option>
+                        <option value="general">General</option>
+                        <option value="obc">OBC</option>
+                        <option value="sc">SC</option>
+                        <option value="st">ST</option>
+                        <option value="ews">EWS</option>
                       </select>
                     </div>
                   </div>
@@ -1035,6 +1426,24 @@ export default function ProfilePage() {
 
               <form onSubmit={handleSavePassword}>
                 <div className="profile-modal-body">
+                  {passwordError && (
+                    <div
+                      className="profile-password-error-banner"
+                      role="alert"
+                      style={{
+                        color: '#D92D20',
+                        backgroundColor: '#FEF3F2',
+                        border: '1px solid #FECDCA',
+                        padding: '10px 14px',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        marginBottom: '14px',
+                      }}
+                    >
+                      {passwordError}
+                    </div>
+                  )}
                   <div className="modal-form-grid single-col">
                     <div className="modal-form-field">
                       <label className="modal-form-label" htmlFor="inputCurrentPassword">
@@ -1102,8 +1511,8 @@ export default function ProfilePage() {
                   <button type="button" className="btn-modal-cancel" onClick={handleCloseModal}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn-modal-save">
-                    Update Password
+                  <button type="submit" className="btn-modal-save" disabled={isChangingPassword}>
+                    {isChangingPassword ? 'Updating...' : 'Update Password'}
                   </button>
                 </div>
               </form>

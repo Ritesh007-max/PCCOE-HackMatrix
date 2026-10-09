@@ -23,7 +23,6 @@ import {
   getRegisteredUserByEmail,
   saveRegisteredUser,
 } from '../services/authService';
-import { useUser, useClerk } from '@clerk/react';
 
 const DEV_AUTH_BYPASS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH_BYPASS === 'true';
 
@@ -53,6 +52,7 @@ export default function SignupPage({ initialMode = 'signup' }) {
   const inactivityReason = new URLSearchParams(location.search).get('reason');
   const isInactivityRedirect = inactivityReason === 'timeout' || inactivityReason === 'inactivity';
   const [isSignIn, setIsSignIn] = useState(initialMode === 'signin' || isInactivityRedirect);
+  const [loginMode, setLoginMode] = useState('citizen'); // 'citizen' | 'reviewer'
   const requestedPath = location.state?.from;
   const postAuthPath = isSignIn && requestedPath
     ? `${requestedPath.pathname || '/dashboard'}${requestedPath.search || ''}${requestedPath.hash || ''}`
@@ -63,27 +63,7 @@ export default function SignupPage({ initialMode = 'signup' }) {
       : null
   );
 
-  const { user: clerkUser, isLoaded: isClerkLoaded, isSignedIn: isClerkSignedIn } = useUser();
-  const clerk = useClerk();
 
-  // If already signed in via Clerk, automatically synchronize session and redirect
-  useEffect(() => {
-    if (isClerkLoaded && isClerkSignedIn && clerkUser) {
-      const email = clerkUser.primaryEmailAddress?.emailAddress || '';
-      const fullName = clerkUser.fullName || clerkUser.firstName || 'Clerk User';
-      storeAuthSession({
-        user: {
-          id: clerkUser.id,
-          email,
-          fullName,
-          avatarUrl: clerkUser.imageUrl,
-        },
-        accessToken: 'clerk-authenticated-token',
-        fallbackName: fullName,
-      });
-      navigate(postAuthPath, { replace: true });
-    }
-  }, [isClerkLoaded, isClerkSignedIn, clerkUser, navigate, postAuthPath]);
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_OPTIONS[0]);
@@ -174,11 +154,13 @@ export default function SignupPage({ initialMode = 'signup' }) {
       let authResult;
 
       if (isSignIn) {
-        // Call BackEnd /api/users/login
+        // Call BackEnd /api/users/login with authoritative loginMode
         authResult = await loginUser({
           email: formData.email,
           password: formData.password,
+          loginMode: loginMode === 'reviewer' ? 'reviewer' : 'user',
         });
+      } else {
         // Sanitize mobile digits to prevent duplicate country codes (e.g. +91 91...)
         let rawMobileDigits = formData.mobile.replace(/\D/g, '');
         if (selectedCountry.code === '+91' && rawMobileDigits.length === 12 && rawMobileDigits.startsWith('91')) {
@@ -193,10 +175,9 @@ export default function SignupPage({ initialMode = 'signup' }) {
           fullName: formData.fullName,
           phone: finalPhone,
         });
-
       }
 
-      // Check for backend errors (validation, invalid credentials, existing user, etc.)
+      // Check for backend errors (validation, invalid credentials, existing user, forbidden reviewer mode, etc.)
       if (!authResult.success) {
         if (!authResult.isNetworkError) {
           setErrorMsg(authResult.message);
@@ -211,6 +192,16 @@ export default function SignupPage({ initialMode = 'signup' }) {
         }
 
         console.warn('Backend server offline, continuing with local development session:', authResult.message);
+      }
+
+      const returnedUser = authResult.data?.user || {};
+      const userRole = returnedUser.role || (targetEmail === 'reviewer@fin.gov.in' ? 'reviewer' : 'user');
+
+      // Security validation: If reviewer mode was selected, require server-verified reviewer role
+      if (isSignIn && loginMode === 'reviewer' && userRole !== 'reviewer') {
+        setErrorMsg('Access denied: You do not have Reviewer permissions. Only authorized government review officers may sign in via Reviewer mode.');
+        setIsSubmitting(false);
+        return;
       }
 
       // Resolve proper registered citizen name (so login preserves the registration username)
@@ -231,17 +222,18 @@ export default function SignupPage({ initialMode = 'signup' }) {
         });
       } else {
         citizenFullName =
-          authResult.data?.user?.user_metadata?.full_name ||
-          authResult.data?.user?.user_metadata?.fullName ||
-          authResult.data?.user?.fullName ||
           registeredProfile?.fullName ||
+          returnedUser?.user_metadata?.full_name ||
+          returnedUser?.user_metadata?.fullName ||
+          returnedUser?.fullName ||
           '';
       }
 
       // Store authenticated session
       storeAuthSession({
         user: {
-          ...(authResult.data?.user || {}),
+          ...returnedUser,
+          role: userRole,
           email: targetEmail,
           ...(citizenFullName ? { fullName: citizenFullName } : {}),
           state: registeredProfile?.state,
@@ -259,7 +251,11 @@ export default function SignupPage({ initialMode = 'signup' }) {
 
       setSuccessMsg(isSignIn ? 'Welcome back! Redirecting...' : 'Account created successfully! Redirecting...');
       setTimeout(() => {
-        navigate(postAuthPath, { replace: true });
+        if (userRole === 'reviewer') {
+          navigate('/reviewer/dashboard', { replace: true });
+        } else {
+          navigate(postAuthPath, { replace: true });
+        }
       }, 700);
     } catch (err) {
       setErrorMsg(err.message || 'An unexpected error occurred. Please try again.');
@@ -267,67 +263,7 @@ export default function SignupPage({ initialMode = 'signup' }) {
     }
   };
 
-  const handleGoogleAuth = async () => {
-    setErrorMsg('');
-    setSuccessMsg('Connecting with Google...');
-    try {
-      const client = clerk?.client || window.Clerk?.client;
-      if (!client) {
-        setErrorMsg('Authentication service is still initializing. Please wait a moment.');
-        setSuccessMsg('');
-        return;
-      }
 
-      const redirectUrl = '/sso-callback';
-      const redirectUrlComplete = postAuthPath || '/dashboard';
-
-      if (isSignIn && client.signIn?.authenticateWithRedirect) {
-        await client.signIn.authenticateWithRedirect({
-          strategy: 'oauth_google',
-          redirectUrl,
-          redirectUrlComplete,
-        });
-      } else if (!isSignIn && client.signUp?.authenticateWithRedirect) {
-        await client.signUp.authenticateWithRedirect({
-          strategy: 'oauth_google',
-          redirectUrl,
-          redirectUrlComplete,
-        });
-      } else if (client.signIn?.authenticateWithRedirect) {
-        await client.signIn.authenticateWithRedirect({
-          strategy: 'oauth_google',
-          redirectUrl,
-          redirectUrlComplete,
-        });
-      } else {
-        throw new Error('Google OAuth method unavailable');
-      }
-    } catch (err) {
-      console.error('Clerk Google OAuth error:', err);
-      try {
-        const client = clerk?.client || window.Clerk?.client;
-        if (isSignIn && client?.signUp?.authenticateWithRedirect) {
-          await client.signUp.authenticateWithRedirect({
-            strategy: 'oauth_google',
-            redirectUrl: '/sso-callback',
-            redirectUrlComplete: postAuthPath || '/dashboard',
-          });
-          return;
-        } else if (!isSignIn && client?.signIn?.authenticateWithRedirect) {
-          await client.signIn.authenticateWithRedirect({
-            strategy: 'oauth_google',
-            redirectUrl: '/sso-callback',
-            redirectUrlComplete: postAuthPath || '/dashboard',
-          });
-          return;
-        }
-      } catch (innerErr) {
-        // Fall through
-      }
-      setSuccessMsg('');
-      setErrorMsg(err.errors?.[0]?.message || err.message || 'Unable to connect to Google authentication.');
-    }
-  };
 
   const handleDevAuthBypass = () => {
     const email = formData.email.trim() || 'developer@localhost.test';
@@ -582,6 +518,34 @@ export default function SignupPage({ initialMode = 'signup' }) {
 
             {/* Form */}
             <form className="signup-form" onSubmit={handleSubmit} noValidate>
+              {/* Login Role Mode Selector (Sign In only) */}
+              {isSignIn && (
+                <div className="login-mode-selector" role="radiogroup" aria-label="Sign-in portal role selector">
+                  <button
+                    type="button"
+                    className={`login-mode-btn ${loginMode === 'citizen' ? 'active' : ''}`}
+                    onClick={() => {
+                      setLoginMode('citizen');
+                      setErrorMsg('');
+                    }}
+                  >
+                    <User size={15} />
+                    <span>Citizen / User</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`login-mode-btn ${loginMode === 'reviewer' ? 'active' : ''}`}
+                    onClick={() => {
+                      setLoginMode('reviewer');
+                      setErrorMsg('');
+                    }}
+                  >
+                    <ShieldCheck size={15} />
+                    <span>Government Reviewer</span>
+                  </button>
+                </div>
+              )}
+
               {/* Full Name (Sign Up only) */}
               {!isSignIn && (
                 <div className="signup-field">
@@ -867,41 +831,7 @@ export default function SignupPage({ initialMode = 'signup' }) {
                 <ArrowRight size={15} />
               </button>
 
-              {/* OR Divider */}
-              <div className="signup-divider">
-                <span className="signup-divider-line" />
-                <span className="signup-divider-text">OR</span>
-                <span className="signup-divider-line" />
-              </div>
 
-              {/* Continue / Sign in with Google (Powered by Clerk) */}
-              <button
-                type="button"
-                id="googleAuthBtn"
-                className="signup-google-btn"
-                onClick={handleGoogleAuth}
-                disabled={isSubmitting}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                  />
-                </svg>
-                <span>{isSignIn ? 'Sign in with Google' : 'Sign up with Google'}</span>
-              </button>
 
               {DEV_AUTH_BYPASS_ENABLED && (
                 <button

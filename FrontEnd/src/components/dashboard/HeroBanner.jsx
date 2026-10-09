@@ -20,7 +20,7 @@ export default function HeroBanner({ userProfile }) {
         if (resolved && resolved.toLowerCase() !== 'user') return resolved;
       }
     } catch (e) {}
-    return 'Hemang';
+    return userProfile?.fullName || 'Citizen';
   });
 
   useEffect(() => {
@@ -45,7 +45,16 @@ export default function HeroBanner({ userProfile }) {
   }, [userProfile]);
 
   // Extract only the first name for this specific greeting spot on the dashboard
-  const firstName = (userName && userName.toLowerCase() !== 'user') ? userName.trim().split(/\s+/)[0] : 'Hemang';
+  const firstName = (userName && userName.toLowerCase() !== 'user')
+    ? userName.trim().split(/\s+/)[0]
+    : (userProfile?.fullName ? userProfile.fullName.trim().split(/\s+/)[0] : 'Citizen');
+
+  const currentDate = new Date().toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
 
   return (
     <section className="dashboard-hero-card" aria-label="Welcome Banner">
@@ -58,7 +67,7 @@ export default function HeroBanner({ userProfile }) {
 
       {/* Left editorial content */}
       <div className="hero-left-content">
-        <span className="hero-date">Thu, 18 Sep 2026</span>
+        <span className="hero-date">{currentDate}</span>
         <h1 className="hero-main-greeting">
           <span>Namaste, {firstName}</span>
           <img

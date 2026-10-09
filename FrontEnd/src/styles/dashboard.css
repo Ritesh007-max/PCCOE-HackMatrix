@@ -286,8 +286,9 @@
 
 .opportunities-main-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr) 220px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+  align-items: stretch;
 }
 
 /* Scheme Card */
@@ -300,12 +301,21 @@
   flex-direction: column;
   justify-content: space-between;
   box-shadow: var(--shadow-sm);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .scheme-card-box:hover {
   border-color: var(--border-medium);
   box-shadow: var(--shadow-card);
+  transform: translateY(-2px);
+}
+
+.scheme-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .scheme-card-top {
@@ -345,10 +355,15 @@
 
 .scheme-card-name {
   font-family: var(--font-serif);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: #10243A;
-  line-height: 1.2;
+  line-height: 1.25;
+  min-height: 68px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .scheme-card-full-name {
@@ -357,15 +372,20 @@
   font-weight: 400;
   color: #344054;
   line-height: 1.4;
-  margin-top: 3px;
-  min-height: 34px;
+  margin-top: 4px;
+  min-height: 35px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .scheme-tags-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 12px 0 16px 0;
+  margin: 10px 0 14px 0;
+  min-height: 26px;
 }
 
 .scheme-tag-pill {
@@ -382,10 +402,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   background-color: #F8F9FA;
   border-radius: var(--radius-md);
   margin-bottom: 14px;
+  min-height: 60px;
+  box-sizing: border-box;
 }
 
 .scheme-metric-icon {
@@ -394,10 +416,10 @@
 
 .scheme-metric-val {
   font-family: var(--font-sans);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   color: #10243A;
-  line-height: 1;
+  line-height: 1.2;
   letter-spacing: -0.01em;
 }
 
@@ -415,6 +437,7 @@
   justify-content: space-between;
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
+  margin-top: auto;
 }
 
 .condition-match-status {
@@ -445,46 +468,53 @@
   transform: translateX(2px);
 }
 
-/* Side Column Stacked Cards */
-.side-widgets-col {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+/* Bottom Utility Widgets (Quote & Need Help) placed below opportunities cards */
+.opportunities-bottom-widgets {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 16px;
 }
 
 .side-quote-card {
   background-color: #FFFFFF;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   align-items: flex-start;
   box-shadow: var(--shadow-sm);
+  min-height: 140px;
+  box-sizing: border-box;
 }
 
 .side-quote-icon {
   color: #005B50;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .side-quote-text {
   font-family: var(--font-serif);
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-style: italic;
   line-height: 1.45;
   color: #10243A;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .side-help-card {
   background-color: #FFFFFF;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   box-shadow: var(--shadow-sm);
+  min-height: 140px;
+  box-sizing: border-box;
 }
 
 .side-help-icon-wrap {
@@ -496,7 +526,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .side-help-title {
@@ -508,7 +538,7 @@
 
 .side-help-desc {
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 400;
   color: #667085;
   line-height: 1.4;
@@ -520,7 +550,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-pill);
   background-color: #FFFFFF;
@@ -530,6 +560,8 @@
   color: #10243A;
   text-decoration: none;
   transition: all var(--transition-fast);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .btn-guidance:hover {
@@ -551,19 +583,6 @@
   justify-content: space-between;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-}
-
-.banner-taj-silhouette {
-  position: absolute;
-  right: 170px;
-  top: 0;
-  bottom: 0;
-  width: 280px;
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center right;
-  opacity: 0.18;
-  pointer-events: none;
 }
 
 .banner-left-wrap {
@@ -632,12 +651,7 @@
    -------------------------------------------------------------------------- */
 @media (max-width: 1200px) {
   .opportunities-main-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .side-widgets-col {
-    grid-column: span 3;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -649,11 +663,7 @@
     grid-template-columns: repeat(2, 1fr);
   }
   .opportunities-main-grid {
-    grid-template-columns: 1fr;
-  }
-  .side-widgets-col {
-    grid-column: span 1;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -670,9 +680,60 @@
   .metrics-grid-row {
     grid-template-columns: 1fr;
   }
+  .opportunities-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .opportunities-bottom-widgets {
+    grid-template-columns: 1fr;
+  }
   .complete-profile-banner {
     flex-direction: column;
     align-items: flex-start;
     gap: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-hero-card {
+    padding: 16px 14px;
+  }
+  .hero-main-greeting {
+    font-size: 24px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .hero-namaste-icon {
+    height: 28px;
+  }
+  .hero-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 8px;
+  }
+  .hero-actions-row .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .banner-left-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .btn-update-profile-saffron {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 360px) {
+  .hero-main-greeting {
+    font-size: 21px;
+  }
+  .hero-hinglish-message {
+    font-size: 14px;
+  }
+  .dashboard-hero-card {
+    padding: 14px 12px;
   }
 }

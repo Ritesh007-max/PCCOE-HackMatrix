@@ -6,91 +6,100 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
  * Fetch list of uploaded documents
  */
 export async function fetchUserDocuments() {
-  try {
-    const res = await authenticatedFetch(`${API_BASE}/api/documents`);
-    if (!res.ok) {
-      throw new Error(`Documents fetch failed (${res.status})`);
-    }
-    const json = await res.json();
-    return json?.data || [];
-  } catch (err) {
-    console.warn('Backend documents fetch failed, using local/cached documents:', err);
-    return null;
+  const res = await authenticatedFetch(`${API_BASE}/api/documents`);
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    const error = new Error(errJson.message || `Documents fetch failed (${res.status})`);
+    error.status = res.status;
+    throw error;
   }
+  const json = await res.json();
+  return json?.data || [];
 }
 
 /**
  * Upload a document file (PDF, PNG, JPG, etc.)
  */
 export async function uploadDocumentFile(file, documentType, applicationId = null) {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (documentType) formData.append('documentType', documentType);
-    if (applicationId) formData.append('applicationId', applicationId);
+  const formData = new FormData();
+  formData.append('file', file);
+  if (documentType) formData.append('documentType', documentType);
+  if (applicationId) formData.append('applicationId', applicationId);
 
-    const token = localStorage.getItem('fin_auth_token');
+  const res = await authenticatedFetch(`${API_BASE}/api/documents/process`, {
+    method: 'POST',
+    body: formData
+  });
 
-    const res = await fetch(`${API_BASE}/api/documents/process`, {
-      method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      },
-      body: formData
-    });
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.message || `Document upload failed with status ${res.status}`);
-    }
-
-    const json = await res.json();
-    return json?.data || null;
-  } catch (err) {
-    console.warn('Backend document upload failed:', err);
-    throw err;
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    const error = new Error(errJson.message || `Document upload failed with status ${res.status}`);
+    error.status = res.status;
+    throw error;
   }
+
+  const json = await res.json();
+  return json?.data || null;
 }
 
 /**
  * Extract data from document using AI OCR
  */
 export async function extractDocumentData(documentId) {
-  try {
-    const res = await authenticatedFetch(`${API_BASE}/api/documents/extract`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documentId })
-    });
+  if (!documentId) throw new Error('Document ID is required');
 
-    if (!res.ok) {
-      throw new Error(`Document extraction failed (${res.status})`);
-    }
+  const res = await authenticatedFetch(`${API_BASE}/api/documents/extract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ documentId })
+  });
 
-    const json = await res.json();
-    return json?.data || null;
-  } catch (err) {
-    console.warn('Backend document extraction failed:', err);
-    throw err;
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    const error = new Error(errJson.message || `Document extraction failed (${res.status})`);
+    error.status = res.status;
+    throw error;
   }
+
+  const json = await res.json();
+  return json?.data || null;
 }
 
 /**
  * Delete a document
  */
 export async function deleteDocument(documentId) {
-  try {
-    const res = await authenticatedFetch(`${API_BASE}/api/documents/${documentId}`, {
-      method: 'DELETE'
-    });
+  if (!documentId) throw new Error('Document ID is required');
 
-    if (!res.ok) {
-      throw new Error(`Failed to delete document (${res.status})`);
-    }
+  const res = await authenticatedFetch(`${API_BASE}/api/documents/${documentId}`, {
+    method: 'DELETE'
+  });
 
-    return true;
-  } catch (err) {
-    console.warn('Backend document delete failed:', err);
-    throw err;
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    const error = new Error(errJson.message || `Failed to delete document (${res.status})`);
+    error.status = res.status;
+    throw error;
   }
+
+  return true;
 }
+
+/**
+ * Get details and signed download URL for a single document
+ */
+export async function getDocumentDetails(documentId) {
+  if (!documentId) throw new Error('Document ID is required');
+
+  const res = await authenticatedFetch(`${API_BASE}/api/documents/${documentId}`);
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    const error = new Error(errJson.message || `Failed to fetch document details (${res.status})`);
+    error.status = res.status;
+    throw error;
+  }
+
+  const json = await res.json();
+  return json?.data || null;
+}
+

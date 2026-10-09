@@ -295,6 +295,10 @@ class HybridRetriever:
                 "original_query": original_query_text or query.query_text,
                 "retrieval_query": primary_chunk.metadata.get("retrieval_query", query.query_text),
             }
+            if primary_chunk.metadata:
+                for k, v in primary_chunk.metadata.items():
+                    if k not in source_meta and v is not None:
+                        source_meta[k] = v
 
             scheme_results.append(SchemeRetrievalResult(
                 scheme_slug=slug,

@@ -113,10 +113,10 @@ data/schemes/documents/*
 !data/schemes/documents/.gitkeep
 
 # Exclude bulk document & dataset formats in data folders
-*.pdf
-*.docx
-*.xlsx
-*.csv
+data/**/*.pdf
+data/**/*.docx
+data/**/*.xlsx
+data/**/*.csv
 *.parquet
 *.feather
 *.tar
@@ -127,7 +127,8 @@ data/schemes/documents/*
 *.npz
 data/processed/*.jsonl
 
-# Retain tracked sample files and golden evaluation suites
+# Retain tracked test fixtures, sample files and golden evaluation suites
+!tests/fixtures/**
 !data/samples/**
 !data/test_cases/**
 !data/evaluation/*.jsonl

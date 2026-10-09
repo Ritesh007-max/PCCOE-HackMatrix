@@ -1,8 +1,10 @@
+const crypto = require('crypto');
 const profileService = require('./profileService');
 const schemeService = require('./schemeService');
 const { checkEligibility } = require('./eligibilityService');
 const { supabaseAdmin } = require('../config/supabaseConfig');
 const intelligenceClient = require('./intelligenceClient');
+const { interpretFinancialBenefit } = require('./financialBenefitService');
 
 const DOCUMENTS_BUCKET = process.env.SUPABASE_DOCUMENTS_BUCKET || 'documents';
 
@@ -10,6 +12,14 @@ const httpError = (status, message) => {
     const error = new Error(message);
     error.status = status;
     return error;
+};
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ensureUuid = (val) => {
+    if (val && UUID_REGEX.test(val)) return val;
+    if (!val) return crypto.randomUUID();
+    const hash = crypto.createHash('md5').update(String(val)).digest('hex');
+    return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 };
 
 // Document type → human label
@@ -124,7 +134,7 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null, opti
                     }
 
                     if (filesAppended > 0) {
-                        formData.append('query', scheme.name || schemeId);
+                        formData.append('query', scheme.scheme_name || scheme.name || schemeId);
                         formData.append('target_scheme', schemeId);
                         formData.append('session_id', String(userId));
 
@@ -164,7 +174,7 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null, opti
                                 source: 'intelligence',
                                 degraded: false,
                                 schemeId,
-                                schemeName: scheme.name,
+                                schemeName: scheme.scheme_name || scheme.name,
                                 readinessScore: isEligible ? 95 : 55,
                                 readinessLabel: isEligible ? 'Ready' : 'Needs Attention',
                                 eligibility: {
@@ -172,7 +182,7 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null, opti
                                     reason: aiAnalysis.explanation?.summary || 'Evaluated via statutory rules.'
                                 },
                                 documents: {
-                                    required: (scheme.required_documents || []).length,
+                                    required: (scheme.documents_required || scheme.required_documents || []).length,
                                     uploaded: filesAppended,
                                     missing: (aiAnalysis.missing_information?.missing_documents || []).length,
                                     details: aiAnalysis.documents_processed || []
@@ -208,7 +218,7 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null, opti
     }
 
     const uploadedDocs = await loadUserDocuments(userId);
-    const requiredDocs = scheme.required_documents || [];
+    const requiredDocs = scheme.documents_required || scheme.required_documents || [];
 
     const documentStatus = requiredDocs.map(docType => ({
         type: docType,
@@ -254,7 +264,7 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null, opti
         source: 'local_readiness',
         degraded: true,
         schemeId,
-        schemeName: scheme.name,
+        schemeName: scheme.scheme_name || scheme.name,
         readinessScore,
         readinessLabel: readinessScore >= 80 ? 'Ready' : readinessScore >= 50 ? 'Almost Ready' : 'Needs Attention',
         eligibility: {
@@ -276,46 +286,298 @@ const analyzeApplication = async (userId, schemeId, profileOverride = null, opti
     };
 };
 
-/**
- * List applications for a user
- */
-const listApplications = async (userId) => {
+const getApplicantId = async (userId) => {
     let profile = null;
     try {
         profile = await profileService.getProfileById(userId);
     } catch (_) {}
+    if (profile && profile.id) return profile.id;
 
-    if (!profile) return [];
+    try {
+        const { data: userRow } = await supabaseAdmin
+            .from('users')
+            .select('full_name, email')
+            .eq('id', userId)
+            .maybeSingle();
+
+        const fallbackName = userRow?.full_name || (userRow?.email ? userRow.email.split('@')[0] : 'Applicant');
+
+        const { data, error } = await supabaseAdmin
+            .from('applicant_profiles')
+            .upsert({ id: userId, full_name: fallbackName }, { onConflict: 'id' })
+            .select('id')
+            .maybeSingle();
+
+        if (!error && data) return data.id;
+    } catch (_) {}
+
+    return userId;
+};
+
+const isGenericTitle = (title) => {
+    if (!title || typeof title !== 'string') return true;
+    const clean = title.trim().toLowerCase();
+    return clean === 'government scheme application' ||
+           clean === 'government scheme' ||
+           clean === 'application' ||
+           clean.startsWith('scheme #') ||
+           clean === 'null' ||
+           clean === 'undefined';
+};
+
+/**
+ * Universal application record hydrator:
+ * Attaches authentic scheme identity, canonical metadata, and verified financial benefit.
+ * Explicitly marks unlinked schemes as unavailable without inventing titles or amounts.
+ */
+const hydrateApplicationRecord = async (app) => {
+    if (!app) return null;
+
+    let scheme = null;
+    let isSchemeAvailable = false;
+    let resolvedSchemeName = null;
+
+    // 1. Resolve scheme by scheme_id
+    if (app.scheme_id) {
+        try {
+            const res = await schemeService.getSchemeById(app.scheme_id);
+            if (res && res.scheme) {
+                scheme = res.scheme;
+                isSchemeAvailable = true;
+                resolvedSchemeName = scheme.scheme_name || scheme.name || scheme.title;
+            }
+        } catch (_) {}
+    }
+
+    // 2. Resolve scheme by decision_notes if not generic
+    if (!scheme && app.decision_notes && !isGenericTitle(app.decision_notes)) {
+        try {
+            const res = await schemeService.getSchemeById(app.decision_notes);
+            if (res && res.scheme) {
+                scheme = res.scheme;
+                isSchemeAvailable = true;
+                resolvedSchemeName = scheme.scheme_name || scheme.name || scheme.title;
+            }
+        } catch (_) {}
+    }
+
+    // 3. Resolve financial benefit & presentation
+    let financialBenefit = null;
+    let benefitDisplay = 'Not specified';
+    let benefitSubtitle = 'Estimated Benefit';
+    let benefitNumeric = 0;
+
+    if (scheme) {
+        financialBenefit = scheme.financial_benefit || interpretFinancialBenefit(scheme);
+        const cat = financialBenefit?.category;
+
+        if (cat === 'UNKNOWN_OR_NOT_SPECIFIED' || financialBenefit?.isUnverifiedOrUnavailable) {
+            benefitDisplay = 'Not specified';
+            benefitSubtitle = 'Not specified';
+            benefitNumeric = 0;
+        } else if (cat === 'PENALTY_OR_INTEREST_WAIVER') {
+            benefitDisplay = financialBenefit.amountDisplay || '100% Penalty Waiver';
+            benefitSubtitle = financialBenefit.subtitle || '(Penalty Waiver)';
+            benefitNumeric = 0;
+        } else if (cat === 'LOAN_OR_CREDIT_FACILITY') {
+            benefitDisplay = financialBenefit.amountDisplay || (scheme.max_benefit ? `Up to ₹${Number(scheme.max_benefit).toLocaleString('en-IN')} (Loan)` : 'Loan Facility');
+            benefitSubtitle = financialBenefit.subtitle || '(Credit Facility / Repayable Loan)';
+            benefitNumeric = 0;
+        } else if (cat === 'INTEREST_SUBSIDY') {
+            benefitDisplay = financialBenefit.amountDisplay || 'Interest Subsidy';
+            benefitSubtitle = financialBenefit.subtitle || '(Interest Subsidy)';
+            benefitNumeric = 0;
+        } else if (cat === 'MONTHLY_FELLOWSHIP_OR_STIPEND') {
+            benefitDisplay = financialBenefit.amountDisplay || 'Monthly Fellowship';
+            benefitSubtitle = financialBenefit.subtitle || '(Monthly Fellowship / Stipend)';
+            benefitNumeric = 0;
+        } else if (cat === 'COMPOSITE_FINANCIAL_SUPPORT') {
+            benefitDisplay = financialBenefit.amountDisplay || 'Multi-Component Support';
+            benefitSubtitle = financialBenefit.subtitle || '(Composite Support)';
+            benefitNumeric = 0;
+        } else if (cat === 'IN_KIND_BENEFIT') {
+            benefitDisplay = 'Non-Financial / In-Kind Assistance';
+            benefitSubtitle = '(In-Kind / Welfare Service)';
+            benefitNumeric = 0;
+        } else if (cat === 'REIMBURSEMENT') {
+            benefitDisplay = financialBenefit.amountDisplay || 'Expense Reimbursement';
+            benefitSubtitle = '(Verified Reimbursement)';
+            benefitNumeric = 0;
+        } else if (financialBenefit?.amountDisplay && financialBenefit.amountDisplay !== 'Not specified' && financialBenefit.amountDisplay !== '₹0') {
+            benefitDisplay = financialBenefit.amountDisplay;
+            benefitSubtitle = financialBenefit.subtitle || 'Direct Financial Assistance';
+            benefitNumeric = typeof financialBenefit.amount === 'number' ? financialBenefit.amount : 0;
+        } else if (app.estimated_benefit && app.estimated_benefit !== 175000) {
+            benefitDisplay = `₹${Number(app.estimated_benefit).toLocaleString('en-IN')}`;
+            benefitSubtitle = 'Estimated Benefit';
+            benefitNumeric = Number(app.estimated_benefit);
+        } else {
+            benefitDisplay = 'Not specified';
+            benefitSubtitle = 'Not specified';
+            benefitNumeric = 0;
+        }
+    } else {
+        benefitDisplay = 'Not specified';
+        benefitSubtitle = 'Benefit Information Unavailable';
+        benefitNumeric = 0;
+    }
+
+    // 4. Resolve applicant name
+    let applicantName = 'Applicant';
+    if (app.applicant_id) {
+        try {
+            const { data: prof } = await supabaseAdmin
+                .from('applicant_profiles')
+                .select('full_name')
+                .eq('id', app.applicant_id)
+                .maybeSingle();
+            if (prof?.full_name) {
+                applicantName = prof.full_name;
+            } else {
+                const { data: u } = await supabaseAdmin
+                    .from('users')
+                    .select('full_name, email')
+                    .eq('id', app.applicant_id)
+                    .maybeSingle();
+                if (u?.full_name) applicantName = u.full_name;
+            }
+        } catch (_) {}
+    }
+
+    // 5. Resolve documents linked to this application
+    let submittedDocuments = [];
+    if (app.id) {
+        try {
+            const { data: docRows } = await supabaseAdmin
+                .from('documents')
+                .select('id, document_type, file_name, file_url, verification_status, uploaded_at, updated_at')
+                .eq('application_id', app.id);
+
+            submittedDocuments = (docRows || []).map(d => ({
+                id: d.id,
+                name: d.file_name || DOC_LABELS[d.document_type] || d.document_type,
+                document_type: d.document_type,
+                file_name: d.file_name,
+                file_url: d.file_url,
+                verification_status: (d.verification_status || 'PENDING').toUpperCase(),
+                verified: (d.verification_status || '').toUpperCase() === 'VERIFIED',
+                reason: (d.verification_status || '').toUpperCase() === 'VERIFIED' ? 'Verified ✓' :
+                    (d.verification_status || '').toUpperCase() === 'REJECTED' ? 'Rejected' : 'Pending Verification',
+                uploaded_at: d.uploaded_at
+            }));
+        } catch (_) {}
+    }
+
+    const requiredDocuments = scheme?.documents_required || scheme?.required_documents || [];
+
+    const isActionReq = Boolean(
+        app.status === 'action_required' ||
+        (app.decision_notes && app.decision_notes.startsWith('ACTION_REQUIRED:')) ||
+        (app.status === 'under_review' && app.reviewed_at && app.decision_notes)
+    );
+    const resolvedStatus = isActionReq ? 'action_required' : (app.status || 'under_review');
+    const cleanRemarks = app.decision_notes?.startsWith('ACTION_REQUIRED:')
+        ? app.decision_notes.replace(/^ACTION_REQUIRED:\s*/i, '').trim()
+        : (app.decision_notes || null);
+
+    return {
+        ...app,
+        status: resolvedStatus,
+        applicant_name: applicantName,
+        scheme_name: isSchemeAvailable ? resolvedSchemeName : null,
+        scheme: isSchemeAvailable ? scheme : null,
+        is_scheme_available: isSchemeAvailable,
+        financial_benefit: financialBenefit,
+        benefit_display: benefitDisplay,
+        benefit_subtitle: benefitSubtitle,
+        benefit_numeric: benefitNumeric,
+        benefit_type: scheme?.benefit_type || financialBenefit?.benefitType || null,
+        dbt_scheme: scheme?.dbt_scheme ?? false,
+        category: scheme?.category || null,
+        submitted_documents: submittedDocuments,
+        required_documents: requiredDocuments,
+        remarks: cleanRemarks,
+        rejection_reason: (resolvedStatus === 'rejected' || resolvedStatus === 'action_required')
+            ? (cleanRemarks || app.llm_explanation || 'Pending administrative review')
+            : null,
+        last_updated: app.updated_at || app.reviewed_at || app.submitted_at || app.created_at
+    };
+};
+
+/**
+ * List applications for a user
+ */
+const listApplications = async (userId) => {
+    const applicantId = await getApplicantId(userId);
 
     const { data, error } = await supabaseAdmin
         .from('applications')
         .select('*')
-        .eq('applicant_id', profile.id)
+        .eq('applicant_id', applicantId)
         .order('created_at', { ascending: false });
 
     if (error) {
         console.warn('Error fetching applications from DB:', error.message);
         return [];
     }
-    return data || [];
+
+    return Promise.all((data || []).map(app => hydrateApplicationRecord(app)));
 };
 
 /**
  * Create a new application
  */
 const createApplication = async (userId, applicationData) => {
-    let profile = null;
+    const applicantId = await getApplicantId(userId);
+
+    const rawSchemeId = applicationData.schemeId || applicationData.scheme_id;
+    if (!rawSchemeId) {
+        throw httpError(400, 'schemeId is required to submit an application');
+    }
+
+    let resolvedSchemeName = applicationData.schemeName || applicationData.schemeTitle || applicationData.subject || null;
+    let schemeRecord = null;
+
     try {
-        profile = await profileService.getProfileById(userId);
+        const res = await schemeService.getSchemeById(rawSchemeId);
+        if (res && res.scheme) {
+            schemeRecord = res.scheme;
+            resolvedSchemeName = schemeRecord.scheme_name || schemeRecord.name || schemeRecord.title || resolvedSchemeName;
+        }
     } catch (_) {}
 
-    if (!profile) throw httpError(400, 'Applicant profile required');
+    if (!schemeRecord) {
+        throw httpError(404, `Invalid scheme ID: '${rawSchemeId}' does not exist in the official scheme catalog.`);
+    }
+
+    if (isGenericTitle(resolvedSchemeName)) {
+        resolvedSchemeName = schemeRecord.scheme_name || schemeRecord.name || schemeRecord.title || null;
+    }
+
+    // Citizen submissions can only initialize as draft or under_review
+    const clientStatus = String(applicationData.status || '').toLowerCase();
+    const validInitialStatus = (clientStatus === 'draft') ? 'draft' : 'under_review';
+
+    const targetSchemeUuid = ensureUuid(schemeRecord.id || rawSchemeId);
+
+    // Prevent duplicate applications for the same scheme
+    const { data: existingApp } = await supabaseAdmin
+        .from('applications')
+        .select('id')
+        .eq('applicant_id', applicantId)
+        .eq('scheme_id', targetSchemeUuid)
+        .maybeSingle();
+
+    if (existingApp) {
+        throw httpError(409, 'An application for this scheme has already been submitted for your profile.');
+    }
 
     const newApp = {
-        applicant_id: profile.id,
-        scheme_id: applicationData.schemeId || applicationData.scheme_id,
-        status: 'under_review',
-        estimated_benefit: applicationData.benefitAmount ? Number(String(applicationData.benefitAmount).replace(/[^0-9]/g, '')) : null,
+        applicant_id: applicantId,
+        scheme_id: targetSchemeUuid,
+        status: validInitialStatus,
+        estimated_benefit: schemeRecord?.max_benefit ? Number(schemeRecord.max_benefit) : null,
+        decision_notes: resolvedSchemeName || null,
         submitted_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -327,37 +589,46 @@ const createApplication = async (userId, applicationData) => {
         .select()
         .single();
 
-    if (error) throw httpError(500, error.message);
-    return data;
+    if (error) {
+        if (error.code === '23505' || error.message?.includes('unique constraint')) {
+            throw httpError(409, 'An application for this scheme has already been submitted for your profile.');
+        }
+        throw httpError(500, error.message);
+    }
+    return hydrateApplicationRecord(data);
 };
 
 /**
  * Get application by ID
  */
 const getApplicationById = async (userId, applicationId) => {
-    let profile = null;
-    try {
-        profile = await profileService.getProfileById(userId);
-    } catch (_) {}
-
-    if (!profile) throw httpError(404, 'Profile not found');
+    const cleanId = String(applicationId || '').trim();
+    if (!cleanId || !UUID_REGEX.test(cleanId)) {
+        throw httpError(404, 'Application not found');
+    }
+    const applicantId = await getApplicantId(userId);
 
     const { data, error } = await supabaseAdmin
         .from('applications')
         .select('*')
-        .eq('id', applicationId)
-        .eq('applicant_id', profile.id)
+        .eq('id', cleanId)
+        .eq('applicant_id', applicantId)
         .maybeSingle();
 
-    if (error) throw httpError(500, error.message);
+    if (error) {
+        if (error.code === '22P02') throw httpError(404, 'Application not found');
+        throw httpError(500, error.message);
+    }
     if (!data) throw httpError(404, 'Application not found');
-    return data;
+    return hydrateApplicationRecord(data);
 };
 
 module.exports = {
     analyzeApplication,
     listApplications,
     createApplication,
-    getApplicationById
+    getApplicationById,
+    hydrateApplicationRecord,
+    isGenericTitle
 };
 
