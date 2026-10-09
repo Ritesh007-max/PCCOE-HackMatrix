@@ -1,6 +1,6 @@
 import { authenticatedFetch } from './authService';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://pccoe-hackmatrix-backend.onrender.com').replace(/\/+$/, '');
 
 /**
  * Fetch current user profile from GET /api/users/profile

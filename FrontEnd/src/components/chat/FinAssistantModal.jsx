@@ -44,7 +44,7 @@ import startupIndiaImg from '../../assets/schemes/startup_india.jpg';
 import ashokStambhOriginal from '../../assets/ashok_stambh_original.png';
 import tricolorFlagClean from '../../assets/tricolor_flag_clean.png';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://pccoe-hackmatrix-backend.onrender.com').replace(/\/+$/, '');
 
 // Default prompt suggestions (Matching Image 2 - Left)
 const PROMPTS = [
